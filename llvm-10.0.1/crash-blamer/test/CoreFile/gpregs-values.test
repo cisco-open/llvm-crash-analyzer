@@ -1,0 +1,74 @@
+## Test register read/write from core-file.
+## Ideally, this should have been tested with unittests.
+
+# RUN: %crash-blamer -debug-only=crash-blamer-corefile \
+# RUN:     --core-file=%S/../Decompiler/Inputs/core-test-1 \
+# RUN:     %S/../Decompiler/Inputs/test-1 < %s 2>&1 | FileCheck %s
+
+# CHECK: Function from top of the stack: main
+# CHECK: Regs:
+# CHECK: reg: r10d val: 0x00000007
+# CHECK: reg: r11 val: 0x0000000000000002
+# CHECK: reg: r11l val: 0x02
+# CHECK: reg: rax val: 0x00005599d9d5b040
+# CHECK: reg: esi val: 0x5ea666b8
+# CHECK: reg: dh val: 0x66
+# CHECK: reg: spl val: 0xc8
+# CHECK: reg: r14l val: 0x00
+# CHECK: reg: rdi val: 0x0000000000000001
+# CHECK: reg: r14w val: 0x0000
+# CHECK: reg: ds val: 0x0000000000000000
+# CHECK: reg: r15 val: 0x0000000000000000
+# CHECK: reg: r8w val: 0x0000
+# CHECK: reg: fs val: 0x0000000000000000
+# CHECK: reg: rbx val: 0x00005599d9d5b170
+# CHECK: reg: r9w val: 0xcd50
+# CHECK: reg: dl val: 0xc8
+# CHECK: reg: bpl val: 0x00
+# CHECK: reg: r12 val: 0x00005599d9d5b060
+# CHECK: reg: ebx val: 0xd9d5b170
+# CHECK: reg: r15w val: 0x0000
+# CHECK: reg: r13l val: 0xb0
+# CHECK: reg: al val: 0x40
+# CHECK: reg: r9d val: 0xd6c3cd50
+# CHECK: reg: eax val: 0xd9d5b040
+# CHECK: reg: bl val: 0x70
+# CHECK: reg: cl val: 0x70
+# CHECK: reg: ch val: 0xb1
+# CHECK: reg: r10l val: 0x07
+# CHECK: reg: r14d val: 0x00000000
+# CHECK: reg: r11d val: 0x00000002
+# CHECK: reg: rsp val: 0x00007ffe5ea665c8
+# CHECK: reg: dx val: 0x66c8
+# CHECK: reg: di val: 0x0001
+# CHECK: reg: r14 val: 0x0000000000000000
+# CHECK: reg: ss val: 0x000000000000002b
+# CHECK: reg: si val: 0x66b8
+# CHECK: reg: bp val: 0x0000
+# CHECK: reg: r11w val: 0x0002
+# CHECK: reg: cs val: 0x0000000000000033
+# CHECK: reg: r9l val: 0x50
+# CHECK: reg: bh val: 0xb1
+# CHECK: reg: dil val: 0x01
+# CHECK: reg: rcx val: 0x00005599d9d5b170
+# CHECK: reg: rip val: 0x00005599d9d5b044
+# CHECK: reg: bx val: 0xb170
+# CHECK: reg: gs val: 0x0000000000000000
+# CHECK: reg: r13w val: 0x66b0
+# CHECK: reg: rflags val: 0x0000000000010246
+# CHECK: reg: sil val: 0xb8
+# CHECK: reg: ecx val: 0xd9d5b170
+# CHECK: reg: r8 val: 0x0000000000000000
+# CHECK: reg: rbp val: 0x0000000000000000
+# CHECK: reg: es val: 0x0000000000000000
+# CHECK: reg: rdx val: 0x00007ffe5ea666c8
+# CHECK: reg: r13 val: 0x00007ffe5ea666b0
+# CHECK: reg: r10w val: 0x0007
+# CHECK: reg: ebp val: 0x00000000
+# CHECK: reg: r9 val: 0x00007f69d6c3cd50
+# CHECK: reg: ax val: 0xb040
+# CHECK: reg: cx val: 0xb170
+# CHECK: reg: r10 val: 0x0000000000000007
+# CHECK: reg: esp val: 0x5ea665c8
+# CHECK: reg: r12l val: 0x60
+# CHECK: reg: r15d val: 0x00000000

@@ -1,0 +1,7 @@
+## Dummy test for Decompiler
+# RUN: %crash-blamer -show-disassemble --core-file=%S/Inputs/core-test-1 %S/Inputs/test-1 2>&1 | FileCheck %s
+
+# CHECK: Crash Blamer -- crash analyzer utility
+# CHECK: Decompiling...
+# CHECK: Disassembly of section .text:
+# CHECK: xorl    %ebp, %ebp

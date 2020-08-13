@@ -1,0 +1,13 @@
+=== Build Steps ===
+
+1. mkdir build && cd build
+2. $ export CXX=/auto/binos-tools/llvm71/llvm-7.1-p1/bin/clang++ && export CC=/auto/binos-tools/llvm71/llvm-7.1-p1/bin/clang
+3. $ /auto/compiler_storage/jstengle/cmake_317/inst/bin/cmake -G "Unix Makefiles" -DCMAKE_BUILD_TYPE=Release -DLLVM_ENABLE_ASSERTIONS=On -DLLVM_ENABLE_PROJECTS="clang;crash-blamer;lldb;" -DLLVM_ENABLE_LIBCXX=ON ../llvm-project/llvm -DLLDB_TEST_COMPILER=/auto/binos-tools/llvm71/llvm-7.1-p1/bin/clang -DPYTHON_EXECUTABLE=/router/bin/python3-3.6.0
+4. $  make -j30 && make check-crash-blamer -j30
+
+=== Running Notes ===
+
+Please make sure the LD_LIBRARY_PATH includes the libpython3.6m.so.1.0 as follows:
+  $ export LD_LIBRARY_PATH=/router/lib/:$LD_LIBRARY_PATH
+in order to avoid:
+error while loading shared libraries: libpython3.6m.so.1.0: cannot open shared object file: No such file or directory
