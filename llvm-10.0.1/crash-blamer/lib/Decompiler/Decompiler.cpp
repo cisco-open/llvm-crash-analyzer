@@ -27,7 +27,7 @@
 #include "llvm/MC/MCInstrInfo.h"
 #include "llvm/MC/MCRegisterInfo.h"
 #include "llvm/MC/MCSubtargetInfo.h"
-#include "llvm/MC/MCTargetOptionsCommandFlags.h"
+#include "llvm/MC/MCTargetOptionsCommandFlags.inc"
 #include "llvm/Object/ELFObjectFile.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/TargetRegistry.h"
@@ -50,7 +50,6 @@ static cl::opt<std::string>
                 cl::desc("Export decompiled LLVM MIR into a file."),
                 cl::value_desc("filename"), cl::init(""));
 
-mc::RegisterMCTargetOptionsFlags MOF;
 static StringSet<> DisasmSymbolSet;
 
 crash_blamer::Decompiler::Decompiler() : TLOF(nullptr) {}
@@ -85,7 +84,7 @@ llvm::Error crash_blamer::Decompiler::init(Triple TheTriple) {
                                        TripleName,
                                    inconvertibleErrorCode());
 
-  MCTargetOptions MCOptions = mc::InitMCTargetOptionsFromFlags();
+  MCTargetOptions MCOptions = InitMCTargetOptionsFromFlags();
   MAI.reset(TheTarget->createMCAsmInfo(*MRI, TripleName, MCOptions));
   if (!MAI)
     return make_error<StringError>("no asm info for target " + TripleName,
@@ -493,23 +492,9 @@ llvm::Error crash_blamer::Decompiler::run(
         continue;
       }
 
-      auto Status = DisAsm->onSymbolStart(Symbols[SI], Size,
-                                          Bytes.slice(Start, End - Start),
-                                          SectionAddr + Start, CommentStream);
-
-      if (Status.hasValue()) {
-        if (Status.getValue() == MCDisassembler::Fail) {
-          if (ShowDisassembly) {
-            outs() << "// Error in decoding " << SymbolName
-                   << " : Decoding failed region as bytes.\n";
-            for (uint64_t I = 0; I < Size; ++I)
-              outs() << "\t.byte\t " << format_hex(Bytes[I], 1, /*Upper=*/true)
-                     << "\n";
-          }
-        }
-      } else {
-        Size = 0;
-      }
+      DisAsm->onSymbolStart(SymbolName, Size,
+                            Bytes.slice(Start, End - Start),
+                            SectionAddr + Start, CommentStream);
 
       Start += Size;
       Index = Start;
