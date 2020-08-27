@@ -17,6 +17,9 @@
 #include "llvm/CodeGen/MachineFunction.h"
 #include "llvm/CodeGen/MachineInstrBuilder.h"
 #include "llvm/CodeGen/MachineModuleInfo.h"
+#include "llvm/DebugInfo/DIContext.h"
+#include "llvm/DebugInfo/Symbolize/Symbolize.h"
+#include "llvm/IR/DIBuilder.h"
 #include "llvm/IR/Function.h"
 #include "llvm/IR/Instructions.h"
 #include "llvm/IR/LLVMContext.h"
@@ -75,6 +78,7 @@ llvm::Error crash_blamer::Decompiler::init(Triple TheTriple) {
   if (!TheTarget)
     return make_error<StringError>(ErrorStr, inconvertibleErrorCode());
 
+  DefaultArch = TheTarget->getName();
   TripleName = TheTriple.getTriple();
 
   // Create all the MC Objects.
@@ -296,10 +300,11 @@ createModule(LLVMContext &Context, const DataLayout DL, StringRef InputFile) {
 }
 
 void crash_blamer::Decompiler::addInstr(MachineFunction *MF,
-    MachineBasicBlock *MBB, MCInst &Inst) {
+    MachineBasicBlock *MBB, MCInst &Inst, DebugLoc *Loc) {
   const unsigned Opcode = Inst.getOpcode();
   const MCInstrDesc &MCID = MII->get(Opcode);
-  MachineInstrBuilder Builder = BuildMI(MBB, DebugLoc(), MCID);
+  MachineInstrBuilder Builder = BuildMI(
+      MBB, !Loc->getLine() ? DebugLoc() : *Loc, MCID);
   for (unsigned OpIndex = 0, E = Inst.getNumOperands(); OpIndex < E;
        ++OpIndex) {
     const MCOperand &Op = Inst.getOperand(OpIndex);
@@ -405,6 +410,19 @@ llvm::Error crash_blamer::Decompiler::run(
 
   bool Is64Bits = Obj.getBytesInAddress() > 4;
 
+  // Init the LLVM symbolizer used to get debug lines.
+  symbolize::LLVMSymbolizer::Options SymbolizerOpts;
+  std::unique_ptr<symbolize::LLVMSymbolizer> Symbolizer;
+  SymbolizerOpts.PrintFunctions = DILineInfoSpecifier::FunctionNameKind::None;
+  SymbolizerOpts.Demangle = false;
+  SymbolizerOpts.DefaultArch = DefaultArch;
+  Symbolizer.reset(new symbolize::LLVMSymbolizer(SymbolizerOpts));
+
+  // Create Debug Info.
+  DIBuilder DIB(*Module);
+  DIFile *File = nullptr;
+  DICompileUnit *CU = nullptr;
+
   for (const auto &Section : Obj.sections()) {
     if (!Section.isText() || Section.isVirtual())
       continue;
@@ -415,6 +433,20 @@ llvm::Error crash_blamer::Decompiler::run(
       continue;
 
     uint64_t SectionAddr = Section.getAddress();
+    if (!File) {
+      // Get file info.
+      auto LineI =
+          Symbolizer->symbolizeCode(Obj, {SectionAddr, Section.getIndex()});
+      if (!LineI) {
+        errs() << "Unable to find debug lines. Is it compiled with -g?\n";
+        // TODO: return real error here.
+        return Error::success();
+      }
+      File = DIB.createFile(LineI->FileName, "/");
+      CU = DIB.createCompileUnit(dwarf::DW_LANG_C, File, "crash-blamer",
+                                 /*isOptimized=*/true, "", 0);
+    }
+
     uint64_t SectSize = Section.getSize();
     if (!SectSize)
       continue;
@@ -477,13 +509,26 @@ llvm::Error crash_blamer::Decompiler::run(
       }
 
       // Create MFs.
-
       MachineFunction *MF = nullptr;
       MachineBasicBlock *MBB = nullptr;
+      DISubprogram *DISP = nullptr;
+
       if (functionsFromCoreFile.count(SymbolName)) {
         MF = &createMF(SymbolName);
         MBB = MF->CreateMachineBasicBlock();
         MF->push_back(MBB);
+      }
+
+      // Create DI subprogram.
+      if (MF) {
+        auto &F = MF->getFunction();
+        auto SPType = DIB.createSubroutineType(DIB.getOrCreateTypeArray(None));
+        DISubprogram::DISPFlags SPFlags =
+            DISubprogram::SPFlagDefinition | DISubprogram::SPFlagOptimized;
+        auto SP = DIB.createFunction(CU, F.getName(), F.getName(), File, 1,
+                                     SPType, 1, DINode::FlagZero, SPFlags);
+        DISP = SP;
+        DIB.finalizeSubprogram(SP);
       }
 
       if (Section.isVirtual()) {
@@ -525,9 +570,25 @@ llvm::Error crash_blamer::Decompiler::run(
                                     Bytes.slice(Index, Size),
                                     {SectionAddr + Index, Section.getIndex()},
                                     FOS, "", *MSTI, Obj.getFileName());
+
+          DILineInfo DbgLineInfo = DILineInfo();
+          auto LineInfo = Symbolizer->symbolizeCode(
+              Obj, {SectionAddr + Index, Section.getIndex()});
+
+          if (!LineInfo) {
+            errs() << "Unable to find debug lines. Is it compiled with -g?\n";
+            // TODO: return real error here.
+            return Error::success();
+          }
+          DbgLineInfo = *LineInfo;
+
           // Fill the Machine Function.
-          if (MF)
-            addInstr(MF, MBB, Inst);
+          if (MF) {
+            auto DILoc = DILocation::get(Ctx, DbgLineInfo.Line,
+                                       DbgLineInfo.Column, DISP);
+            DebugLoc Loc (DILoc);
+            addInstr(MF, MBB, Inst, &Loc);
+          }
         }
 
         if (ShowDisassembly)

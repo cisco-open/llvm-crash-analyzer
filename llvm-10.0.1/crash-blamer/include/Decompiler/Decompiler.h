@@ -19,6 +19,7 @@
 
 namespace llvm {
 
+class DebugLoc;
 class MachineBasicBlock;
 class MachineFunction;
 class MCAsmInfo;
@@ -40,6 +41,7 @@ namespace crash_blamer {
 
 /// Used to decompile an object file to LLVM MIR representation.
 class Decompiler {
+  StringRef DefaultArch;
   std::unique_ptr<MCRegisterInfo> MRI;
   std::unique_ptr<MCAsmInfo> MAI;
   std::unique_ptr<MCContext> MC;
@@ -80,6 +82,7 @@ public:
                           object::SectionedAddress Address,
                           formatted_raw_ostream &OS, StringRef Annot,
                           MCSubtargetInfo const &STI, StringRef ObjectFilename);
+
     /// Create dynamic elf symbols.
     static void addDynamicElfSymbols(
         const object::ObjectFile *Obj,
@@ -110,7 +113,8 @@ public:
   MachineFunction &createMF(StringRef FunctionName);
 
   /// Add Machine Instr to the MF.
-  void addInstr(MachineFunction *MF, MachineBasicBlock *MBB, MCInst &Inst);
+  void addInstr(MachineFunction *MF, MachineBasicBlock *MBB, MCInst &Inst,
+                DebugLoc *Loc);
 };
 
 } // end crash_blamer namespace

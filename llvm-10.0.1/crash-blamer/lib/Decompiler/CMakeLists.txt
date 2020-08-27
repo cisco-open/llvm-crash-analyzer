@@ -4,6 +4,7 @@ set(LLVM_LINK_COMPONENTS
   AsmPrinter
   Object
   Support
+  Symbolize
   Target
   )
 
