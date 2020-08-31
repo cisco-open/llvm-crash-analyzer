@@ -106,6 +106,8 @@ public:
                                         // known to be exact.
     NoFPExcept   = 1 << 14,             // Instruction does not raise
                                         // floatint-point exceptions.
+    CrashStart   = 1 << 15,             // Instruction the is first to be
+                                        // analysed via crash-blamer.
   };
 
 private:

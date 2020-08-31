@@ -11,10 +11,10 @@
 //===----------------------------------------------------------------------===//
 
 #include "Decompiler/Decompiler.h"
-#include "CoreFile/CoreFile.h"
 
 #include "llvm/ADT/Triple.h"
 #include "llvm/CodeGen/MachineFunction.h"
+#include "llvm/CodeGen/MachineInstr.h"
 #include "llvm/CodeGen/MachineInstrBuilder.h"
 #include "llvm/CodeGen/MachineModuleInfo.h"
 #include "llvm/DebugInfo/DIContext.h"
@@ -39,6 +39,8 @@
 #include "llvm/Target/TargetLoweringObjectFile.h"
 #include "llvm/Target/TargetMachine.h"
 #include "llvm/Target/TargetOptions.h"
+
+#include <sstream>
 
 using namespace llvm;
 using namespace llvm::object;
@@ -300,7 +302,8 @@ createModule(LLVMContext &Context, const DataLayout DL, StringRef InputFile) {
 }
 
 void crash_blamer::Decompiler::addInstr(MachineFunction *MF,
-    MachineBasicBlock *MBB, MCInst &Inst, DebugLoc *Loc) {
+    MachineBasicBlock *MBB, MCInst &Inst, DebugLoc *Loc,
+    bool IsCrashStart) {
   const unsigned Opcode = Inst.getOpcode();
   const MCInstrDesc &MCID = MII->get(Opcode);
   MachineInstrBuilder Builder = BuildMI(
@@ -323,6 +326,9 @@ void crash_blamer::Decompiler::addInstr(MachineFunction *MF,
       llvm_unreachable("Not yet implemented");
     }
   }
+
+  if (IsCrashStart)
+    Builder->setFlag(MachineInstr::CrashStart);
 }
 
 MachineFunction& crash_blamer::Decompiler::createMF(StringRef FunctionName) {
@@ -341,7 +347,8 @@ MachineFunction& crash_blamer::Decompiler::createMF(StringRef FunctionName) {
 }
 
 llvm::Error crash_blamer::Decompiler::run(
-    StringRef InputFile, StringSet<> &functionsFromCoreFile) {
+    StringRef InputFile, StringSet<> &functionsFromCoreFile,
+    FrameToRegsMap &FrameToRegs) {
   llvm::outs() << "Decompiling...\n";
   std::string ErrorStr;
   auto ErrOrObj = object::ObjectFile::createObjectFile(InputFile);
@@ -512,11 +519,25 @@ llvm::Error crash_blamer::Decompiler::run(
       MachineFunction *MF = nullptr;
       MachineBasicBlock *MBB = nullptr;
       DISubprogram *DISP = nullptr;
+      std::string InstrAddr;
+      unsigned AddrValue = 0;
 
       if (functionsFromCoreFile.count(SymbolName)) {
         MF = &createMF(SymbolName);
         MBB = MF->CreateMachineBasicBlock();
         MF->push_back(MBB);
+        // Get the address of the latest instruction executed within a frame.
+        auto Regs = FrameToRegs.find(SymbolName);
+        // Get the value of $rip register, since it holds the address of current
+        // instr being executed.
+        for (auto &reg : Regs->second) {
+          if (reg.regName == "rip") {
+            InstrAddr = reg.regValue;
+            std::istringstream converter(InstrAddr);
+            converter >> std::hex >> AddrValue;
+            break;
+          }
+        }
       }
 
       // Create DI subprogram.
@@ -565,15 +586,15 @@ llvm::Error crash_blamer::Decompiler::run(
 
         if (Disassembled) {
           LLVM_DEBUG(Inst.dump());
+          object::SectionedAddress Addr =
+              {SectionAddr + Index, Section.getIndex()};
           if (ShowDisassembly)
             Disassembler::printInst(*InstPrinter, &Inst,
-                                    Bytes.slice(Index, Size),
-                                    {SectionAddr + Index, Section.getIndex()},
+                                    Bytes.slice(Index, Size), Addr,
                                     FOS, "", *MSTI, Obj.getFileName());
 
           DILineInfo DbgLineInfo = DILineInfo();
-          auto LineInfo = Symbolizer->symbolizeCode(
-              Obj, {SectionAddr + Index, Section.getIndex()});
+          auto LineInfo = Symbolizer->symbolizeCode(Obj, Addr);
 
           if (!LineInfo) {
             errs() << "Unable to find debug lines. Is it compiled with -g?\n";
@@ -587,7 +608,7 @@ llvm::Error crash_blamer::Decompiler::run(
             auto DILoc = DILocation::get(Ctx, DbgLineInfo.Line,
                                        DbgLineInfo.Column, DISP);
             DebugLoc Loc (DILoc);
-            addInstr(MF, MBB, Inst, &Loc);
+            addInstr(MF, MBB, Inst, &Loc, AddrValue == Addr.Address);
           }
         }
 
@@ -629,6 +650,13 @@ llvm::Error crash_blamer::Decompiler::run(
       if (MF)
         MF->print(OS_FILE);
     }
+  }
+
+  // Rememer the MFs for analysis.
+  for (auto &F : *(Module.get())) {
+    auto MF = MMI->getMachineFunction(F);
+    if (MF)
+      BlameTrace.push_back(MF);
   }
 
   llvm::outs() << "Decompiled.\n";

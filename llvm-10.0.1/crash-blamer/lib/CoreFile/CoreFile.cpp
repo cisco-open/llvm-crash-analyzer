@@ -62,6 +62,8 @@ void llvm::crash_blamer::CoreFile::read(StringRef InputFile) {
   int NumOfFrames = thread.GetNumFrames();
   LLVM_DEBUG(dbgs() << "Num of frames " << NumOfFrames << "\n");
 
+  setNumOfFrames(NumOfFrames);
+
   for (int i = 0; i < NumOfFrames; ++i) {
     SBFrame frame = thread.GetFrameAtIndex(i);
     if (!frame.IsValid()) {
@@ -73,25 +75,30 @@ void llvm::crash_blamer::CoreFile::read(StringRef InputFile) {
   }
 
   // Get registers state at the point of the crash.
-  auto crashFrame = thread.GetFrameAtIndex(NumOfFrames - 1);
-  auto Regs = crashFrame.GetRegisters();
-  auto GPRegss = Regs.GetFirstValueByName(GPR);
-  int NumOfGPRegs = GPRegss.GetNumChildren();
-  for (int j = 0; j < NumOfGPRegs; ++j) {
-    auto Reg = GPRegss.GetChildAtIndex(j);
-    if (Reg.GetValue())
-      insertIntoGPRFromCrashFrame(Reg.GetName(), Reg.GetValue());
-    else
-      insertIntoGPRFromCrashFrame(Reg.GetName(), nullptr);
+  for (int i = 0; i < NumOfFrames; ++i) {
+    auto Frame = thread.GetFrameAtIndex(i);
+    auto Regs = Frame.GetRegisters();
+    auto GPRegss = Regs.GetFirstValueByName(GPR);
+    int NumOfGPRegs = GPRegss.GetNumChildren();
+    std::vector<RegInfo> RegReads;
+    for (int j = 0; j < NumOfGPRegs; ++j) {
+      auto Reg = GPRegss.GetChildAtIndex(j);
+      if (Reg.GetValue())
+        RegReads.push_back({Reg.GetName(), Reg.GetValue()});
+      else
+        RegReads.push_back({Reg.GetName(), nullptr});
+    }
+    StringRef fnName = Frame.GetFunctionName();
+    insertIntoGPRsFromFrame(fnName, RegReads);
   }
 
-  LLVM_DEBUG(auto GPRegs = getGRPsFromCrashFrame();
-             dbgs() << "Function from top of the stack: "
-                    << crashFrame.GetFunctionName() << "\n";
-             dbgs() << "Regs:\n";
-             for (auto &R : GPRegs)
-               dbgs() << " reg: " << R.first << " val: "
-                      << R.second << "\n";);
+  LLVM_DEBUG(auto FrameToRegs = getGRPsFromFrame();
+    for (auto &fn : FrameToRegs) {
+      dbgs() << "Function: " << fn.first << "\n";
+      dbgs() << "Regs:\n";
+      for (auto &R : fn.second)
+        dbgs() << " reg: " << R.regName << " val: " << R.regValue << "\n";
+    });
 
   SBDebugger::Destroy(debugger);
   SBDebugger::Terminate();

@@ -1540,6 +1540,8 @@ void MachineInstr::print(raw_ostream &OS, ModuleSlotTracker &MST,
     OS << "exact ";
   if (getFlag(MachineInstr::NoFPExcept))
     OS << "nofpexcept ";
+  if (getFlag(MachineInstr::CrashStart))
+    OS << "crash-start ";
 
   // Print the opcode name.
   if (TII)

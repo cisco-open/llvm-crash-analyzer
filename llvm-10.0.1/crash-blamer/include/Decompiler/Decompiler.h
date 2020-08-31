@@ -9,19 +9,25 @@
 #ifndef CB_DECOMPILER_
 #define CB_DECOMPILER_
 
+#include "CoreFile/CoreFile.h"
+
+#include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringSet.h"
+#include "llvm/CodeGen/MachineFunction.h"
 #include "llvm/MC/MCDisassembler/MCDisassembler.h"
 #include "llvm/Object/ObjectFile.h"
 #include "llvm/Support/Error.h"
 #include "llvm/Support/StringSaver.h"
 
 #include <map>
+#include <vector>
 
 namespace llvm {
 
 class DebugLoc;
 class MachineBasicBlock;
 class MachineFunction;
+class MachineInstr;
 class MCAsmInfo;
 class MCContext;
 class MCInstrInfo;
@@ -54,6 +60,8 @@ class Decompiler {
 
   std::unique_ptr<Module> Module;
   MachineModuleInfo *MMI;
+
+  SmallVector<MachineFunction *, 8> BlameTrace;
 
   /// Private constructor, call Decompiler::Create(...).
   Decompiler();
@@ -107,14 +115,17 @@ public:
   ~Decompiler();
 
   /// This will perform disassemble and transformation to LLVM MIR part.
-  llvm::Error run(StringRef InputFile, StringSet<> &functionsFromCoreFile);
+  llvm::Error run(StringRef InputFile, StringSet<> &functionsFromCoreFile,
+                  FrameToRegsMap &FrameToRegs);
 
   /// Add Machine Function to the Module.
   MachineFunction &createMF(StringRef FunctionName);
 
   /// Add Machine Instr to the MF.
-  void addInstr(MachineFunction *MF, MachineBasicBlock *MBB, MCInst &Inst,
-                DebugLoc *Loc);
+  void addInstr(MachineFunction *MF, MachineBasicBlock *MBB,
+                MCInst &Inst, DebugLoc *Loc, bool IsCrashStart);
+
+  SmallVector<MachineFunction *, 8> &getBlameTrace() { return BlameTrace; }
 };
 
 } // end crash_blamer namespace

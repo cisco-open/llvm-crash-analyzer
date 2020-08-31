@@ -5,10 +5,6 @@
 # RUN:     --core-file=%S/../Decompiler/Inputs/core-test-1 \
 # RUN:     %S/../Decompiler/Inputs/test-1 < %s 2>&1 | FileCheck %s
 
-# CHECK: Function from top of the stack: main
+# CHECK: Function: main
 # CHECK: Regs:
-# CHECK: reg: r10d val: 0x00000007
-# CHECK: reg: r11 val: 0x0000000000000002
-# CHECK: reg: r11l val: 0x02
-# CHECK: reg: rax val: 0x00005599d9d5b040
-# CHECK: reg: esi val: 0x5ea666b8
+# CHECK: reg: rip val: 0x00005599d9d5b044

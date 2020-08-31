@@ -28,6 +28,8 @@
 using namespace llvm;
 using namespace crash_blamer;
 
+#define DEBUG_TYPE "crash-blamer"
+
 /// @}
 /// Command line options.
 /// @{
@@ -100,6 +102,7 @@ int main(int argc, char **argv) {
   coreFile.read(InputFilename);
   // Get the functions from backtrace.
   StringSet<> functionsFromCoreFile = coreFile.getFunctionsFromBacktrace();
+  auto FrameToRegs = coreFile.getGRPsFromFrame();
 
   // Implement decompiler.
   Triple Triple(Triple::normalize(sys::getDefaultTargetTriple()));
@@ -109,11 +112,17 @@ int main(int argc, char **argv) {
     return 1;
   crash_blamer::Decompiler *Dec = Decompiler.get().get();
 
-  auto Err = Dec->run(InputFilename, functionsFromCoreFile);
+  auto Err = Dec->run(InputFilename, functionsFromCoreFile, FrameToRegs);
   if (Err)
     return 1;
 
+  LLVM_DEBUG(auto BlameMFs = Dec->getBlameTrace();
+             for (auto MF
+                  : BlameMFs) MF->dump(););
+
   // TODO: Implement LLVM MIR analysis.
+  // e.g.: CrashBlameAnalysys CBA;
+  //       CBA->run(BlameMFs);
 
   return exit_code;
 }

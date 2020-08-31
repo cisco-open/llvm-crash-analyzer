@@ -13,16 +13,36 @@
 #include "llvm/ADT/StringSet.h"
 
 #include <map>
+#include <vector>
 
-using RegisterMap = std::map<const char*, const char*>;
+struct RegInfo {
+  std::string regName;
+  std::string regValue;
+  RegInfo(const char *regName1, const char *regValue1) {
+    if (regName1)
+      std::copy(regName1, regName1 + strlen(regName1),
+                std::back_inserter(regName));
+    else
+      regName = "";
+
+    if (regValue1)
+      std::copy(regValue1, regValue1 + strlen(regValue1),
+                std::back_inserter(regValue));
+    else
+      regValue = "";
+  }
+};
+
+using FrameToRegsMap = std::map<llvm::StringRef, std::vector<RegInfo>>;
 
 namespace llvm {
 namespace crash_blamer {
 
 class CoreFile {
+  unsigned NumOfFrames = 0;
   const char *name;
   StringSet<> FunctionsFromBacktrace;
-  RegisterMap GPRs;
+  FrameToRegsMap GPRs;
 public:
   CoreFile(StringRef name) : name(name.data()) { FunctionsFromBacktrace = {}; }
 
@@ -30,9 +50,16 @@ public:
   StringSet<> &getFunctionsFromBacktrace() { return FunctionsFromBacktrace; }
 
   // Handle General Purpose Registers.
-  RegisterMap &getGRPsFromCrashFrame() { return GPRs; }
-  void insertIntoGPRFromCrashFrame(const char *reg, const char *value) {
-    GPRs.insert(std::make_pair(reg, value));
+  FrameToRegsMap &getGRPsFromFrame() { return GPRs; }
+  void insertIntoGPRsFromFrame(StringRef frame, std::vector<RegInfo> &Regs) {
+    GPRs.insert(std::make_pair(frame, Regs));
+  }
+
+  void setNumOfFrames(unsigned frames) {
+    NumOfFrames = frames;
+  }
+  unsigned getNumOfFrames() {
+    return NumOfFrames;
   }
 };
 
