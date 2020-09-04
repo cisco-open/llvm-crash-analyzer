@@ -112,17 +112,26 @@ int main(int argc, char **argv) {
     return 1;
   crash_blamer::Decompiler *Dec = Decompiler.get().get();
 
-  auto Err = Dec->run(InputFilename, functionsFromCoreFile, FrameToRegs);
+  // This map holds the function-name<->MF mapping from the backtrace
+  // (in order the functions were called within the program).
+  SmallVector<BlameFunction, 8> BlameTrace;
+  // Init the blame trace map.
+  for (StringRef Fn : functionsFromCoreFile.keys())
+    BlameTrace.push_back({Fn, nullptr});
+
+  auto Err = Dec->run(InputFilename, functionsFromCoreFile, FrameToRegs,
+                      BlameTrace);
   if (Err)
     return 1;
 
-  LLVM_DEBUG(auto BlameMFs = Dec->getBlameTrace();
-             for (auto MF
-                  : BlameMFs) MF->dump(););
+  LLVM_DEBUG(for (auto &f : BlameTrace) {
+    llvm::dbgs() << "** fn: " << f.Name << "\n";
+    f.MF->dump();
+  });
 
   // TODO: Implement LLVM MIR analysis.
   // e.g.: CrashBlameAnalysys CBA;
-  //       CBA->run(BlameMFs);
+  //       CBA->run(BlameTrace);
 
   return exit_code;
 }

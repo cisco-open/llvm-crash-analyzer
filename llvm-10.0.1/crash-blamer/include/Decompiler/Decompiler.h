@@ -45,6 +45,11 @@ class formatted_raw_ostream;
 
 namespace crash_blamer {
 
+struct BlameFunction {
+  StringRef Name;
+  MachineFunction *MF;
+};
+
 /// Used to decompile an object file to LLVM MIR representation.
 class Decompiler {
   StringRef DefaultArch;
@@ -61,7 +66,7 @@ class Decompiler {
   std::unique_ptr<Module> Module;
   MachineModuleInfo *MMI;
 
-  SmallVector<MachineFunction *, 8> BlameTrace;
+  SmallVector<MachineFunction *, 8> BlameMFs;
 
   /// Private constructor, call Decompiler::Create(...).
   Decompiler();
@@ -116,7 +121,8 @@ public:
 
   /// This will perform disassemble and transformation to LLVM MIR part.
   llvm::Error run(StringRef InputFile, StringSet<> &functionsFromCoreFile,
-                  FrameToRegsMap &FrameToRegs);
+                  FrameToRegsMap &FrameToRegs,
+                  SmallVectorImpl<BlameFunction> &BlameTrace);
 
   /// Add Machine Function to the Module.
   MachineFunction &createMF(StringRef FunctionName);
@@ -125,7 +131,7 @@ public:
   void addInstr(MachineFunction *MF, MachineBasicBlock *MBB,
                 MCInst &Inst, DebugLoc *Loc, bool IsCrashStart);
 
-  SmallVector<MachineFunction *, 8> &getBlameTrace() { return BlameTrace; }
+  SmallVector<MachineFunction *, 8> &getBlameMFs() { return BlameMFs; }
 };
 
 } // end crash_blamer namespace

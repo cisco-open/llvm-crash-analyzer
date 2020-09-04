@@ -348,7 +348,8 @@ MachineFunction& crash_blamer::Decompiler::createMF(StringRef FunctionName) {
 
 llvm::Error crash_blamer::Decompiler::run(
     StringRef InputFile, StringSet<> &functionsFromCoreFile,
-    FrameToRegsMap &FrameToRegs) {
+    FrameToRegsMap &FrameToRegs,
+    SmallVectorImpl<BlameFunction> &BlameTrace) {
   llvm::outs() << "Decompiling...\n";
   std::string ErrorStr;
   auto ErrOrObj = object::ObjectFile::createObjectFile(InputFile);
@@ -621,6 +622,15 @@ llvm::Error crash_blamer::Decompiler::run(
 
         Index += Size;
       }
+
+      // Map the fn from backtrace to the MF.
+      if (functionsFromCoreFile.count(SymbolName))
+        for (auto &f : BlameTrace) {
+          if (f.Name == SymbolName) {
+            f.MF = MF;
+            break;
+          }
+        }
     }
   }
 
@@ -656,7 +666,7 @@ llvm::Error crash_blamer::Decompiler::run(
   for (auto &F : *(Module.get())) {
     auto MF = MMI->getMachineFunction(F);
     if (MF)
-      BlameTrace.push_back(MF);
+      BlameMFs.push_back(MF);
   }
 
   llvm::outs() << "Decompiled.\n";
