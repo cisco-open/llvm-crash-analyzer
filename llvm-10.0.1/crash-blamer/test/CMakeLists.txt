@@ -4,9 +4,18 @@ configure_lit_site_cfg(
   MAIN_CONFIG
   ${CMAKE_CURRENT_SOURCE_DIR}/lit.cfg.py
 )
+
+configure_lit_site_cfg(
+  ${CMAKE_CURRENT_SOURCE_DIR}/Unit/lit.site.cfg.py.in
+  ${CMAKE_CURRENT_BINARY_DIR}/Unit/lit.site.cfg.py
+  MAIN_CONFIG
+  ${CMAKE_CURRENT_SOURCE_DIR}/Unit/lit.cfg.py
+)
+
 set(CRASH_BLAMER_TEST_DEPENDS
   FileCheck
   crash-blamer
+  CRASHBLAMERUnitTests
   )
 # Show progress bar!
 list(APPEND LLVM_LIT_ARGS

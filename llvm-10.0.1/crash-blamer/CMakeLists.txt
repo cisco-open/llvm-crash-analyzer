@@ -8,6 +8,7 @@ include_directories(include/
 
 add_subdirectory(lib)
 add_subdirectory(test)
+add_subdirectory(unittests)
 
 set(LLVM_LINK_COMPONENTS
   AllTargetsCodeGens
