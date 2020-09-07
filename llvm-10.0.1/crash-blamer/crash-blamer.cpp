@@ -126,7 +126,10 @@ int main(int argc, char **argv) {
 
   LLVM_DEBUG(for (auto &f : BlameTrace) {
     llvm::dbgs() << "** fn: " << f.Name << "\n";
-    f.MF->dump();
+    if (f.MF)
+      f.MF->dump();
+    else
+      llvm::dbgs() << "No code generated for " << f.Name << "\n";
   });
 
   // TODO: Implement LLVM MIR analysis.
