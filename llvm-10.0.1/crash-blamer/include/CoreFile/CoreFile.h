@@ -9,8 +9,8 @@
 #ifndef CB_COREFILE_
 #define CB_COREFILE_
 
+#include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringRef.h"
-#include "llvm/ADT/StringSet.h"
 
 #include <map>
 #include <vector>
@@ -41,13 +41,15 @@ namespace crash_blamer {
 class CoreFile {
   unsigned NumOfFrames = 0;
   const char *name;
-  StringSet<> FunctionsFromBacktrace;
+  SmallVector<StringRef, 8> FunctionsFromBacktrace;
   FrameToRegsMap GPRs;
 public:
   CoreFile(StringRef name) : name(name.data()) { FunctionsFromBacktrace = {}; }
 
   void read(StringRef InputFile);
-  StringSet<> &getFunctionsFromBacktrace() { return FunctionsFromBacktrace; }
+  SmallVector<StringRef, 8> &getFunctionsFromBacktrace() {
+    return FunctionsFromBacktrace;
+  }
 
   // Handle General Purpose Registers.
   FrameToRegsMap &getGRPsFromFrame() { return GPRs; }

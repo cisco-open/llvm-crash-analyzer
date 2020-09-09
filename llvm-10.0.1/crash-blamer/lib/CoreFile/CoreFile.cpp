@@ -71,7 +71,7 @@ void llvm::crash_blamer::CoreFile::read(StringRef InputFile) {
       return;
     }
     LLVM_DEBUG(dbgs() << frame.GetFunctionName() << "\n");
-    FunctionsFromBacktrace.insert(frame.GetFunctionName());
+    FunctionsFromBacktrace.push_back(frame.GetFunctionName());
   }
 
   // Get registers state at the point of the crash.

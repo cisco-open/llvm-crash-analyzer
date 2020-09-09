@@ -346,8 +346,17 @@ MachineFunction& crash_blamer::Decompiler::createMF(StringRef FunctionName) {
   return MMI->getOrCreateMachineFunction(*F);
 }
 
+static bool checkIfBTContainsFn(
+    SmallVectorImpl<StringRef> &FunctionsFromBacktrace, StringRef fn) {
+  for (StringRef f : FunctionsFromBacktrace)
+    if (f == fn)
+      return true;
+  return false;
+}
+
 llvm::Error crash_blamer::Decompiler::run(
-    StringRef InputFile, StringSet<> &functionsFromCoreFile,
+    StringRef InputFile,
+    SmallVectorImpl<StringRef> &functionsFromCoreFile,
     FrameToRegsMap &FrameToRegs,
     SmallVectorImpl<BlameFunction> &BlameTrace) {
   llvm::outs() << "Decompiling...\n";
@@ -523,7 +532,7 @@ llvm::Error crash_blamer::Decompiler::run(
       std::string InstrAddr;
       unsigned AddrValue = 0;
 
-      if (functionsFromCoreFile.count(SymbolName)) {
+      if (checkIfBTContainsFn(functionsFromCoreFile, SymbolName)) {
         MF = &createMF(SymbolName);
         MBB = MF->CreateMachineBasicBlock();
         MF->push_back(MBB);
@@ -624,7 +633,7 @@ llvm::Error crash_blamer::Decompiler::run(
       }
 
       // Map the fn from backtrace to the MF.
-      if (functionsFromCoreFile.count(SymbolName))
+      if (checkIfBTContainsFn(functionsFromCoreFile, SymbolName))
         for (auto &f : BlameTrace) {
           if (f.Name == SymbolName) {
             f.MF = MF;

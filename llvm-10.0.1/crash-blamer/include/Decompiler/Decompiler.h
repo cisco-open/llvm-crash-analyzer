@@ -120,7 +120,8 @@ public:
   ~Decompiler();
 
   /// This will perform disassemble and transformation to LLVM MIR part.
-  llvm::Error run(StringRef InputFile, StringSet<> &functionsFromCoreFile,
+  llvm::Error run(StringRef InputFile,
+                  SmallVectorImpl<StringRef> &functionsFromCoreFile,
                   FrameToRegsMap &FrameToRegs,
                   SmallVectorImpl<BlameFunction> &BlameTrace);
 

@@ -101,7 +101,7 @@ int main(int argc, char **argv) {
   CoreFile coreFile(CoreFileName);
   coreFile.read(InputFilename);
   // Get the functions from backtrace.
-  StringSet<> functionsFromCoreFile = coreFile.getFunctionsFromBacktrace();
+  auto functionsFromCoreFile = coreFile.getFunctionsFromBacktrace();
   auto FrameToRegs = coreFile.getGRPsFromFrame();
 
   // Implement decompiler.
@@ -116,7 +116,7 @@ int main(int argc, char **argv) {
   // (in order the functions were called within the program).
   SmallVector<BlameFunction, 8> BlameTrace;
   // Init the blame trace map.
-  for (StringRef Fn : functionsFromCoreFile.keys())
+  for (StringRef Fn : functionsFromCoreFile)
     BlameTrace.push_back({Fn, nullptr});
 
   auto Err = Dec->run(InputFilename, functionsFromCoreFile, FrameToRegs,
