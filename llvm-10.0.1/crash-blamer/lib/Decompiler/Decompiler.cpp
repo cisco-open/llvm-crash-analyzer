@@ -354,18 +354,33 @@ static bool checkIfBTContainsFn(
   return false;
 }
 
+static void error(StringRef Prefix, std::error_code EC) {
+  if (!EC)
+    return;
+  WithColor::error() << Prefix << ": " << EC.message() << "\n";
+  exit(1);
+}
+
 llvm::Error crash_blamer::Decompiler::run(
     StringRef InputFile,
     SmallVectorImpl<StringRef> &functionsFromCoreFile,
     FrameToRegsMap &FrameToRegs,
     SmallVectorImpl<BlameFunction> &BlameTrace) {
   llvm::outs() << "Decompiling...\n";
+
   std::string ErrorStr;
-  auto ErrOrObj = object::ObjectFile::createObjectFile(InputFile);
-  if (!ErrOrObj)
+  ErrorOr<std::unique_ptr<MemoryBuffer>> BuffOrErr =
+  MemoryBuffer::getFileOrSTDIN(InputFile);
+  error(InputFile, BuffOrErr.getError());
+  std::unique_ptr<MemoryBuffer> Buffer = std::move(BuffOrErr.get());
+  Expected<std::unique_ptr<Binary>> BinOrErr = object::createBinary(*Buffer);
+  error(InputFile, errorToErrorCode(BinOrErr.takeError()));
+
+  auto *ObjFile = dyn_cast<ObjectFile>(BinOrErr->get());
+  if (!ObjFile)
     return make_error<StringError>("unable to open " + InputFile,
                                    inconvertibleErrorCode());
-
+  auto &Obj = *ObjFile;
   static LLVMContext Ctx;
   LLVMTargetMachine &LLVMTM = static_cast<LLVMTargetMachine &>(*TM.get());
 
@@ -377,8 +392,6 @@ llvm::Error crash_blamer::Decompiler::run(
     return Error::success();
 
   MMI->initialize();
-
-  auto &Obj = *ErrOrObj->getBinary();
 
   // Mapping virtual address --> symbol name.
   std::map<SectionRef, SectionSymbolsTy> AllSymbols;
