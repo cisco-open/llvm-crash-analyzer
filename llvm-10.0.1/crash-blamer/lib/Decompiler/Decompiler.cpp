@@ -17,6 +17,7 @@
 #include "llvm/CodeGen/MachineInstr.h"
 #include "llvm/CodeGen/MachineInstrBuilder.h"
 #include "llvm/CodeGen/MachineModuleInfo.h"
+#include "llvm/CodeGen/MIRPrinter.h"
 #include "llvm/DebugInfo/DIContext.h"
 #include "llvm/DebugInfo/Symbolize/Symbolize.h"
 #include "llvm/IR/DIBuilder.h"
@@ -53,6 +54,11 @@ static cl::opt<bool> ShowDisassembly("show-disassemble", cl::Hidden,
 static cl::opt<std::string>
     ExportToMIR("export-to-mir",
                 cl::desc("Export decompiled LLVM MIR into a file."),
+                cl::value_desc("filename"), cl::init(""));
+
+static cl::opt<std::string>
+    PrintDecMIR("print-decompiled-mir",
+                cl::desc("Print decompiled LLVM MIR."),
                 cl::value_desc("filename"), cl::init(""));
 
 static StringSet<> DisasmSymbolSet;
@@ -571,6 +577,7 @@ llvm::Error crash_blamer::Decompiler::run(
             DISubprogram::SPFlagDefinition | DISubprogram::SPFlagOptimized;
         auto SP = DIB.createFunction(CU, F.getName(), F.getName(), File, 1,
                                      SPType, 1, DINode::FlagZero, SPFlags);
+        (const_cast<Function*>(&F))->setSubprogram(SP);
         DISP = SP;
         DIB.finalizeSubprogram(SP);
       }
@@ -681,6 +688,28 @@ llvm::Error crash_blamer::Decompiler::run(
       auto MF = MMI->getMachineFunction(F);
       if (MF)
         MF->print(OS_FILE);
+    }
+  }
+
+  if (PrintDecMIR != "") {
+    StringRef file_name = PrintDecMIR;
+    if (!file_name.endswith(".mir")) {
+      errs() << "MIR file must be with '.mir' extension.\n";
+      // TODO: return real error here.
+      return Error::success();
+    }
+
+    std::error_code EC;
+    raw_fd_ostream OS_FILE{PrintDecMIR, EC, sys::fs::OF_Text};
+    if (EC) {
+      errs() << "Could not open file: " << EC.message() << ", " << PrintDecMIR
+             << '\n';
+      return errorCodeToError(EC);
+    }
+    printMIR(OS_FILE, *Module.get());
+    for (auto &f : BlameTrace) {
+      if (f.MF)
+        printMIR(OS_FILE, *f.MF);
     }
   }
 
