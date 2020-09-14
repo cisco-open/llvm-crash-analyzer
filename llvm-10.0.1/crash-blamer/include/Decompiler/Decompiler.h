@@ -12,6 +12,7 @@
 #include "CoreFile/CoreFile.h"
 
 #include "llvm/ADT/SmallVector.h"
+#include "llvm/ADT/SmallSet.h"
 #include "llvm/ADT/StringSet.h"
 #include "llvm/CodeGen/MachineFunction.h"
 #include "llvm/MC/MCDisassembler/MCDisassembler.h"
@@ -49,6 +50,8 @@ struct BlameFunction {
   StringRef Name;
   MachineFunction *MF;
 };
+
+using RegSet = SmallSet<Register, 32>;
 
 /// Used to decompile an object file to LLVM MIR representation.
 class Decompiler {
@@ -130,7 +133,8 @@ public:
 
   /// Add Machine Instr to the MF.
   void addInstr(MachineFunction *MF, MachineBasicBlock *MBB,
-                MCInst &Inst, DebugLoc *Loc, bool IsCrashStart);
+                MCInst &Inst, DebugLoc *Loc, bool IsCrashStart,
+                RegSet &DefinedRegs);
 
   SmallVector<MachineFunction *, 8> &getBlameMFs() { return BlameMFs; }
 };

@@ -309,11 +309,24 @@ createModule(LLVMContext &Context, const DataLayout DL, StringRef InputFile) {
 
 void crash_blamer::Decompiler::addInstr(MachineFunction *MF,
     MachineBasicBlock *MBB, MCInst &Inst, DebugLoc *Loc,
-    bool IsCrashStart) {
+    bool IsCrashStart, crash_blamer::RegSet &DefinedRegs) {
   const unsigned Opcode = Inst.getOpcode();
   const MCInstrDesc &MCID = MII->get(Opcode);
   MachineInstrBuilder Builder = BuildMI(
       MBB, !Loc->getLine() ? DebugLoc() : *Loc, MCID);
+
+  // TODO: Revisit this logic. We keep tracking of
+  // all defined registers, so if we face a register
+  // use that isn't defined, we assume the register
+  // was line-in (premise: the final generated
+  // code was properly generated).
+  unsigned NumImplDefs = MCID.getNumImplicitDefs();
+  auto ImplDefs = MCID.getImplicitDefs();
+  for (unsigned i = 0; i < NumImplDefs; ++i) {
+    if (!DefinedRegs.count(ImplDefs[i]))
+      DefinedRegs.insert(ImplDefs[i]);
+  }
+
   for (unsigned OpIndex = 0, E = Inst.getNumOperands(); OpIndex < E;
        ++OpIndex) {
     const MCOperand &Op = Inst.getOperand(OpIndex);
@@ -321,8 +334,17 @@ void crash_blamer::Decompiler::addInstr(MachineFunction *MF,
       const bool IsDef = OpIndex < MCID.getNumDefs();
       unsigned Flags = 0;
       const MCOperandInfo &OpInfo = MCID.operands().begin()[OpIndex];
-      if (IsDef && !OpInfo.isOptionalDef())
+      if (IsDef && !OpInfo.isOptionalDef()) {
         Flags |= RegState::Define;
+        DefinedRegs.insert(Op.getReg());
+      } else if (Op.getReg() &&
+                 !MCID.hasImplicitUseOfPhysReg(Op.getReg()) &&
+                 !MCID.hasImplicitDefOfPhysReg(Op.getReg()) &&
+                 !DefinedRegs.count(Op.getReg())) {
+        // This is register use. If it wasn't defined, it could be
+        // line-in.
+        MBB->addLiveIn(Op.getReg());
+      }
       Builder.addReg(Op.getReg(), Flags);
     } else if (Op.isImm()) {
       Builder.addImm(Op.getImm());
@@ -548,6 +570,7 @@ llvm::Error crash_blamer::Decompiler::run(
       MachineFunction *MF = nullptr;
       MachineBasicBlock *MBB = nullptr;
       DISubprogram *DISP = nullptr;
+      crash_blamer::RegSet DefinedRegs;
       std::string InstrAddr;
       unsigned AddrValue = 0;
 
@@ -638,7 +661,8 @@ llvm::Error crash_blamer::Decompiler::run(
             auto DILoc = DILocation::get(Ctx, DbgLineInfo.Line,
                                        DbgLineInfo.Column, DISP);
             DebugLoc Loc (DILoc);
-            addInstr(MF, MBB, Inst, &Loc, AddrValue == Addr.Address);
+            addInstr(MF, MBB, Inst, &Loc, AddrValue == Addr.Address,
+                     DefinedRegs);
           }
         }
 
