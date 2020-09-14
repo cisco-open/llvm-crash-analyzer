@@ -18,6 +18,8 @@
 #include "llvm/CodeGen/MachineInstrBuilder.h"
 #include "llvm/CodeGen/MachineModuleInfo.h"
 #include "llvm/CodeGen/MIRPrinter.h"
+#include "llvm/CodeGen/TargetInstrInfo.h"
+#include "llvm/CodeGen/TargetSubtargetInfo.h"
 #include "llvm/DebugInfo/DIContext.h"
 #include "llvm/DebugInfo/Symbolize/Symbolize.h"
 #include "llvm/IR/DIBuilder.h"
@@ -310,10 +312,22 @@ createModule(LLVMContext &Context, const DataLayout DL, StringRef InputFile) {
 void crash_blamer::Decompiler::addInstr(MachineFunction *MF,
     MachineBasicBlock *MBB, MCInst &Inst, DebugLoc *Loc,
     bool IsCrashStart, crash_blamer::RegSet &DefinedRegs) {
+
+  // TODO: Add frame-setup for the PUSH64r $rbp and
+  // destroy-frame for the $rbp = POP64r.
+
   const unsigned Opcode = Inst.getOpcode();
   const MCInstrDesc &MCID = MII->get(Opcode);
   MachineInstrBuilder Builder = BuildMI(
       MBB, !Loc->getLine() ? DebugLoc() : *Loc, MCID);
+
+  auto TII = MF->getSubtarget().getInstrInfo();
+  // No need for the NOOPs within MIR representation.
+  // TODO: Optimize this. Can we check if it is a noop from MCID?
+  if (TII->isNoopInstr(*Builder)) {
+    Builder->eraseFromParent();
+    return;
+  }
 
   // TODO: Revisit this logic. We keep tracking of
   // all defined registers, so if we face a register
@@ -353,6 +367,13 @@ void crash_blamer::Decompiler::addInstr(MachineFunction *MF,
     } else {
       llvm_unreachable("Not yet implemented");
     }
+  }
+
+  // If it is an XOR eax, eax mark them as undef. It's a simple
+  // way of setting a reg to zero.
+  if (TII->isXORSimplifiedSetToZero(*Builder)) {
+    Builder->getOperand(1).setIsUndef();
+    Builder->getOperand(2).setIsUndef();
   }
 
   if (IsCrashStart)

@@ -194,6 +194,9 @@ public:
   unsigned isLoadFromStackSlotPostFE(const MachineInstr &MI,
                                      int &FrameIndex) const override;
 
+  bool isNoopInstr(const MachineInstr &MI) const override;
+  bool isXORSimplifiedSetToZero(const MachineInstr &MI) const override;
+
   unsigned isStoreToStackSlot(const MachineInstr &MI,
                               int &FrameIndex) const override;
   unsigned isStoreToStackSlot(const MachineInstr &MI,

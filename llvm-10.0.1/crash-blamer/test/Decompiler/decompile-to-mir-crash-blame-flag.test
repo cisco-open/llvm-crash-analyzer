@@ -33,4 +33,4 @@
 # CHECK: $rsp = crash-start ADD64ri8 $rsp(tied-def 0), 16, implicit-def $eflags, debug-location {{.*}}:13:1
 
 # CHECK: # Machine code for function main
-# CHECK: $eax = crash-start XOR32rr $eax(tied-def 0), $eax, implicit-def $eflags, debug-location {{.*}}:17:3
+# CHECK: $eax = crash-start XOR32rr undef $eax(tied-def 0), undef $eax, implicit-def $eflags, debug-location {{.*}}:17:3

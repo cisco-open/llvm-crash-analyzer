@@ -959,6 +959,16 @@ public:
     return isCopyInstrImpl(MI);
   }
 
+  /// Check if the instruction is a noop.
+  virtual bool isNoopInstr(const MachineInstr &MI) const {
+    return false;
+  }
+
+  /// Check if the instruction is a xor that sets a reg to zero.
+  virtual bool isXORSimplifiedSetToZero(const MachineInstr &MI) const {
+    return false;
+  }
+
   /// If the specific machine instruction is an instruction that adds an
   /// immediate value and a physical register, and stores the result in
   /// the given physical register \c Reg, return a pair of the source

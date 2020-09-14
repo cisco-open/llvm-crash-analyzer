@@ -427,6 +427,31 @@ unsigned X86InstrInfo::isLoadFromStackSlotPostFE(const MachineInstr &MI,
   return 0;
 }
 
+bool X86InstrInfo::isNoopInstr(const MachineInstr &MI) const {
+  switch (MI.getOpcode()) {
+  default:
+    return false;
+  case X86::NOOP:
+  case X86::XCHG16ar:
+  case X86::NOOPL:
+  case X86::NOOPW:
+    return true;
+  }
+  llvm_unreachable("Unexpected!");
+}
+
+bool X86InstrInfo::isXORSimplifiedSetToZero(const MachineInstr &MI) const {
+  // TODO: Cover more cases.
+  if (MI.getOpcode() != X86::XOR32rr && MI.getOpcode() != X86::XOR64rr)
+    return false;
+
+  auto Op1 = MI.getOperand(1);
+  auto Op2 = MI.getOperand(2);
+  if (Op1.isReg() && Op2.isReg() && Op1.getReg() == Op2.getReg())
+    return true;
+  return false;
+}
+
 unsigned X86InstrInfo::isStoreToStackSlot(const MachineInstr &MI,
                                           int &FrameIndex) const {
   unsigned Dummy;
