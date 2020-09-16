@@ -25,10 +25,14 @@ There are multiple phases as following:
 There are various steps && variants/combination of CMake usage on the LLVM project builds, but we will point to the one we use on our CISCO dev machines. For further info, please consider using the link: https://llvm.org/docs/CMake.html.
 Steps:
 
-    $ mkdir build && cd build
-    $ export CXX=/auto/binos-tools/llvm71/llvm-7.1-p1/bin/clang++ && export CC=/auto/binos-tools/llvm71/llvm-7.1-p1/bin/clang
-    $ /auto/compiler_storage/jstengle/cmake_317/inst/bin/cmake -G "Unix Makefiles" -DCMAKE_BUILD_TYPE=Release -DLLVM_ENABLE_ASSERTIONS=On -DLLVM_ENABLE_PROJECTS="clang;crash-blamer;lldb;" -DLLVM_ENABLE_LIBCXX=ON ../llvm-project/llvm -DLLDB_TEST_COMPILER=/auto/binos-tools/llvm71/llvm-7.1-p1/bin/clang
-    $ make -j30 && make check-crash-blamer -j30
+$ export CXX=/auto/binos-tools/llvm90/llvm-9.0-p0a/bin/clang++ && export CC=/auto/binos-tools/llvm90/llvm-9.0-p0a/bin/clang   
+$ export LD_LIBRARY_PATH=/router/lib/:$LD_LIBRARY_PATH
+$ export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/auto/binos-tools/llvm90/llvm-9.0-p0a/lib
+
+$ mkdir build && cd build
+$ /auto/binos-tools/llvm40/tools/cmake/bin/cmake -G "Unix Makefiles" -DCMAKE_BUILD_TYPE=Release -DLLVM_ENABLE_ASSERTIONS=On -DLLVM_ENABLE_PROJECTS="clang;crash-blamer;lldb;" -DLLVM_ENABLE_LIBCXX=ON ../llvm-10.0.1/llvm -DLLDB_TEST_COMPILER=/auto/binos-tools/llvm90/llvm-9.0-p0a/bin/clang 
+
+$ make -j30 && make check-crash-blamer -j30
 
 ## Using the tool
 
