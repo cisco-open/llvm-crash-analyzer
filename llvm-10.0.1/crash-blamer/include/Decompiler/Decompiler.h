@@ -52,6 +52,7 @@ struct BlameFunction {
 };
 
 using RegSet = SmallSet<Register, 32>;
+using BlameModule = SmallVector<BlameFunction, 8>;
 
 /// Used to decompile an object file to LLVM MIR representation.
 class Decompiler {

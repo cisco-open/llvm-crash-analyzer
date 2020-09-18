@@ -12,6 +12,7 @@
 
 #include "Decompiler/Decompiler.h"
 #include "CoreFile/CoreFile.h"
+#include "Analysis/TaintAnalysis.h"
 
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/StringSet.h"
@@ -114,7 +115,7 @@ int main(int argc, char **argv) {
 
   // This map holds the function-name<->MF mapping from the backtrace
   // (in order the functions were called within the program).
-  SmallVector<BlameFunction, 8> BlameTrace;
+  BlameModule BlameTrace;
   // Init the blame trace map.
   for (StringRef Fn : functionsFromCoreFile)
     BlameTrace.push_back({Fn, nullptr});
@@ -132,9 +133,12 @@ int main(int argc, char **argv) {
       llvm::dbgs() << "No code generated for " << f.Name << "\n";
   });
 
-  // TODO: Implement LLVM MIR analysis.
-  // e.g.: CrashBlameAnalysys CBA;
-  //       CBA->run(BlameTrace);
+  // Run the analysis.
+  crash_blamer::TaintAnalysis TA;
+  if (!TA.runOnBlameModule(BlameTrace))
+    llvm::outs() << "\nRESULT: FAIL\n";
+  else
+    llvm::outs() << "\nRESULT: SUCCESS\n";
 
   return exit_code;
 }

@@ -29,4 +29,5 @@ target_link_libraries (crash-blamer
   PRIVATE
     CrashBlamerDecompiler
     CrashBlamerCoreFile
+    CrashBlamerTaintAnalysis
   )
