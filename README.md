@@ -74,4 +74,17 @@ $ make -j30 && make check-crash-blamer -j30
        ii) show-disassemble
        iii) ...
 
+## Commiting to the repository
+In order to pass every commit through a code reioew process, it is suggested to create a git pull request for each commit. First create a local branch:
 
+       $ git checkout -tb "branch_name" origin/master
+
+Make your changes and commit them locally:
+
+       $ git commit
+
+Push your changes to GitHub:
+
+       $ git push origin branch_name 
+
+This should create a git pull request on GitHub. Once the changes have been approved, you can merge the changes in.
