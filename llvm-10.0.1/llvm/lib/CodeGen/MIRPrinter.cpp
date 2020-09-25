@@ -132,6 +132,9 @@ public:
   void convertCallSiteObjects(yaml::MachineFunction &YMF,
                               const MachineFunction &MF,
                               ModuleSlotTracker &MST);
+  void convertCrashRegObjects(yaml::MachineFunction &YMF,
+                              const MachineFunction &MF,
+                              ModuleSlotTracker &MST);
 
 private:
   void initRegisterMaskIds(const MachineFunction &MF);
@@ -216,6 +219,8 @@ void MIRPrinter::print(const MachineFunction &MF) {
   convert(MST, YamlMF.FrameInfo, MF.getFrameInfo());
   convertStackObjects(YamlMF, MF, MST);
   convertCallSiteObjects(YamlMF, MF, MST);
+  convertCrashRegObjects(YamlMF, MF, MST);
+
   if (const auto *ConstantPool = MF.getConstantPool())
     convert(YamlMF, *ConstantPool);
   if (const auto *JumpTableInfo = MF.getJumpTableInfo())
@@ -496,6 +501,22 @@ void MIRPrinter::convertCallSiteObjects(yaml::MachineFunction &YMF,
                  return A.CallLocation.Offset < B.CallLocation.Offset;
                return A.CallLocation.BlockNum < B.CallLocation.BlockNum;
              });
+}
+
+void MIRPrinter::convertCrashRegObjects(yaml::MachineFunction &YMF,
+                                        const MachineFunction &MF,
+                                        ModuleSlotTracker &MST) {
+  yaml::RegisterCrashInfo YmlRegInfo;
+  auto MFRegInfo = MF.getCrashRegInfo();
+
+  for (auto RegInfo : MFRegInfo) {
+    yaml::RegisterCrashInfo::RegisterCrashValue YmlReg;
+    YmlReg.Name = RegInfo.Name;
+    YmlReg.Value = RegInfo.Value;
+    YmlRegInfo.Regs.push_back(YmlReg);
+  }
+
+  YMF.MFRegInfo = YmlRegInfo;
 }
 
 void MIRPrinter::convert(yaml::MachineFunction &MF,
