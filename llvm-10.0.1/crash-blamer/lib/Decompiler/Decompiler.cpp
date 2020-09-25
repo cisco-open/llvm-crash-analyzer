@@ -611,6 +611,12 @@ llvm::Error crash_blamer::Decompiler::run(
             break;
           }
         }
+
+        // Fill up the register-memory state into coresponding MF attributes.
+        MachineFunction::RegisterCrashInfo regInfo;
+        for (auto &reg : Regs->second)
+          regInfo.push_back({reg.regName, reg.regValue});
+        MF->addCrashRegInfo(regInfo);
       }
 
       // Create DI subprogram.

@@ -125,6 +125,9 @@ public:
   bool initializeCallSiteInfo(PerFunctionMIParsingState &PFS,
                               const yaml::MachineFunction &YamlMF);
 
+  bool initializeCrashRegInfoInfo(PerFunctionMIParsingState &PFS,
+                                  const yaml::MachineFunction &YamlMF);
+
   bool parseCalleeSavedRegister(PerFunctionMIParsingState &PFS,
                                 std::vector<CalleeSavedInfo> &CSIInfo,
                                 const yaml::StringValue &RegisterSource,
@@ -390,6 +393,19 @@ bool MIRParserImpl::initializeCallSiteInfo(
   return false;
 }
 
+bool MIRParserImpl::initializeCrashRegInfoInfo(
+    PerFunctionMIParsingState &PFS, const yaml::MachineFunction &YamlMF) {
+  MachineFunction &MF = PFS.MF;
+  SMDiagnostic Error;
+  // TODO: Validate the attribute. If we found an issue, return true.
+  MachineFunction::RegisterCrashInfo CrashRegInfo;
+  for (auto regInfo : YamlMF.MFRegInfo.Regs) {
+    CrashRegInfo.push_back({regInfo.Name, regInfo.Value});
+  }
+  MF.addCrashRegInfo(CrashRegInfo);
+  return false;
+}
+
 bool
 MIRParserImpl::initializeMachineFunction(const yaml::MachineFunction &YamlMF,
                                          MachineFunction &MF) {
@@ -491,6 +507,10 @@ MIRParserImpl::initializeMachineFunction(const yaml::MachineFunction &YamlMF,
   computeFunctionProperties(MF);
 
   if (initializeCallSiteInfo(PFS, YamlMF))
+    return false;
+
+ // TODO: Improve this.
+ if (initializeCrashRegInfoInfo(PFS, YamlMF))
     return false;
 
   MF.getSubtarget().mirFileLoaded(MF);

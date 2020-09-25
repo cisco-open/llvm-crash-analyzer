@@ -389,10 +389,38 @@ template <> struct MappingTraits<CallSiteInfo::ArgRegPair> {
 
   static const bool flow = true;
 };
+
+/// Serializable representation of RegisterCrashInfo.
+struct RegisterCrashInfo {
+  struct RegisterCrashValue {
+    std::string Name;
+    std::string Value;
+
+    bool operator==(const RegisterCrashValue &Other) const {
+      return Name == Other.Name && Value == Other.Value;
+    }
+  };
+
+  std::vector<RegisterCrashValue> Regs;
+  bool operator==(const RegisterCrashInfo &Other) const {
+      return Regs == Other.Regs;
+  }
+};
+
+template <> struct MappingTraits<RegisterCrashInfo::RegisterCrashValue> {
+  static void mapping(IO &YamlIO, RegisterCrashInfo::RegisterCrashValue &Reg) {
+    YamlIO.mapRequired("reg", Reg.Name);
+    YamlIO.mapRequired("value", Reg.Value);
+  }
+
+  static const bool flow = true;
+};
+
 }
 }
 
 LLVM_YAML_IS_SEQUENCE_VECTOR(llvm::yaml::CallSiteInfo::ArgRegPair)
+LLVM_YAML_IS_SEQUENCE_VECTOR(llvm::yaml::RegisterCrashInfo::RegisterCrashValue)
 
 namespace llvm {
 namespace yaml {
@@ -403,6 +431,15 @@ template <> struct MappingTraits<CallSiteInfo> {
     YamlIO.mapRequired("offset", CSInfo.CallLocation.Offset);
     YamlIO.mapOptional("fwdArgRegs", CSInfo.ArgForwardingRegs,
                        std::vector<CallSiteInfo::ArgRegPair>());
+  }
+
+  static const bool flow = true;
+};
+
+template <> struct MappingTraits<RegisterCrashInfo> {
+  static void mapping(IO &YamlIO, RegisterCrashInfo &RegInfo) {
+    YamlIO.mapOptional("GPRegs", RegInfo.Regs,
+                       std::vector<RegisterCrashInfo::RegisterCrashValue>());
   }
 
   static const bool flow = true;
@@ -463,6 +500,7 @@ LLVM_YAML_IS_SEQUENCE_VECTOR(llvm::yaml::VirtualRegisterDefinition)
 LLVM_YAML_IS_SEQUENCE_VECTOR(llvm::yaml::MachineStackObject)
 LLVM_YAML_IS_SEQUENCE_VECTOR(llvm::yaml::FixedMachineStackObject)
 LLVM_YAML_IS_SEQUENCE_VECTOR(llvm::yaml::CallSiteInfo)
+LLVM_YAML_IS_SEQUENCE_VECTOR(llvm::yaml::RegisterCrashInfo)
 LLVM_YAML_IS_SEQUENCE_VECTOR(llvm::yaml::MachineConstantPoolValue)
 LLVM_YAML_IS_SEQUENCE_VECTOR(llvm::yaml::MachineJumpTable::Entry)
 
@@ -592,6 +630,7 @@ struct MachineFunction {
   std::vector<MachineConstantPoolValue> Constants; /// Constant pool.
   std::unique_ptr<MachineFunctionInfo> MachineFuncInfo;
   std::vector<CallSiteInfo> CallSitesInfo;
+  RegisterCrashInfo MFRegInfo;
   MachineJumpTable JumpTableInfo;
   BlockStringValue Body;
 };
@@ -620,6 +659,7 @@ template <> struct MappingTraits<MachineFunction> {
                        std::vector<MachineStackObject>());
     YamlIO.mapOptional("callSites", MF.CallSitesInfo,
                        std::vector<CallSiteInfo>());
+    YamlIO.mapOptional("regInfo", MF.MFRegInfo, RegisterCrashInfo());
     YamlIO.mapOptional("constants", MF.Constants,
                        std::vector<MachineConstantPoolValue>());
     YamlIO.mapOptional("machineFunctionInfo", MF.MachineFuncInfo);
