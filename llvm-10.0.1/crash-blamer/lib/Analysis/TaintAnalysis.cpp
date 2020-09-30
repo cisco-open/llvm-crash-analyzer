@@ -7,6 +7,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "Analysis/TaintAnalysis.h"
+#include "llvm/CodeGen/TargetInstrInfo.h"
 
 using namespace llvm;
 
@@ -17,6 +18,8 @@ crash_blamer::TaintAnalysis::TaintAnalysis() {}
 bool crash_blamer::TaintAnalysis::runOnBlameMF(const MachineFunction &MF) {
   // Crash Sequence starts after the MI with the crash-blame flag.
   bool CrashSequenceStarted = false;
+
+  auto TII = MF.getSubtarget().getInstrInfo();
 
   // Perform backward analysis on the MF.
   for (auto MBBIt = MF.rbegin(); MBBIt != MF.rend(); ++MBBIt) {
@@ -29,7 +32,33 @@ bool crash_blamer::TaintAnalysis::runOnBlameMF(const MachineFunction &MF) {
       if (!CrashSequenceStarted)
         continue;
 
+      // TODO: Handle calls other than the one from the backtrace.
+      if (MI.isCall())
+        continue;
+
+      // We reached the end of the frame.
+      if (TII->isPushPop(MI))
+        break;
+
       LLVM_DEBUG(MI.dump(););
+
+      auto DestSrc = TII->getDestAndSrc(MI);
+      if (!DestSrc) {
+        LLVM_DEBUG(
+          llvm::dbgs() << "haven't found dest && source for the MI\n";);
+        continue;
+      }
+
+      LLVM_DEBUG(
+          llvm::dbgs() << "***performing tint analysis on the operands\n";
+          llvm::dbgs() << "dest: ";
+          DestSrc->Destination->dump();
+          if (DestSrc->DestOffset)
+            llvm::dbgs() << "dest offset: " << DestSrc->DestOffset << "\n";
+          llvm::dbgs() << "src: ";
+          DestSrc->Source->dump();
+          if (DestSrc->SrcOffset)
+            llvm::dbgs() << "src offset: " << DestSrc->SrcOffset << "\n";);
 
       // TODO: Perform the actual analysis here.
     }
