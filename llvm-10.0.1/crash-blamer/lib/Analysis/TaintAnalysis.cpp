@@ -50,7 +50,7 @@ bool crash_blamer::TaintAnalysis::runOnBlameMF(const MachineFunction &MF) {
       }
 
       LLVM_DEBUG(
-          llvm::dbgs() << "***performing tint analysis on the operands\n";
+          llvm::dbgs() << "***performing taint analysis on the operands\n";
           llvm::dbgs() << "dest: ";
           DestSrc->Destination->dump();
           if (DestSrc->DestOffset)
