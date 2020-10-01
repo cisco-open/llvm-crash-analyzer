@@ -196,6 +196,9 @@ public:
 
   bool isNoopInstr(const MachineInstr &MI) const override;
   bool isXORSimplifiedSetToZero(const MachineInstr &MI) const override;
+  bool isPushPop(const MachineInstr &MI) const override;
+
+  Optional<DestSourcePair> getDestAndSrc(const MachineInstr &MI) const override;
 
   unsigned isStoreToStackSlot(const MachineInstr &MI,
                               int &FrameIndex) const override;

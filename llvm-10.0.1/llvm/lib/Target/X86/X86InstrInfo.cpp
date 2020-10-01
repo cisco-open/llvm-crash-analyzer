@@ -452,6 +452,91 @@ bool X86InstrInfo::isXORSimplifiedSetToZero(const MachineInstr &MI) const {
   return false;
 }
 
+bool X86InstrInfo::isPushPop(const MachineInstr &MI) const {
+  switch (MI.getOpcode()) {
+  case X86::PUSH32i8:
+  case X86::PUSH32r:
+  case X86::PUSH32rmm:
+  case X86::PUSH32rmr:
+  case X86::PUSHi32:
+  case X86::PUSH64i8:
+  case X86::PUSH64r:
+  case X86::PUSH64rmm:
+  case X86::PUSH64rmr:
+  case X86::PUSH64i32:
+  case X86::POP32r:
+  case X86::POP64r:
+    return true;
+  default:
+    return false;
+  }
+}
+
+Optional<DestSourcePair>
+X86InstrInfo::getDestAndSrc(const MachineInstr &MI) const {
+  auto Res = isCopyInstr(MI);
+  if (Res)
+    return Res;
+
+  // `xor eax, eax` means: write 0 into $eax.
+  if (isXORSimplifiedSetToZero(MI))
+    return DestSourcePair{MI.getOperand(0), MachineOperand::CreateImm(0)};
+
+  // NOTE: We cannot use isMoveImmediate() since it does not specify what
+  // operand is a source or destination (e.g. see:
+  // https://reviews.llvm.org/D69109).
+
+  const TargetRegisterInfo *TRI = &getRegisterInfo();
+  const MachineOperand *BaseOp;
+  int64_t Offset;
+
+  switch(MI.getOpcode()) {
+    case X86::MOV64mi32:
+    case X86::MOV32mi: {
+      // Memory operands are being printed with multiple MI operands,
+      // describing offsets, etc., so:
+      //   movl   $0x0,(%rax) <== prints 0 at indirect address rax + 0
+      // will be printed within MIR as:
+      //   MOV32mi $rax, 1, $noreg, 0, $noreg, 0 <== first 5 operands
+      // describe the indirect address rax, and the last (6th) is an
+      // immediate being stored in.
+      // Another example:
+      //   mov    -0x8(%rbp),%rax
+      // will be converted as:
+      //   $rax = MOV64rm $rbp, 1, $noreg, -8, $noreg
+      // so, the $rax is register destination, and the block
+      // $rbp, 1, $noreg, -8, $noreg describes the -0x8(%rbp).
+      if (!getMemOperandWithOffset(MI, BaseOp, Offset, TRI))
+        return None;
+
+      return DestSourcePair{*BaseOp, Offset, MI.getOperand(5)};
+    } case X86::MOV64rm: {
+      const MachineOperand *Dest = &(MI.getOperand(0));
+      if (!getMemOperandWithOffset(MI, BaseOp, Offset, TRI))
+        return None;
+
+      return DestSourcePair{*Dest, *BaseOp, Offset};
+    } case X86::MOV64mr: {
+      const MachineOperand *Src = &(MI.getOperand(5));
+      if (!getMemOperandWithOffset(MI, BaseOp, Offset, TRI))
+        return None;
+      return DestSourcePair{*BaseOp, Offset, *Src};
+    } case X86::SUB64ri8:
+      case X86::ADD64ri8: {
+      const MachineOperand *Dest = &(MI.getOperand(0));
+      const MachineOperand *Src = &(MI.getOperand(2));
+      return DestSourcePair{*Dest, *Src};
+    } case X86::LEA64r: {
+      const MachineOperand *Dest = &(MI.getOperand(0));
+      if (!getMemOperandWithOffset(MI, BaseOp, Offset, TRI))
+        return None;
+      return DestSourcePair{*Dest, *BaseOp, Offset};
+    }
+  }
+
+  return None;
+}
+
 unsigned X86InstrInfo::isStoreToStackSlot(const MachineInstr &MI,
                                           int &FrameIndex) const {
   unsigned Dummy;

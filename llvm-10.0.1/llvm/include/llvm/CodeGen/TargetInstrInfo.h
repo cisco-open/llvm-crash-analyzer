@@ -70,8 +70,20 @@ struct DestSourcePair {
   const MachineOperand *Destination;
   const MachineOperand *Source;
 
+  // Used if one of the operands is a memory operand.
+  int64_t DestOffset = 0;
+  int64_t SrcOffset = 0;
+
   DestSourcePair(const MachineOperand &Dest, const MachineOperand &Src)
       : Destination(&Dest), Source(&Src) {}
+
+  DestSourcePair(const MachineOperand &Dest, int64_t Offset,
+                 const MachineOperand &Src)
+      : Destination(&Dest), Source(&Src), DestOffset(Offset) {}
+
+  DestSourcePair(const MachineOperand &Dest, const MachineOperand &Src,
+                 int64_t Offset)
+      : Destination(&Dest), Source(&Src), SrcOffset(Offset) {}
 };
 
 /// Used to describe a register and immediate addition.
@@ -966,6 +978,18 @@ public:
 
   /// Check if the instruction is a xor that sets a reg to zero.
   virtual bool isXORSimplifiedSetToZero(const MachineInstr &MI) const {
+    return false;
+  }
+
+  /// Return both source and destination operands for specified instruction,
+  /// if any.
+  virtual Optional<DestSourcePair>
+  getDestAndSrc(const MachineInstr &MI) const {
+    return None;
+  }
+
+  /// Check if the instruction is push/pop.
+  virtual bool isPushPop(const MachineInstr &MI) const {
     return false;
   }
 

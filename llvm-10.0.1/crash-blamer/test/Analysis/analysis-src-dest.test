@@ -1,0 +1,50 @@
+## Test dest/src operands.
+# RUN: %crash-blamer --core-file=%S/../Decompiler/Inputs/core.clang-test00.93177 \
+# RUN:     %S/../Decompiler/Inputs/clang-test00 -debug-only=taint-analysis < %s 2>&1 | FileCheck %s
+
+# CHECK: ### MF: h
+# CHECK: crash-start MOV32mi $rax, 1, $noreg, 0, $noreg, 0
+# CHECK: dest: $rax
+# CHECK: src: 0
+# CHECK: $rax = MOV64rm $rbp, 1, $noreg, -8, $noreg
+# CHECK: dest: $rax
+# CHECK: src: $rbp
+# CHECK: src offset: -8
+# CHECK: MOV64mr $rbp, 1, $noreg, -8, $noreg, $rdi
+# CHECK: dest: $rbp
+# CHECK: dest offset: -8
+# CHECK: src: $rdi
+# CHECK: $rbp = MOV64rr $rsp
+# CHECK: dest: $rbp
+# CHECK: src: $rsp
+
+# CHECK: ### MF: g
+# CHECK: $rsp = crash-start ADD64ri8 $rsp(tied-def 0), 16
+# CHECK: dest: $rsp
+# CHECK: src: 16
+# CHECK: $rdi = MOV64rm $rbp, 1, $noreg, -16, $noreg
+# CHECK: dest: $rdi
+# CHECK: src: $rbp
+# CHECK: src offset: -16
+# CHECK: MOV64mr $rbp, 1, $noreg, -16, $noreg, $rax
+# CHECK: dest: $rbp
+# CHECK: dest offset: -16
+# CHECK: src: $rax
+# CHECK: $rax = MOV64rm $rax, 1, $noreg, 0, $noreg
+# CHECK: dest: $rax
+# CHECK: src: $rax
+# CHECK: $rax = MOV64rm $rbp, 1, $noreg, -8, $noreg
+# CHECK: dest: $rax
+# CHECK: src: $rbp
+# CHECK: src offset: -8
+# CHECK: MOV64mr $rbp, 1, $noreg, -8, $noreg, $rdi
+# CHECK: dest: $rbp
+# CHECK: dest offset: -8
+# CHECK: src: $rdi
+# CHECK: $rsp = SUB64ri8 $rsp(tied-def 0), 16, implicit-def $eflags
+# CHECK: dest: $rsp
+# CHECK: src: 16
+# CHECK: $rbp = MOV64rr $rsp
+# CHECK: dest: $rbp
+# CHECK: src: $rsp
+
