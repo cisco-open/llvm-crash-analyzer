@@ -31,6 +31,7 @@ class MachineFunction;
 class MachineInstr;
 class MCAsmInfo;
 class MCContext;
+class MCInstrAnalysis;
 class MCInstrInfo;
 class MCInstPrinter;
 class MCRegisterInfo;
@@ -60,6 +61,7 @@ class Decompiler {
   std::unique_ptr<MCRegisterInfo> MRI;
   std::unique_ptr<MCAsmInfo> MAI;
   std::unique_ptr<MCContext> MC;
+  std::unique_ptr<MCInstrAnalysis> MIA;
   std::unique_ptr<MCInstrInfo> MII;
   std::unique_ptr<MCSubtargetInfo> MSTI;
   std::unique_ptr<TargetMachine> TM;
@@ -135,7 +137,7 @@ public:
   /// Add Machine Instr to the MF.
   void addInstr(MachineFunction *MF, MachineBasicBlock *MBB,
                 MCInst &Inst, DebugLoc *Loc, bool IsCrashStart,
-                RegSet &DefinedRegs);
+                RegSet &DefinedRegs, StringRef TargetFnName);
 
   SmallVector<MachineFunction *, 8> &getBlameMFs() { return BlameMFs; }
 };
