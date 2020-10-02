@@ -19,6 +19,7 @@
 #include "llvm/CodeGen/MachineModuleInfo.h"
 #include "llvm/CodeGen/MIRPrinter.h"
 #include "llvm/CodeGen/TargetInstrInfo.h"
+#include "llvm/CodeGen/TargetRegisterInfo.h"
 #include "llvm/CodeGen/TargetSubtargetInfo.h"
 #include "llvm/DebugInfo/DIContext.h"
 #include "llvm/DebugInfo/Symbolize/Symbolize.h"
@@ -29,6 +30,7 @@
 #include "llvm/IR/Module.h"
 #include "llvm/MC/MCAsmInfo.h"
 #include "llvm/MC/MCContext.h"
+#include "llvm/MC/MCInstrAnalysis.h"
 #include "llvm/MC/MCInstPrinter.h"
 #include "llvm/MC/MCInstrInfo.h"
 #include "llvm/MC/MCRegisterInfo.h"
@@ -112,6 +114,12 @@ llvm::Error crash_blamer::Decompiler::init(Triple TheTriple) {
   MII.reset(TheTarget->createMCInstrInfo());
   if (!MII)
     return make_error<StringError>("no instr info info for target " +
+                                       TripleName,
+                                   inconvertibleErrorCode());
+
+  MIA.reset(TheTarget->createMCInstrAnalysis(MII.get()));
+  if (!MIA)
+    return make_error<StringError>("no mc instr analysis info for target " +
                                        TripleName,
                                    inconvertibleErrorCode());
 
@@ -311,7 +319,8 @@ createModule(LLVMContext &Context, const DataLayout DL, StringRef InputFile) {
 
 void crash_blamer::Decompiler::addInstr(MachineFunction *MF,
     MachineBasicBlock *MBB, MCInst &Inst, DebugLoc *Loc,
-    bool IsCrashStart, crash_blamer::RegSet &DefinedRegs) {
+    bool IsCrashStart, crash_blamer::RegSet &DefinedRegs,
+    StringRef TargetFnName) {
 
   // TODO: Add frame-setup for the PUSH64r $rbp and
   // destroy-frame for the $rbp = POP64r.
@@ -322,6 +331,7 @@ void crash_blamer::Decompiler::addInstr(MachineFunction *MF,
       MBB, !Loc->getLine() ? DebugLoc() : *Loc, MCID);
 
   auto TII = MF->getSubtarget().getInstrInfo();
+  auto TRI = MF->getSubtarget().getRegisterInfo();
   // No need for the NOOPs within MIR representation.
   // TODO: Optimize this. Can we check if it is a noop from MCID?
   if (TII->isNoopInstr(*Builder)) {
@@ -340,6 +350,8 @@ void crash_blamer::Decompiler::addInstr(MachineFunction *MF,
     if (!DefinedRegs.count(ImplDefs[i]))
       DefinedRegs.insert(ImplDefs[i]);
   }
+
+  bool CSRGenerated = false;
 
   for (unsigned OpIndex = 0, E = Inst.getNumOperands(); OpIndex < E;
        ++OpIndex) {
@@ -361,7 +373,26 @@ void crash_blamer::Decompiler::addInstr(MachineFunction *MF,
       }
       Builder.addReg(Op.getReg(), Flags);
     } else if (Op.isImm()) {
-      Builder.addImm(Op.getImm());
+      if (!MCID.isCall() || TargetFnName == "") {
+        Builder.addImm(Op.getImm());
+        continue;
+      }
+      auto &Context = MF->getFunction().getContext();
+      FunctionCallee Callee = Module->getOrInsertFunction(
+          TargetFnName, FunctionType::get(Type::getVoidTy(Context), false));
+      GlobalValue *GV = dyn_cast<GlobalValue>(Callee.getCallee());
+      if (!GV) {
+        Builder.addImm(Op.getImm());
+        continue;
+      }
+      Builder.addGlobalAddress(GV);
+      // Make sure we generate the csr only once.
+      if (!CSRGenerated) {
+        // TODO: Add the callee saved reg mask for indirect calls.
+        Builder.addRegMask(
+          TRI->getCallPreservedMask(*MF, MF->getFunction().getCallingConv()));
+        CSRGenerated = true;
+      }
     } else if (!Op.isValid()) {
       llvm_unreachable("Operand is not set");
     } else {
@@ -673,6 +704,67 @@ llvm::Error crash_blamer::Decompiler::run(
                                     Bytes.slice(Index, Size), Addr,
                                     FOS, "", *MSTI, Obj.getFileName());
 
+        StringRef TargetFnName = "";
+        // Try to resolve the target of a call, tail call, etc. to a specific
+        // symbol.
+        if (MIA && (MIA->isCall(Inst) || MIA->isUnconditionalBranch(Inst) ||
+                    MIA->isConditionalBranch(Inst))) {
+          uint64_t Target;
+          if (MIA->evaluateBranch(Inst, SectionAddr + Index, Size, Target)) {
+            // In a relocatable object, the target's section must reside in
+            // the same section as the call instruction or it is accessed
+            // through a relocation.
+            //
+            // In a non-relocatable object, the target may be in any section.
+            //
+            // N.B. We don't walk the relocations in the relocatable case yet.
+            auto *TargetSectionSymbols = &Symbols;
+            if (!Obj.isRelocatableObject()) {
+              auto It = partition_point(
+                  SectionAddresses,
+                  [=](const std::pair<uint64_t, SectionRef> &O) {
+                    return O.first <= Target;
+                  });
+              if (It != SectionAddresses.begin()) {
+                --It;
+                TargetSectionSymbols = &AllSymbols[It->second];
+              } else {
+                TargetSectionSymbols = &AbsoluteSymbols;
+              }
+            }
+
+            // Find the last symbol in the section whose offset is less than
+            // or equal to the target. If there isn't a section that contains
+            // the target, find the nearest preceding absolute symbol.
+            auto TargetSym = partition_point(
+                *TargetSectionSymbols,
+                [=](const SymbolInfoTy &O) {
+                  return O.Addr <= Target;
+                });
+            if (TargetSym == TargetSectionSymbols->begin()) {
+              TargetSectionSymbols = &AbsoluteSymbols;
+              TargetSym = partition_point(
+                  AbsoluteSymbols,
+                  [=](const SymbolInfoTy &O) {
+                    return O.Addr <= Target;
+                  });
+            }
+            if (TargetSym != TargetSectionSymbols->begin()) {
+              --TargetSym;
+              uint64_t TargetAddress = TargetSym->Addr;
+              TargetFnName = TargetSym->Name;
+              if (ShowDisassembly)
+                FOS << " <" << TargetFnName;
+              uint64_t Disp = Target - TargetAddress;
+              if (ShowDisassembly) {
+                if (Disp)
+                  FOS << "+0x" << Twine::utohexstr(Disp);
+                FOS << '>';
+              }
+            }
+          }
+        }
+
           DILineInfo DbgLineInfo = DILineInfo();
           auto LineInfo = Symbolizer->symbolizeCode(Obj, Addr);
 
@@ -689,7 +781,7 @@ llvm::Error crash_blamer::Decompiler::run(
                                        DbgLineInfo.Column, DISP);
             DebugLoc Loc (DILoc);
             addInstr(MF, MBB, Inst, &Loc, AddrValue == Addr.Address,
-                     DefinedRegs);
+                     DefinedRegs, TargetFnName);
           }
         }
 

@@ -21,3 +21,5 @@
 # CHECK: $rbp = POP64r implicit-def $rsp, implicit $rsp
 # CEHCK: RETQ
 
+# CHECK: name: g
+# CHECK: CALL64pcrel32 @h, csr_64, implicit $rsp, implicit $ssp
