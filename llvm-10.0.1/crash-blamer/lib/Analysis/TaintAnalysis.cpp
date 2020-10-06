@@ -67,6 +67,7 @@ void removeFromTaintList(TaintInfo &op) {
     TaintList.erase(itr);
     return;
   }
+  llvm_unreachable("Operand not in Taint List");
 }
 
 TaintInfo isTainted(TaintInfo &op) {
