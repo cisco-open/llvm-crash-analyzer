@@ -14,18 +14,29 @@ using namespace llvm;
 
 #define DEBUG_TYPE "taint-analysis"
 
-// Tainted Operands in a Machine Instruction
-// This will be Reg-Offset for certain instructions
+// Tainted Operands in a Machine Instruction.
+// This is a Reg-Offset pair.
 struct TaintInfo {
   const MachineOperand *op;
   int64_t Offset;
 };
 
 bool operator==(const TaintInfo &t1, const TaintInfo &t2) {
-
   if (t1.op->isReg() && t2.op->isReg()) {
     if (t1.op->getReg() == t2.op->getReg()) {
       if (t1.Offset == t2.Offset)
+        return true;
+      else
+        return false;
+    }
+  }
+  return false;
+}
+
+bool operator!=(const TaintInfo &t1, const TaintInfo &t2) {
+  if (t1.op->isReg() && t2.op->isReg()) {
+    if (t1.op->getReg() != t2.op->getReg()) {
+      if (t1.Offset != t2.Offset)
         return true;
       else
         return false;
@@ -38,11 +49,10 @@ SmallVector<TaintInfo, 8> TaintList;
 
 crash_blamer::TaintAnalysis::TaintAnalysis() {}
 
-bool propagate_taint(DestSourcePair &ds);
-void start_taint(DestSourcePair &ds);
+bool propagateTaint(DestSourcePair &ds);
+void startTaint(DestSourcePair &ds);
 
 void addToTaintList(TaintInfo &ti) {
-
   if (!ti.op)
     return;
   if (!ti.op->isImm())
@@ -51,47 +61,39 @@ void addToTaintList(TaintInfo &ti) {
 }
 
 void removeFromTaintList(TaintInfo &op) {
-
-  for (auto itr = TaintList.begin(); itr != TaintList.end(); itr++) {
-
-    if (*itr == op) {
-      TaintList.erase(itr);
-      return;
-    }
+  for (auto itr = TaintList.begin(); itr != TaintList.end(); ++itr) {
+    if (*itr != op)
+      continue;
+    TaintList.erase(itr);
+    return;
   }
-  return;
 }
 
 TaintInfo isTainted(TaintInfo &op) {
-
   TaintInfo empty_op;
   empty_op.op = nullptr;
   empty_op.Offset = 0;
-  for (auto itr = TaintList.begin(); itr != TaintList.end(); itr++) {
+  for (auto itr = TaintList.begin(); itr != TaintList.end(); ++itr) {
     if (*itr == op)
       return *itr;
   }
   return empty_op;
 }
 
-void print_taint_list(void) {
-
+void printTaintList(void) {
   if (TaintList.empty()) {
     LLVM_DEBUG(dbgs() << "Taint List is empty");
     return;
   }
   LLVM_DEBUG(dbgs() << "\n-----Taint List Begin------\n");
-
-  for (auto itr = TaintList.begin(); itr != TaintList.end(); itr++) {
-    LLVM_DEBUG(itr->op->dump());
-    LLVM_DEBUG(dbgs() << "Offset =  " << itr->Offset);
-  }
-
+  LLVM_DEBUG(for (auto itr = TaintList.begin(); itr != TaintList.end(); ++itr) {
+    itr->op->dump();
+    dbgs() << "Offset =  " << itr->Offset;
+  });
   LLVM_DEBUG(dbgs() << "\n------Taint List End----\n");
 }
 
-void start_taint(DestSourcePair &ds) {
-
+void startTaint(DestSourcePair &ds) {
   // This is the case when analysis begins
 
   TaintInfo src_ti, dst_ti;
@@ -105,18 +107,17 @@ void start_taint(DestSourcePair &ds) {
   if (TaintList.empty()) {
     addToTaintList(src_ti);
     addToTaintList(dst_ti);
-    print_taint_list();
+    printTaintList();
     return;
   } else // For Frames > 1
-    propagate_taint(ds);
+    propagateTaint(ds);
 
   return;
 }
 
 // Return true if taint is propagated
 // Return false if taint is terminated
-bool propagate_taint(DestSourcePair &ds) {
-
+bool propagateTaint(DestSourcePair &ds) {
   // Terminating condition 1
   // This can happen only due to lack of info/data for some taints
   if (TaintList.empty()) {
@@ -155,7 +156,7 @@ bool propagate_taint(DestSourcePair &ds) {
     removeFromTaintList(dest_ti);
   }
 
-  print_taint_list();
+  printTaintList();
   return true;
 }
 
@@ -177,7 +178,7 @@ bool crash_blamer::TaintAnalysis::runOnBlameMF(const MachineFunction &MF) {
         CrashSequenceStarted = true;
         LLVM_DEBUG(MI.dump(););
         auto DestSrc = TII->getDestAndSrc(MI);
-        start_taint(*DestSrc);
+        startTaint(*DestSrc);
         continue;
       }
 
@@ -212,7 +213,7 @@ bool crash_blamer::TaintAnalysis::runOnBlameMF(const MachineFunction &MF) {
                  << "src offset: " << DestSrc->SrcOffset << "\n";);
 
       // Backward Taint Analysis
-      if (!propagate_taint(*DestSrc) && TaintList.empty()) {
+      if (!propagateTaint(*DestSrc) && TaintList.empty()) {
         LLVM_DEBUG(dbgs() << "\n Taint Terminated");
         return true;
       }
