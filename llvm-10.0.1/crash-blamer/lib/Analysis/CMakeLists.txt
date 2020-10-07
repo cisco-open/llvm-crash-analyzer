@@ -6,4 +6,6 @@ set(LLVM_LINK_COMPONENTS
 
 llvm_add_library(CrashBlamerTaintAnalysis
   TaintAnalysis.cpp
+  DEPENDS
+    intrinsics_gen
   )
