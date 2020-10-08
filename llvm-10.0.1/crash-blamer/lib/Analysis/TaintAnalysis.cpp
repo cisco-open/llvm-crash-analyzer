@@ -181,7 +181,7 @@ bool crash_blamer::TaintAnalysis::runOnBlameMF(const MachineFunction &MF) {
         auto DestSrc = TII->getDestAndSrc(MI);
         if (!DestSrc) {
           llvm::outs() << "Crash instruction doesn't have blame operands\n";
-          return false;
+          continue;
         }
         startTaint(*DestSrc);
         continue;
