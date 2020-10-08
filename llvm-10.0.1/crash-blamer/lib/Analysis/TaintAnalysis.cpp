@@ -179,6 +179,10 @@ bool crash_blamer::TaintAnalysis::runOnBlameMF(const MachineFunction &MF) {
         CrashSequenceStarted = true;
         LLVM_DEBUG(MI.dump(););
         auto DestSrc = TII->getDestAndSrc(MI);
+        if (!DestSrc) {
+          llvm::outs() << "Crash instruction doesn't have blame operands\n";
+          continue;
+        }
         startTaint(*DestSrc);
         continue;
       }
