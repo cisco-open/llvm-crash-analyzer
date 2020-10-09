@@ -492,7 +492,8 @@ X86InstrInfo::getDestAndSrc(const MachineInstr &MI) const {
 
   switch(MI.getOpcode()) {
     case X86::MOV64mi32:
-    case X86::MOV32mi: {
+    case X86::MOV32mi:
+    case X86::MOV8mi: {
       // Memory operands are being printed with multiple MI operands,
       // describing offsets, etc., so:
       //   movl   $0x0,(%rax) <== prints 0 at indirect address rax + 0
@@ -506,11 +507,20 @@ X86InstrInfo::getDestAndSrc(const MachineInstr &MI) const {
       //   $rax = MOV64rm $rbp, 1, $noreg, -8, $noreg
       // so, the $rax is register destination, and the block
       // $rbp, 1, $noreg, -8, $noreg describes the -0x8(%rbp).
-      if (!getMemOperandWithOffset(MI, BaseOp, Offset, TRI))
-        return None;
+      if (getMemOperandWithOffset(MI, BaseOp, Offset, TRI))
+        return DestSourcePair{*BaseOp, Offset, MI.getOperand(5)};
 
-      return DestSourcePair{*BaseOp, Offset, MI.getOperand(5)};
-    } case X86::MOV64rm: {
+      // This should be scaled indexing addressing mode.
+      const MachineOperand *Src = &(MI.getOperand(5));
+      const MachineOperand *Dst = &(MI.getOperand(0));
+      MachineOperand *DstScaledIndex =
+          const_cast<MachineOperand *>(&(MI.getOperand(1)));
+      MachineOperand *DstOffset =
+          const_cast<MachineOperand *>(&(MI.getOperand(2)));
+
+      return DestSourcePair{*Dst, *DstScaledIndex, *DstOffset, *Src};
+    } case X86::MOV64rm:
+      case X86::MOVSX64rm32: {
       const MachineOperand *Dest = &(MI.getOperand(0));
       if (!getMemOperandWithOffset(MI, BaseOp, Offset, TRI))
         return None;

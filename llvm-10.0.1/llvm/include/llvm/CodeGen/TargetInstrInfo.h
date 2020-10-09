@@ -74,6 +74,12 @@ struct DestSourcePair {
   int64_t DestOffset = 0;
   int64_t SrcOffset = 0;
 
+  // Used for scaled addressing mode.
+  // e.g.:
+  //   movb $0x41,(%rax,%rcx,1) == rax + rcx * 1 = $0x41
+  MachineOperand *DestScaledIndex = nullptr;
+  MachineOperand *DestOffsetReg = nullptr;
+
   DestSourcePair(const MachineOperand &Dest, const MachineOperand &Src)
       : Destination(&Dest), Source(&Src) {}
 
@@ -84,6 +90,11 @@ struct DestSourcePair {
   DestSourcePair(const MachineOperand &Dest, const MachineOperand &Src,
                  int64_t Offset)
       : Destination(&Dest), Source(&Src), SrcOffset(Offset) {}
+
+  DestSourcePair(const MachineOperand &Dest, MachineOperand &DestOff,
+                 MachineOperand &ScaledIndex, const MachineOperand &Src)
+      : Destination(&Dest), Source(&Src), DestScaledIndex(&ScaledIndex),
+        DestOffsetReg(&DestOff) {}
 };
 
 /// Used to describe a register and immediate addition.
