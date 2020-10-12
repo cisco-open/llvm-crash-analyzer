@@ -1,0 +1,6 @@
+# RUN: %crash-blamer --core-file=%S/Inputs/core.xor-example.41153 \
+# RUN:     %S/Inputs/xor-example < %s 2>&1 | FileCheck %s
+
+# CHECK: Blame Function is main
+# CHECK: At Line Number 9
+
