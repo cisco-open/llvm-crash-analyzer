@@ -519,14 +519,16 @@ X86InstrInfo::getDestAndSrc(const MachineInstr &MI) const {
           const_cast<MachineOperand *>(&(MI.getOperand(2)));
 
       return DestSourcePair{*Dst, *DstScaledIndex, *DstOffset, *Src};
-    } case X86::MOV64rm:
+    } case X86::MOV32rm:
+      case X86::MOV64rm:
       case X86::MOVSX64rm32: {
       const MachineOperand *Dest = &(MI.getOperand(0));
       if (!getMemOperandWithOffset(MI, BaseOp, Offset, TRI))
         return None;
 
       return DestSourcePair{*Dest, *BaseOp, Offset};
-    } case X86::MOV64mr: {
+    } case X86::MOV32mr:
+      case X86::MOV64mr: {
       const MachineOperand *Src = &(MI.getOperand(5));
       if (!getMemOperandWithOffset(MI, BaseOp, Offset, TRI))
         return None;
@@ -541,6 +543,12 @@ X86InstrInfo::getDestAndSrc(const MachineInstr &MI) const {
       if (!getMemOperandWithOffset(MI, BaseOp, Offset, TRI))
         return None;
       return DestSourcePair{*Dest, *BaseOp, Offset};
+    } case X86::XOR32ri8: {
+      const MachineOperand *Dest = &(MI.getOperand(0));
+      const MachineOperand *Src = &(MI.getOperand(1));
+      // FIXME: Should we take into account the operands of the
+      // aritmetic operation?
+      return DestSourcePair{*Dest, *Src};
     }
   }
 
