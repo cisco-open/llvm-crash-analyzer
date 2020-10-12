@@ -16,6 +16,9 @@ using namespace llvm;
 
 // Tainted Operands in a Machine Instruction.
 // This is a Reg-Offset pair.
+// TODO: Take into account:
+//   1) Register as offset
+//   2) Scaled Index addressing mode
 struct TaintInfo {
   const MachineOperand *op;
   int64_t Offset;

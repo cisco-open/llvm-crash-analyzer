@@ -1,0 +1,14 @@
+# RUN: %crash-blamer --core-file=%S/Inputs/core.str-null-out.83083 \
+# RUN:     %S/Inputs/str-null-out < %s 2>&1 | FileCheck %s
+
+# RUN: %crash-blamer --core-file=%S/Inputs/core.arr-out.44035 \
+# RUN:     %S/Inputs/arr-out < %s 2>&1 | FileCheck %s
+
+# RUN: %crash-blamer --core-file=%S/Inputs/core.long-arr-out.78782 \
+# RUN:     %S/Inputs/long-arr-out < %s 2>&1 | FileCheck %s
+
+# CHECK:  Decompiling...
+# CHECK:Decompiled.
+# CHECK: Blame Function is main
+# CHECK: At Line Number 11
+# CHECK: RESULT: SUCCESS
