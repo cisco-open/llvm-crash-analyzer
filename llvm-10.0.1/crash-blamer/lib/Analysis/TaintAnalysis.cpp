@@ -7,65 +7,51 @@
 //===----------------------------------------------------------------------===//
 
 #include "Analysis/TaintAnalysis.h"
-#include "llvm/ADT/SmallVector.h"
-#include "llvm/CodeGen/TargetInstrInfo.h"
 
 using namespace llvm;
 
 #define DEBUG_TYPE "taint-analysis"
 
-// Tainted Operands in a Machine Instruction.
-// This is a Reg-Offset pair.
-// TODO: Take into account:
-//   1) Register as offset
-//   2) Scaled Index addressing mode
-struct TaintInfo {
-  const MachineOperand *op;
-  int64_t Offset;
-};
+using TaintInfo = llvm::crash_blamer::TaintInfo;
 
-bool operator==(const TaintInfo &t1, const TaintInfo &t2) {
-  if (t1.op->isReg() && t2.op->isReg()) {
-    if (t1.op->getReg() == t2.op->getReg()) {
-      if (t1.Offset == t2.Offset)
-        return true;
-      else
-        return false;
-    }
-  }
-  return false;
+bool llvm::crash_blamer::operator==(const TaintInfo &T1, const TaintInfo &T2) {
+  if (!T1.Op->isReg() || !T2.Op->isReg())
+    return false;
+
+  if (T1.Op->getReg() != T2.Op->getReg())
+    return false;
+
+  if (T1.Offset != T2.Offset)
+   return false;
+
+  return true;
 }
 
-bool operator!=(const TaintInfo &t1, const TaintInfo &t2) {
-  if (t1.op->isReg() && t2.op->isReg()) {
-    if (t1.op->getReg() != t2.op->getReg()) {
-      if (t1.Offset != t2.Offset)
-        return true;
-      else
-        return false;
-    }
-  }
-  return false;
-}
+bool llvm::crash_blamer::operator!=(const TaintInfo &T1, const TaintInfo &T2) {
+  if (!T1.Op->isReg() || !T2.Op->isReg())
+    return false;
 
-SmallVector<TaintInfo, 8> TaintList;
+  if (T1.Op->getReg() == T2.Op->getReg())
+    return false;
+
+  if (T1.Offset == T2.Offset)
+    return false;
+
+  return true;
+}
 
 crash_blamer::TaintAnalysis::TaintAnalysis() {}
 
-bool propagateTaint(DestSourcePair &ds);
-void startTaint(DestSourcePair &ds);
-
-void addToTaintList(TaintInfo &ti) {
-  if (!ti.op)
+void crash_blamer::TaintAnalysis::addToTaintList(TaintInfo &Ti) {
+  if (!Ti.Op)
     return;
-  if (!ti.op->isImm())
-    TaintList.push_back(ti);
-  return;
+  if (!Ti.Op->isImm())
+    TaintList.push_back(Ti);
 }
 
-void removeFromTaintList(TaintInfo &op) {
+void llvm::crash_blamer::TaintAnalysis::removeFromTaintList(TaintInfo &Op) {
   for (auto itr = TaintList.begin(); itr != TaintList.end(); ++itr) {
-    if (*itr != op)
+    if (*itr != Op)
       continue;
     TaintList.erase(itr);
     return;
@@ -73,105 +59,101 @@ void removeFromTaintList(TaintInfo &op) {
   llvm_unreachable("Operand not in Taint List");
 }
 
-TaintInfo isTainted(TaintInfo &op) {
-  TaintInfo empty_op;
-  empty_op.op = nullptr;
-  empty_op.Offset = 0;
+TaintInfo crash_blamer::TaintAnalysis::isTainted(TaintInfo &Op) {
+  TaintInfo Empty_op;
+  Empty_op.Op = nullptr;
+  Empty_op.Offset = 0;
   for (auto itr = TaintList.begin(); itr != TaintList.end(); ++itr) {
-    if (*itr == op)
+    if (*itr == Op)
       return *itr;
   }
-  return empty_op;
+  return Empty_op;
 }
 
-void printTaintList(void) {
+void crash_blamer::TaintAnalysis::printTaintList() {
   if (TaintList.empty()) {
     LLVM_DEBUG(dbgs() << "Taint List is empty");
     return;
   }
-  LLVM_DEBUG(dbgs() << "\n-----Taint List Begin------\n");
-  LLVM_DEBUG(for (auto itr = TaintList.begin(); itr != TaintList.end(); ++itr) {
-    itr->op->dump();
-    dbgs() << "Offset =  " << itr->Offset << "\n";
-  });
-  LLVM_DEBUG(dbgs() << "\n------Taint List End----\n");
+  LLVM_DEBUG(dbgs() << "\n-----Taint List Begin------\n";
+             for (auto itr = TaintList.begin(); itr != TaintList.end(); ++itr) {
+               itr->Op->dump();
+               dbgs() << "Offset =  " << itr->Offset << "\n";
+             } dbgs()
+             << "\n------Taint List End----\n";);
 }
 
-void startTaint(DestSourcePair &ds) {
-  // This is the case when analysis begins
-
-  TaintInfo src_ti, dst_ti;
-
-  src_ti.op = ds.Source;
-  src_ti.Offset = ds.SrcOffset;
-
-  dst_ti.op = ds.Destination;
-  dst_ti.Offset = ds.DestOffset;
+void crash_blamer::TaintAnalysis::startTaint(DestSourcePair &DS) {
+  // This is the case when analysis begins.
+  TaintInfo SrcTi, DestTi;
+  SrcTi.Op = DS.Source;
+  SrcTi.Offset = DS.SrcOffset;
+  DestTi.Op = DS.Destination;
+  DestTi.Offset = DS.DestOffset;
 
   if (TaintList.empty()) {
-    addToTaintList(src_ti);
-    addToTaintList(dst_ti);
+    addToTaintList(SrcTi);
+    addToTaintList(DestTi);
     printTaintList();
-    return;
-  } else // For Frames > 1
-    propagateTaint(ds);
-
-  return;
+  } else
+    // For Frames > 1.
+    propagateTaint(DS);
 }
 
-// Return true if taint is propagated
-// Return false if taint is terminated
-bool propagateTaint(DestSourcePair &ds) {
-  // Terminating condition 1
-  // This can happen only due to lack of info/data for some taints
+// Return true if taint is propagated.
+// Return false if taint is terminated.
+bool llvm::crash_blamer::TaintAnalysis::propagateTaint(DestSourcePair &DS) {
+  // Terminating condition 1.
+  // This can happen only due to lack of info/data for some taints.
   if (TaintList.empty()) {
     LLVM_DEBUG(dbgs() << "\n No taint to propagate");
     return false;
   }
 
-  TaintInfo src_ti;
-  TaintInfo dest_ti;
+  TaintInfo SrcTi, DestTi;
+  SrcTi.Op = DS.Source;
+  SrcTi.Offset = DS.SrcOffset;
+  DestTi.Op = DS.Destination;
+  DestTi.Offset = DS.DestOffset;
 
-  src_ti.op = ds.Source;
-  src_ti.Offset = ds.SrcOffset;
-  dest_ti.op = ds.Destination;
-  dest_ti.Offset = ds.DestOffset;
-
-  // Check if Dest is already tainted
-  auto taint = isTainted(dest_ti);
-  if (taint.op != nullptr) {
-    // Add SrcOp to the taint-list
-    // Remove DestOp from the taint-list
-    // If Src is Immediate, we have reached end of taint
-    // ds.Source is 0 for immediate operands
-    if (ds.Source->isImm()) {
+  // Check if Dest is already tainted.
+  auto Taint = isTainted(DestTi);
+  if (Taint.Op != nullptr) {
+    // Add SrcOp to the taint-list.
+    // Remove DestOp from the taint-list.
+    // If Src is Immediate, we have reached end of taint.
+    // DS.Source is 0 for immediate operands.
+    if (DS.Source->isImm()) {
       // We have reached a terminating condition where
-      // dest is tainted and src is a constant operand
-      removeFromTaintList(dest_ti);
+      // dest is tainted and src is a constant operand.
+      removeFromTaintList(DestTi);
       LLVM_DEBUG(dbgs() << "\n******** Blame MI is here\n");
-      LLVM_DEBUG(ds.Destination->getParent()->dump());
+      LLVM_DEBUG(DS.Destination->getParent()->dump());
       llvm::outs() << "\nBlame Function is "
-                   << ds.Destination->getParent()->getMF()->getName();
+                   << DS.Destination->getParent()->getMF()->getName();
       llvm::outs() << "\nAt Line Number "
-                   << ds.Destination->getParent()->getDebugLoc().getLine();
+                   << DS.Destination->getParent()->getDebugLoc().getLine();
       return false;
     }
-    addToTaintList(src_ti);
-    removeFromTaintList(dest_ti);
+    addToTaintList(SrcTi);
+    removeFromTaintList(DestTi);
   }
 
   printTaintList();
   return true;
 }
 
-/* Return true if taint is terminated
- * Return false otherwise
- */
+// Return true if taint is terminated.
+// Return false otherwise.
 bool crash_blamer::TaintAnalysis::runOnBlameMF(const MachineFunction &MF) {
   // Crash Sequence starts after the MI with the crash-blame flag.
   bool CrashSequenceStarted = false;
 
   auto TII = MF.getSubtarget().getInstrInfo();
+
+  // If we find at least one blame entity, we can consider our
+  // analysis as successful.
+  bool Result = false;
 
   // Perform backward analysis on the MF.
   for (auto MBBIt = MF.rbegin(); MBBIt != MF.rend(); ++MBBIt) {
@@ -193,9 +175,8 @@ bool crash_blamer::TaintAnalysis::runOnBlameMF(const MachineFunction &MF) {
       if (!CrashSequenceStarted)
         continue;
 
-      /* TBD : If Call Instruction, we may have to analyze the call
-       * if it modifies a tainted operand
-       */
+      // TBD : If Call Instruction, we may have to analyze the call
+      // if it modifies a tainted operand.
       if (MI.isCall() || MI.isBranch())
         continue;
 
@@ -220,15 +201,19 @@ bool crash_blamer::TaintAnalysis::runOnBlameMF(const MachineFunction &MF) {
                  if (DestSrc->SrcOffset) llvm::dbgs()
                  << "src offset: " << DestSrc->SrcOffset << "\n";);
 
-      // Backward Taint Analysis
-      if (!propagateTaint(*DestSrc) && TaintList.empty()) {
+      // Backward Taint Analysis.
+      bool TaintResult = propagateTaint(*DestSrc);
+      if (!Result && !TaintResult)
+        // Found at least one blame entity.
+        Result = true;
+      if (!TaintResult && TaintList.empty()) {
         LLVM_DEBUG(dbgs() << "\n Taint Terminated");
         return true;
       }
     }
   }
 
-  return false;
+  return Result;
 }
 
 // TODO: Based on the reason of the crash (e.g. signal or error code) read from
