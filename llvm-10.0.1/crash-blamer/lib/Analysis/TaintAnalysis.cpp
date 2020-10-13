@@ -92,7 +92,7 @@ void printTaintList(void) {
   LLVM_DEBUG(dbgs() << "\n-----Taint List Begin------\n");
   LLVM_DEBUG(for (auto itr = TaintList.begin(); itr != TaintList.end(); ++itr) {
     itr->op->dump();
-    dbgs() << "Offset =  " << itr->Offset;
+    dbgs() << "Offset =  " << itr->Offset << "\n";
   });
   LLVM_DEBUG(dbgs() << "\n------Taint List End----\n");
 }
@@ -196,7 +196,7 @@ bool crash_blamer::TaintAnalysis::runOnBlameMF(const MachineFunction &MF) {
       /* TBD : If Call Instruction, we may have to analyze the call
        * if it modifies a tainted operand
        */
-      if (MI.isCall())
+      if (MI.isCall() || MI.isBranch())
         continue;
 
       // Print the instruction from crash-start point
