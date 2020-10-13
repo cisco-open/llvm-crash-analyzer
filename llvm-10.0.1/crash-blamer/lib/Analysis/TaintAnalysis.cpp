@@ -204,7 +204,7 @@ bool crash_blamer::TaintAnalysis::runOnBlameMF(const MachineFunction &MF) {
       // Backward Taint Analysis.
       bool TaintResult = propagateTaint(*DestSrc);
       if (!Result && !TaintResult)
-        // Fount at least one blame entity.
+        // Found at least one blame entity.
         Result = true;
       if (!TaintResult && TaintList.empty()) {
         LLVM_DEBUG(dbgs() << "\n Taint Terminated");
