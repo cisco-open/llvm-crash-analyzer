@@ -549,6 +549,16 @@ X86InstrInfo::getDestAndSrc(const MachineInstr &MI) const {
       // FIXME: Should we take into account the operands of the
       // aritmetic operation?
       return DestSourcePair{*Dest, *Src};
+    } case X86::CMP32rm: {
+      const MachineOperand *Dest = &(MI.getOperand(0));
+      if (!getMemOperandWithOffset(MI, BaseOp, Offset, TRI))
+        return None;
+      return DestSourcePair{*Dest, *BaseOp, Offset};
+    } case X86::MOV32ri: {
+      // Move of immediates.
+      const MachineOperand *Dest = &(MI.getOperand(0));
+      const MachineOperand *Src = &(MI.getOperand(1));
+      return DestSourcePair{*Dest, *Src};
     }
   }
 
