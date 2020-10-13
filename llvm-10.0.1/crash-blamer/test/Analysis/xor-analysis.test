@@ -3,4 +3,4 @@
 
 # CHECK: Blame Function is main
 # CHECK: At Line Number 9
-
+# CHECK: RESULT: SUCCESS
