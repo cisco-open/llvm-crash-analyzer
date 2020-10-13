@@ -490,23 +490,13 @@ X86InstrInfo::getDestAndSrc(const MachineInstr &MI) const {
   const MachineOperand *BaseOp;
   int64_t Offset;
 
+  // TODO: All the mem operands can be addressed in different modes.
+  // Support all addressing modes.
   switch(MI.getOpcode()) {
-    case X86::MOV64mi32:
+    case X86::MOV8mi:
+    case X86::MOV16mi:
     case X86::MOV32mi:
-    case X86::MOV8mi: {
-      // Memory operands are being printed with multiple MI operands,
-      // describing offsets, etc., so:
-      //   movl   $0x0,(%rax) <== prints 0 at indirect address rax + 0
-      // will be printed within MIR as:
-      //   MOV32mi $rax, 1, $noreg, 0, $noreg, 0 <== first 5 operands
-      // describe the indirect address rax, and the last (6th) is an
-      // immediate being stored in.
-      // Another example:
-      //   mov    -0x8(%rbp),%rax
-      // will be converted as:
-      //   $rax = MOV64rm $rbp, 1, $noreg, -8, $noreg
-      // so, the $rax is register destination, and the block
-      // $rbp, 1, $noreg, -8, $noreg describes the -0x8(%rbp).
+    case X86::MOV64mi32: {
       if (getMemOperandWithOffset(MI, BaseOp, Offset, TRI))
         return DestSourcePair{*BaseOp, Offset, MI.getOperand(5)};
 
@@ -519,45 +509,292 @@ X86InstrInfo::getDestAndSrc(const MachineInstr &MI) const {
           const_cast<MachineOperand *>(&(MI.getOperand(2)));
 
       return DestSourcePair{*Dst, *DstScaledIndex, *DstOffset, *Src};
-    } case X86::MOV32rm:
+    } case X86::MOV8rm:
+      case X86::MOV32rm:
       case X86::MOV64rm:
-      case X86::MOVSX64rm32: {
+      case X86::MOVDQArm:
+      case X86::MOVUPSrm:
+      case X86::MOVAPSrm:
+      case X86::MOVDQUrm:
+      case X86::MOVAPDrm:
+      case X86::MOVSDrm_alt:
+      case X86::MOVSX64rm32:
+      case X86::MOVZX32rm8:
+      case X86::MOVSX32rm8:
+      case X86::MOVSX64rm8:
+      case X86::MOVZX32rm16:
+      case X86::AND8rm:
+      case X86::AND16rm:
+      case X86::AND32rm:
+      case X86::AND64rm:
+      case X86::ADD8rm:
+      case X86::ADD16rm:
+      case X86::ADD32rm:
+      case X86::ADD64rm:
+      case X86::SUB8rm:
+      case X86::SUB16rm:
+      case X86::SUB32rm:
+      case X86::SUB64rm:
+      case X86::OR8rm:
+      case X86::OR16rm:
+      case X86::OR32rm:
+      case X86::OR64rm:
+      case X86::XOR8rm:
+      case X86::XOR16rm:
+      case X86::XOR32rm:
+      case X86::XOR64rm: {
       const MachineOperand *Dest = &(MI.getOperand(0));
       if (!getMemOperandWithOffset(MI, BaseOp, Offset, TRI))
         return None;
 
       return DestSourcePair{*Dest, *BaseOp, Offset};
-    } case X86::MOV32mr:
-      case X86::MOV64mr: {
+    } case X86::MOV8mr:
+      case X86::MOV16mr:
+      case X86::MOV32mr:
+      case X86::MOV64mr:
+      case X86::MOVDQUmr:
+      case X86::MOVUPSmr:
+      case X86::MOVAPSmr:
+      case X86::MOV8mr_NOREX:
+      case X86::SUB32mr:
+      case X86::OR8mr:
+      case X86::OR16mr:
+      case X86::OR32mr:
+      case X86::OR64mr:
+      case X86::ADD32mr:
+      case X86::ADD64mr: {
       const MachineOperand *Src = &(MI.getOperand(5));
       if (!getMemOperandWithOffset(MI, BaseOp, Offset, TRI))
         return None;
       return DestSourcePair{*BaseOp, Offset, *Src};
-    } case X86::SUB64ri8:
-      case X86::ADD64ri8: {
+    } case X86::LEA64r:
+      case X86::LEA32r:
+      case X86::LEA64_32r: {
+      const MachineOperand *Dest = &(MI.getOperand(0));
+      if (!getMemOperandWithOffset(MI, BaseOp, Offset, TRI))
+        return None;
+      return DestSourcePair{*Dest, *BaseOp, Offset};
+    } case X86::MOV8ri:
+      case X86::MOV16ri:
+      case X86::MOV32ri:
+      case X86::MOV64ri:
+      case X86::MOV64ri32:
+      case X86::MOVZX32rr8:
+      case X86::MOVZX32rr16:
+      case X86::MOVSX64rr32:
+      case X86::MOVPDI2DIrr:
+      case X86::MOVSX32rr8:
+      case X86::MOVSX64rr8:
+      case X86::SETCCr:
+      case X86::PSHUFHWri:
+      case X86::PCMPEQDrr:
+      case X86::PSLLDri:
+      case X86::PEXTRWrr: {
+      const MachineOperand *Dest = &(MI.getOperand(0));
+      const MachineOperand *Src = &(MI.getOperand(1));
+      return DestSourcePair{*Dest, *Src};
+    } case X86::CMOV16rm:
+      case X86::CMOV32rm:
+      case X86::CMOV64rm:
+      case X86::CMOV16rr:
+      case X86::CMOV32rr:
+      case X86::CMOV64rr: {
+      // These are conditional moves.
+      // What to do??
+      return None;
+    } case X86::AND8rr:
+      case X86::AND16rr:
+      case X86::AND32rr:
+      case X86::AND64rr:
+      case X86::AND8ri:
+      case X86::AND16ri:
+      case X86::AND32ri:
+      case X86::AND32ri8:
+      case X86::AND64ri8:
+      case X86::AND64ri32:
+      case X86::OR8rr:
+      case X86::OR16rr:
+      case X86::OR32rr:
+      case X86::OR64rr:
+      case X86::OR8ri:
+      case X86::OR16ri:
+      case X86::OR32ri:
+      case X86::OR16ri8:
+      case X86::OR32ri8:
+      case X86::OR64ri8:
+      case X86::OR64ri32:
+      case X86::XOR8rr:
+      case X86::XOR16rr:
+      case X86::XOR32rr:
+      case X86::XOR64rr:
+      case X86::XOR8ri:
+      case X86::XOR16ri:
+      case X86::XOR32ri:
+      case X86::XOR32ri8:
+      case X86::XOR64ri8:
+      case X86::XOR64ri32:
+      case X86::PXORrr:
+      case X86::PORrr:
+      case X86::PANDrr:
+      case X86::ADD8rr:
+      case X86::ADD16rr:
+      case X86::ADD32rr:
+      case X86::ADD64rr:
+      case X86::ADD8ri:
+      case X86::ADD16ri:
+      case X86::ADD32ri:
+      case X86::ADD16ri8:
+      case X86::ADD32ri8:
+      case X86::ADD64ri8:
+      case X86::ADD64ri32:
+      case X86::SUB8rr:
+      case X86::SUB16rr:
+      case X86::SUB32rr:
+      case X86::SUB64rr:
+      case X86::SUB32ri8:
+      case X86::SUB64ri8:
+      case X86::SUB64ri32:
+      case X86::SUBPDrr:
+      case X86::IMUL16rr:
+      case X86::IMUL32rr:
+      case X86::IMUL64rr:
+      case X86::MULSDrr:
+      case X86::SHL8ri:
+      case X86::SHL16ri:
+      case X86::SHL32ri:
+      case X86::SHL64ri:
+      case X86::SHR8ri:
+      case X86::SHR16ri:
+      case X86::SHR32ri:
+      case X86::SHR64ri:
+      case X86::SAR8ri:
+      case X86::SAR16ri:
+      case X86::SAR32ri:
+      case X86::SAR64ri:
+      case X86::SBB8ri:
+      case X86::SBB16ri8:
+      case X86::SBB32ri8:
+      case X86::SHLD32rri8:
+      case X86::ROL32ri:
+      case X86::UNPCKLPSrr:
+      case X86::UNPCKHPSrr:
+      case X86::PUNPCKLBWrr:
+      case X86::PUNPCKHBWrr:
+      case X86::PUNPCKLWDrr:
+      case X86::PUNPCKLDQrr:
+      case X86::PUNPCKLQDQrr:
+      case X86::PSUBDrr:
+      case X86::PCMPGTDrr:
+      case X86::PCMPEQBrr: {
       const MachineOperand *Dest = &(MI.getOperand(0));
       const MachineOperand *Src = &(MI.getOperand(2));
       return DestSourcePair{*Dest, *Src};
-    } case X86::LEA64r: {
-      const MachineOperand *Dest = &(MI.getOperand(0));
-      if (!getMemOperandWithOffset(MI, BaseOp, Offset, TRI))
-        return None;
-      return DestSourcePair{*Dest, *BaseOp, Offset};
-    } case X86::XOR32ri8: {
+    } case X86::TEST32mi:
+      case X86::TEST16i16:
+      case X86::TEST16mr:
+      case X86::TEST16ri:
+      case X86::TEST16rr:
+      case X86::TEST32i32:
+      case X86::TEST32mr:
+      case X86::TEST32ri:
+      case X86::TEST32rr:
+      case X86::TEST64i32:
+      case X86::TEST64mr:
+      case X86::TEST64ri32:
+      case X86::TEST64rr:
+      case X86::TEST8i8:
+      case X86::TEST8mr:
+      case X86::TEST8ri:
+      case X86::TEST8rr:
+      case X86::TEST8mi:
+      case X86::CMP32mi8:
+      case X86::CMP8mi:
+      case X86::CMP16i16:
+      case X86::CMP16mr:
+      case X86::CMP16ri:
+      case X86::CMP16ri8:
+      case X86::CMP16rm:
+      case X86::CMP16rr:
+      case X86::CMP16rr_REV:
+      case X86::CMP32i32:
+      case X86::CMP32mr:
+      case X86::CMP32ri:
+      case X86::CMP32ri8:
+      case X86::CMP32rm:
+      case X86::CMP32rr:
+      case X86::CMP32rr_REV:
+      case X86::CMP64i32:
+      case X86::CMP64mr:
+      case X86::CMP64ri32:
+      case X86::CMP64ri8:
+      case X86::CMP64rm:
+      case X86::CMP64rr:
+      case X86::CMP64rr_REV:
+      case X86::CMP64mi8:
+      case X86::CMP8i8:
+      case X86::CMP8mr:
+      case X86::CMP8ri:
+      case X86::CMP8ri8:
+      case X86::CMP8rm:
+      case X86::CMP8rr:
+      case X86::CMP32mi:
+      case X86::CMP16mi8:
+      case X86::CMP8rr_REV:
+      case X86::BT64ri8:
+      case X86::BT32rr:
+      case X86::BT64rr: {
+      return None;
+    } case X86::NOT8r:
+      case X86::NOT16r:
+      case X86::NOT32r:
+      case X86::NOT64r:
+      case X86::NEG64r:
+      case X86::NEG16r:
+      case X86::NEG32r:
+      case X86::NEG8r:
+      case X86::XORPSrr:
+      case X86::XORPDrr:
+      case X86::INC64r:
+      case X86::MUL64r:
+      case X86::BSWAP32r:
+      case X86::BSWAP64r:
+      case X86::ADC32ri8:
+      case X86::PSHUFDri:
+      case X86::PSHUFLWri:
+      case X86::MOV64toPQIrr:
+      case X86::CVTSI642SDrr:
+      case X86::SBB32rr:
+      case X86::SAR64r1:
+      case X86::SHL32rCL:
+      case X86::SHL64rCL:
+      case X86::SHR8r1:
+      case X86::SHR16r1:
+      case X86::SHR32r1:
+      case X86::SHR64r1:
+      case X86::SHR32rCL:
+      case X86::SHR64rCL: {
       const MachineOperand *Dest = &(MI.getOperand(0));
       const MachineOperand *Src = &(MI.getOperand(1));
-      // FIXME: Should we take into account the operands of the
-      // aritmetic operation?
       return DestSourcePair{*Dest, *Src};
-    } case X86::CMP32rm: {
-      const MachineOperand *Dest = &(MI.getOperand(0));
+    } case X86::OR8mi:
+      case X86::OR16mi:
+      case X86::OR32mi8:
+      case X86::SHR64mi:
+      case X86::ADD8mi:
+      case X86::AND8mi:
+      case X86::ADD16mi8:
+      case X86::ADD32mi8:
+      case X86::ADD64mi8:
+      case X86::SETCCm: {
       if (!getMemOperandWithOffset(MI, BaseOp, Offset, TRI))
         return None;
-      return DestSourcePair{*Dest, *BaseOp, Offset};
-    } case X86::MOV32ri: {
-      // Move of immediates.
-      const MachineOperand *Dest = &(MI.getOperand(0));
-      const MachineOperand *Src = &(MI.getOperand(1));
+      return DestSourcePair{*BaseOp, Offset, MI.getOperand(5)};
+    } case X86::DIV32r:
+      case X86::DIV64r:
+      case X86::CQO: {
+      const MachineOperand *Src = &(MI.getOperand(0));
+      const MachineOperand *Dest = &(MI.getOperand(1));
+      // TODO: for DIV -- within operand(2) is the remainder.
       return DestSourcePair{*Dest, *Src};
     }
   }
