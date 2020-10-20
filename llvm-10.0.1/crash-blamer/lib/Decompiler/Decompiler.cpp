@@ -46,6 +46,7 @@
 #include "llvm/Target/TargetOptions.h"
 
 #include <sstream>
+#include <unordered_map>
 
 using namespace llvm;
 using namespace llvm::object;
@@ -317,7 +318,7 @@ createModule(LLVMContext &Context, const DataLayout DL, StringRef InputFile) {
   return Mod;
 }
 
-void crash_blamer::Decompiler::addInstr(MachineFunction *MF,
+MachineInstr* crash_blamer::Decompiler::addInstr(MachineFunction *MF,
     MachineBasicBlock *MBB, MCInst &Inst, DebugLoc *Loc,
     bool IsCrashStart, crash_blamer::RegSet &DefinedRegs,
     StringRef TargetFnName) {
@@ -336,7 +337,7 @@ void crash_blamer::Decompiler::addInstr(MachineFunction *MF,
   // TODO: Optimize this. Can we check if it is a noop from MCID?
   if (TII->isNoopInstr(*Builder)) {
     Builder->eraseFromParent();
-    return;
+    return nullptr;
   }
 
   // TODO: Revisit this logic. We keep tracking of
@@ -409,6 +410,8 @@ void crash_blamer::Decompiler::addInstr(MachineFunction *MF,
 
   if (IsCrashStart)
     Builder->setFlag(MachineInstr::CrashStart);
+
+  return &*Builder;
 }
 
 MachineFunction& crash_blamer::Decompiler::createMF(StringRef FunctionName) {
@@ -626,6 +629,10 @@ llvm::Error crash_blamer::Decompiler::run(
       std::string InstrAddr;
       unsigned AddrValue = 0;
 
+      // Jumps to be updated with proper targets ( in form of bb).
+      // This maps the target address with the jump.
+      std::unordered_multimap<uint64_t, MachineInstr*> BranchesToUpdate;
+
       if (checkIfBTContainsFn(functionsFromCoreFile, SymbolName)) {
         MF = &createMF(SymbolName);
         MBB = MF->CreateMachineBasicBlock();
@@ -675,7 +682,6 @@ llvm::Error crash_blamer::Decompiler::run(
 
       Start += Size;
       Index = Start;
-
       formatted_raw_ostream FOS(outs());
 
       while (Index < End) {
@@ -704,7 +710,11 @@ llvm::Error crash_blamer::Decompiler::run(
                                     Bytes.slice(Index, Size), Addr,
                                     FOS, "", *MSTI, Obj.getFileName());
 
+        uint64_t TargetBBAddr = 0;
         StringRef TargetFnName = "";
+        const unsigned Opcode = Inst.getOpcode();
+        const MCInstrDesc &MCID = MII->get(Opcode);
+
         // Try to resolve the target of a call, tail call, etc. to a specific
         // symbol.
         if (MIA && (MIA->isCall(Inst) || MIA->isUnconditionalBranch(Inst) ||
@@ -761,6 +771,9 @@ llvm::Error crash_blamer::Decompiler::run(
                   FOS << "+0x" << Twine::utohexstr(Disp);
                 FOS << '>';
               }
+
+              if (MF && MCID.isBranch())
+                TargetBBAddr = Target;
             }
           }
         }
@@ -775,13 +788,42 @@ llvm::Error crash_blamer::Decompiler::run(
           }
           DbgLineInfo = *LineInfo;
 
+          MachineInstr *MI = nullptr;
           // Fill the Machine Function.
           if (MF) {
             auto DILoc = DILocation::get(Ctx, DbgLineInfo.Line,
                                        DbgLineInfo.Column, DISP);
             DebugLoc Loc (DILoc);
-            addInstr(MF, MBB, Inst, &Loc, AddrValue == Addr.Address,
-                     DefinedRegs, TargetFnName);
+            MI = addInstr(MF, MBB, Inst, &Loc, AddrValue == Addr.Address,
+                          DefinedRegs, TargetFnName);
+            if (MI) {
+              // There could be multiple branches targeting the same
+              // MBB.
+              while (BranchesToUpdate.count(Addr.Address)) {
+                auto BranchIt = BranchesToUpdate.find(Addr.Address);
+                MachineInstr *BranchInstr = BranchIt->second;
+                // In the first shot it was an imm representing the address.
+                // Now we set the real MBB as an operand.
+                // FIXME: Should call RemoveOperand(0) and then set it to
+                // the MBB.
+                BranchInstr->getOperand(0) = MachineOperand::CreateMBB(MBB);
+                if (!BranchInstr->getParent()->isSuccessor(MBB))
+                  BranchInstr->getParent()->addSuccessor(MBB);
+                BranchesToUpdate.erase(BranchIt);
+              }
+            }
+          }
+
+          // If this is a branch, start new MBB.
+          if (MF && MCID.isBranch()) {
+            MachineBasicBlock *OldBB = MBB;
+            MBB = MF->CreateMachineBasicBlock();
+            if (MI && MI->isConditionalBranch() && !OldBB->isSuccessor(MBB))
+              OldBB->addSuccessor(MBB);
+            MF->push_back(MBB);
+            // Rememer the target address, so we can fix it
+            // with the proper BB.
+            BranchesToUpdate.insert({TargetBBAddr, MI});
           }
         }
 
