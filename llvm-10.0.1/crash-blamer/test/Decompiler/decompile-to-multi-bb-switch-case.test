@@ -1,0 +1,36 @@
+## Test Machine Functions decompiled.
+
+## From test C reproducer; compiled with clang -g -O0:
+## void foo(int *x) {
+##   switch(*x) {
+##    case 5:
+##      ++x;
+##      break;
+##    default:
+##      *x = 5;
+##   }
+## }
+## 
+## int main()
+## {
+##   int ptr = 0x4;
+##   foo (ptr);
+##   return 0;
+## }
+
+# RUN: %crash-blamer --print-decompiled-mir=%t.mir --core-file=%S/Inputs/core.switch2-out.15531 %S/Inputs/switch2-out
+# RUN: cat %t.mir | FileCheck %s
+
+# CHECK:  bb.0:
+# CHECK:  successors: %bb.1(0x40000000), %bb.3(0x40000000)
+# CHECK:  JCC_4 %bb.3, 5, implicit $eflags
+# CHECK:  bb.1:
+# CHECK:  successors: %bb.2(0x80000000)
+# CHECK:  JMP_4 %bb.2
+# CHECK:  bb.2:
+# CHECK:  successors: %bb.4(0x80000000)
+# CHECK:  JMP_4 %bb.4
+# CHECK:  bb.3:
+# CHECK:  successors: %bb.4(0x80000000)
+# CHECK:  bb.4:
+# CHECK:  RETQ
