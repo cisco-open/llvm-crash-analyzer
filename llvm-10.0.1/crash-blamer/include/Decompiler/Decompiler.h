@@ -135,9 +135,9 @@ public:
   MachineFunction &createMF(StringRef FunctionName);
 
   /// Add Machine Instr to the MF.
-  void addInstr(MachineFunction *MF, MachineBasicBlock *MBB,
-                MCInst &Inst, DebugLoc *Loc, bool IsCrashStart,
-                RegSet &DefinedRegs, StringRef TargetFnName);
+  MachineInstr* addInstr(MachineFunction *MF, MachineBasicBlock *MBB,
+                         MCInst &Inst, DebugLoc *Loc, bool IsCrashStart,
+                         RegSet &DefinedRegs, StringRef TargetFnName);
 
   SmallVector<MachineFunction *, 8> &getBlameMFs() { return BlameMFs; }
 };
