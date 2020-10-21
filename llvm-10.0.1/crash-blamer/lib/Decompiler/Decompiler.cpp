@@ -628,6 +628,7 @@ llvm::Error crash_blamer::Decompiler::run(
       crash_blamer::RegSet DefinedRegs;
       std::string InstrAddr;
       unsigned AddrValue = 0;
+      bool PrevBranch = true;
 
       // Jumps to be updated with proper targets ( in form of bb).
       // This maps the target address with the jump.
@@ -789,8 +790,19 @@ llvm::Error crash_blamer::Decompiler::run(
           DbgLineInfo = *LineInfo;
 
           MachineInstr *MI = nullptr;
+
           // Fill the Machine Function.
           if (MF) {
+            // If it is not a branch and we previously did not decompile a branch,
+            // check if this should start a new basic block. For example default:
+            // label within a switch usually has this structure.
+            if (!MCID.isBranch() && BranchesToUpdate.count(Addr.Address) && !PrevBranch) {
+              MachineBasicBlock *OldBB = MBB;
+              MBB = MF->CreateMachineBasicBlock();
+              if (!OldBB->isSuccessor(MBB))
+                OldBB->addSuccessor(MBB);
+              MF->push_back(MBB);
+            }
             auto DILoc = DILocation::get(Ctx, DbgLineInfo.Line,
                                        DbgLineInfo.Column, DISP);
             DebugLoc Loc (DILoc);
@@ -824,7 +836,9 @@ llvm::Error crash_blamer::Decompiler::run(
             // Rememer the target address, so we can fix it
             // with the proper BB.
             BranchesToUpdate.insert({TargetBBAddr, MI});
-          }
+            PrevBranch = true;
+          } else
+            PrevBranch = false;
         }
 
         if (ShowDisassembly)
