@@ -1,5 +1,6 @@
 ## Test Machine Functions decompiled.
-# RUN: %crash-blamer -export-to-mir=%t.mir --core-file=%S/Inputs/core-test-1 %S/Inputs/test-1
+# RUN: %crash-blamer -debug-only=crash-blamer-decompiler \
+# RUN:     --core-file=%S/Inputs/core-test-1 %S/Inputs/test-1
 # RUN: cat %t.mir | FileCheck %s
 
 # CHECK: Machine code for function main: IsSSA, TracksLiveness
