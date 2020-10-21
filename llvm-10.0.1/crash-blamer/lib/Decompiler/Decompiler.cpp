@@ -57,11 +57,6 @@ static cl::opt<bool> ShowDisassembly("show-disassemble", cl::Hidden,
                                      cl::init(false));
 
 static cl::opt<std::string>
-    ExportToMIR("export-to-mir",
-                cl::desc("Export decompiled LLVM MIR into a file."),
-                cl::value_desc("filename"), cl::init(""));
-
-static cl::opt<std::string>
     PrintDecMIR("print-decompiled-mir",
                 cl::desc("Print decompiled LLVM MIR."),
                 cl::value_desc("filename"), cl::init(""));
@@ -851,6 +846,8 @@ llvm::Error crash_blamer::Decompiler::run(
         Index += Size;
       }
 
+      LLVM_DEBUG(if (MF) { dbgs() << "Decompiled MF:\n"; MF->dump();});
+
       // Map the fn from backtrace to the MF.
       if (checkIfBTContainsFn(functionsFromCoreFile, SymbolName))
         for (auto &f : BlameTrace) {
@@ -863,32 +860,6 @@ llvm::Error crash_blamer::Decompiler::run(
   }
 
   MMI->finalize();
-
-  if (ExportToMIR != "") {
-    StringRef file_name = ExportToMIR;
-    if (!file_name.endswith(".mir")) {
-      errs() << "MIR file must be with '.mir' extension.\n";
-      // TODO: return real error here.
-      return Error::success();
-    }
-
-    std::error_code EC;
-    raw_fd_ostream OS_FILE{ExportToMIR, EC, sys::fs::OF_Text};
-    if (EC) {
-      errs() << "Could not open file: " << EC.message() << ", " << ExportToMIR
-             << '\n';
-      return errorCodeToError(EC);
-    }
-
-    OS_FILE << "# crash-blamer decompiler\n";
-    OS_FILE << "# Decompiled Module: " << InputFile << "\n\n";
-
-    for (auto &F : *(Module.get())) {
-      auto MF = MMI->getMachineFunction(F);
-      if (MF)
-        MF->print(OS_FILE);
-    }
-  }
 
   if (PrintDecMIR != "") {
     StringRef file_name = PrintDecMIR;
