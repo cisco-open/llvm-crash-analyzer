@@ -55,6 +55,7 @@ public:
   void removeFromTaintList(TaintInfo &Op);
   void addToTaintList(TaintInfo &Ti);
   void printTaintList();
+  void printDestSrcInfo(DestSourcePair &DS);
   TaintInfo isTainted(TaintInfo &Op);
 };
 

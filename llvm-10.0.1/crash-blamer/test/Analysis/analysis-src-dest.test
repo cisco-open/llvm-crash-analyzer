@@ -1,3 +1,32 @@
+## Test case compiled with clang -O0 -g
+## #include <stdio.h>
+## typedef struct node {
+## int *fn;
+## } T;
+##
+## void h(int *r) {
+## *r = 0; // crash
+## }
+##
+## void g (T*q) {
+## int *t = q->fn;
+## h(t);
+## }
+##
+## void f() {
+## T p;
+## T q2;
+## p.fn = NULL; // blame point
+## q2.fn = NULL;
+## g(&p);
+## }
+##
+## int main() {
+## f();
+## return 0;
+## }
+
+
 # RUN: %crash-blamer --core-file=%S/../Decompiler/Inputs/core.clang-test00.93177 \
 # RUN:     %S/../Decompiler/Inputs/clang-test00 -debug-only=taint-analysis < %s 2>&1 | FileCheck %s
 
@@ -78,7 +107,7 @@
 # CHECK: ------Taint List End----
 # CHECK:   $rsp = SUB64ri8 $rsp(tied-def 0), 16, implicit-def $eflags, debug-location !DILocation(line: 10, scope: !5); <invalid>:10
 # CHECK: dest: $rsp
-# CHECK: src: 16
+# CHECK: src: $rsp(tied-def 0)
 # CHECK: -----Taint List Begin------
 # CHECK: $rdi
 # CHECK: Offset =  0
