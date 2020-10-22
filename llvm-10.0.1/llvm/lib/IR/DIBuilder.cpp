@@ -140,11 +140,25 @@ DICompileUnit *DIBuilder::createCompileUnit(
     StringRef Flags, unsigned RunTimeVer, StringRef SplitName,
     DICompileUnit::DebugEmissionKind Kind, uint64_t DWOId,
     bool SplitDebugInlining, bool DebugInfoForProfiling,
-    DICompileUnit::DebugNameTableKind NameTableKind, bool RangesBaseAddress) {
+    DICompileUnit::DebugNameTableKind NameTableKind, bool RangesBaseAddress,
+    bool CrashBlamerModule) {
 
   assert(((Lang <= dwarf::DW_LANG_Fortran08 && Lang >= dwarf::DW_LANG_C89) ||
           (Lang <= dwarf::DW_LANG_hi_user && Lang >= dwarf::DW_LANG_lo_user)) &&
          "Invalid Language tag");
+
+  if (CrashBlamerModule && CUNode) {
+    DICompileUnit *CUNodeNew = DICompileUnit::getDistinct(
+      VMContext, Lang, File, Producer, isOptimized, Flags, RunTimeVer,
+      SplitName, Kind, nullptr, nullptr, nullptr, nullptr, nullptr, DWOId,
+      SplitDebugInlining, DebugInfoForProfiling, NameTableKind,
+      RangesBaseAddress);
+    AllCUs.push_back(CUNodeNew);
+    NamedMDNode *NMD = M.getOrInsertNamedMetadata("llvm.dbg.cu");
+    NMD->addOperand(CUNodeNew);
+    trackIfUnresolved(CUNodeNew);
+    return CUNodeNew;
+  }
 
   assert(!CUNode && "Can only make one compile unit per DIBuilder instance");
   CUNode = DICompileUnit::getDistinct(
@@ -152,6 +166,9 @@ DICompileUnit *DIBuilder::createCompileUnit(
       SplitName, Kind, nullptr, nullptr, nullptr, nullptr, nullptr, DWOId,
       SplitDebugInlining, DebugInfoForProfiling, NameTableKind,
       RangesBaseAddress);
+
+  if (CrashBlamerModule)
+    AllCUs.push_back(CUNode);
 
   // Create a named metadata so that it is easier to find cu in a module.
   NamedMDNode *NMD = M.getOrInsertNamedMetadata("llvm.dbg.cu");

@@ -1,0 +1,55 @@
+## File 1 - (compiled with: clang -g -O0 -c file2.c):
+##typedef struct{
+##    int *a;
+##      float b;
+##} T;
+##
+##float f() {
+##  T p;
+##  p.a = 0;
+##  g(&p);
+##  return p.b;
+##}
+
+## (Main) File 2 - (compiled with: clang -g -O0 -c file2.o example3.c -O0):
+## #include<stdio.h>
+##
+##typedef struct{
+##    int *a;
+##      float b;
+##} T;
+##
+##float f();
+##
+##g(T *q) {
+##  int *t = q->a;
+##  float fl = q->b;
+##  if (fl > 0.0) {
+##    q->b = 2.0;
+##  }
+##  else {
+##    q->b = 3.0;
+##  }
+##
+##
+##  h(t);
+##}
+##
+##h(int *r) {
+##    *r = 0; // crash!!
+##}
+##
+##main() {
+##  float val = f();
+##  printf("%f\n", val);
+##  return 0;
+##}
+
+# RUN: %crash-blamer -debug-only=taint-analysis \
+# RUN:     --core-file=%S/Inputs/core.multiple-source.33114 \
+# RUN:     %S/Inputs/multiple-sources < %s 2>&1 | FileCheck %s
+
+# CHECK:  Blame Function is f
+# CHECK:At Line Number 8, from file {{.*}}/file2.c
+# CHECK: RESULT: SUCCESS
+
