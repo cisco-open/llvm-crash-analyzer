@@ -1,0 +1,26 @@
+## #include <stdio.h>
+##
+## int do_cmp(int *num) {
+##   int y = 8;
+##   if (y != 0)
+##     ++y;
+##   if (y == *num)
+##     --y;
+##   return y;
+## }
+##
+## int main() {
+##   int *num = NULL;
+##   int res = do_cmp(num);
+##   return res;
+## }
+##
+
+# RUN: %crash-blamer --core-file=%S/Inputs/core.null-cmp-O0 \
+# RUN:     %S/Inputs/null-cmp-O0 < %s 2>&1 | FileCheck %s
+
+# CHECK: Blame Function is do_cmp
+# CHECK: At Line Number 4
+# CHECK: Blame Function is main
+# CHECK: At Line Number 13
+# CHECK: RESULT: SUCCESS

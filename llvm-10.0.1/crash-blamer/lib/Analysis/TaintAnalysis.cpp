@@ -23,20 +23,19 @@ bool llvm::crash_blamer::operator==(const TaintInfo &T1, const TaintInfo &T2) {
     return false;
 
   if (T1.Offset != T2.Offset)
-   return false;
+    return false;
 
   return true;
 }
 
 bool llvm::crash_blamer::operator!=(const TaintInfo &T1, const TaintInfo &T2) {
   if (!T1.Op->isReg() || !T2.Op->isReg())
-    return false;
+    return true;
 
-  if (T1.Op->getReg() == T2.Op->getReg())
-    return false;
-
-  if (T1.Offset == T2.Offset)
-    return false;
+  if (T1.Op->getReg() == T2.Op->getReg()) {
+    if (T1.Offset == T2.Offset)
+      return false;
+  }
 
   return true;
 }
@@ -46,8 +45,9 @@ crash_blamer::TaintAnalysis::TaintAnalysis() {}
 void crash_blamer::TaintAnalysis::addToTaintList(TaintInfo &Ti) {
   if (!Ti.Op)
     return;
-  if (!Ti.Op->isImm())
+  if (!Ti.Op->isImm()) {
     TaintList.push_back(Ti);
+  }
 }
 
 void llvm::crash_blamer::TaintAnalysis::removeFromTaintList(TaintInfo &Op) {
@@ -84,20 +84,46 @@ void crash_blamer::TaintAnalysis::printTaintList() {
              << "\n------Taint List End----\n";);
 }
 
+void crash_blamer::TaintAnalysis::printDestSrcInfo(DestSourcePair &DestSrc) {
+  LLVM_DEBUG(if (DestSrc.Destination) {
+    llvm::dbgs() << "dest: ";
+    DestSrc.Destination->dump();
+    if (DestSrc.DestOffset)
+      llvm::dbgs() << "dest offset: " << DestSrc.DestOffset << "\n";
+  } if (DestSrc.Source) {
+    llvm::dbgs() << "src: ";
+    DestSrc.Source->dump();
+    if (DestSrc.SrcOffset)
+      llvm::dbgs() << "src offset: " << DestSrc.SrcOffset << "\n";
+  } if (DestSrc.Source2) {
+    llvm::dbgs() << "src2: ";
+    DestSrc.Source2->dump();
+    if (DestSrc.Src2Offset)
+      llvm::dbgs() << "src2 offset: " << DestSrc.Src2Offset << "\n";
+  });
+}
+
 void crash_blamer::TaintAnalysis::startTaint(DestSourcePair &DS) {
   // This is the case when analysis begins.
-  TaintInfo SrcTi, DestTi;
+  TaintInfo SrcTi, DestTi, Src2Ti;
   SrcTi.Op = DS.Source;
   SrcTi.Offset = DS.SrcOffset;
   DestTi.Op = DS.Destination;
   DestTi.Offset = DS.DestOffset;
+  Src2Ti.Op = DS.Source2;
+  Src2Ti.Offset = DS.Src2Offset;
 
   if (TaintList.empty()) {
-    addToTaintList(SrcTi);
-    addToTaintList(DestTi);
+    if (SrcTi.Op)
+      addToTaintList(SrcTi);
+    if (DestTi.Op)
+      addToTaintList(DestTi);
+    if (Src2Ti.Op)
+      addToTaintList(Src2Ti);
     printTaintList();
   } else
-    // For Frames > 1.
+      // For Frames > 1.
+      if (DestTi.Op)
     propagateTaint(DS);
 }
 
@@ -116,6 +142,9 @@ bool llvm::crash_blamer::TaintAnalysis::propagateTaint(DestSourcePair &DS) {
   SrcTi.Offset = DS.SrcOffset;
   DestTi.Op = DS.Destination;
   DestTi.Offset = DS.DestOffset;
+
+  if (!DestTi.Op)
+    return true;
 
   // Check if Dest is already tainted.
   auto Taint = isTainted(DestTi);
@@ -158,12 +187,9 @@ bool llvm::crash_blamer::TaintAnalysis::propagateTaint(DestSourcePair &DS) {
 bool crash_blamer::TaintAnalysis::runOnBlameMF(const MachineFunction &MF) {
   // Crash Sequence starts after the MI with the crash-blame flag.
   bool CrashSequenceStarted = false;
+  bool Result = false;
 
   auto TII = MF.getSubtarget().getInstrInfo();
-
-  // If we find at least one blame entity, we can consider our
-  // analysis as successful.
-  bool Result = false;
 
   // Perform backward analysis on the MF.
   for (auto MBBIt = MF.rbegin(); MBBIt != MF.rend(); ++MBBIt) {
@@ -179,6 +205,7 @@ bool crash_blamer::TaintAnalysis::runOnBlameMF(const MachineFunction &MF) {
             llvm::dbgs() << "Crash instruction doesn't have blame operands\n");
           continue;
         }
+        printDestSrcInfo(*DestSrc);
         startTaint(*DestSrc);
         continue;
       }
@@ -205,17 +232,11 @@ bool crash_blamer::TaintAnalysis::runOnBlameMF(const MachineFunction &MF) {
         continue;
       }
 
-      LLVM_DEBUG(llvm::dbgs() << "dest: "; DestSrc->Destination->dump();
-                 if (DestSrc->DestOffset) llvm::dbgs()
-                 << "dest offset: " << DestSrc->DestOffset << "\n";
-                 llvm::dbgs() << "src: "; DestSrc->Source->dump();
-                 if (DestSrc->SrcOffset) llvm::dbgs()
-                 << "src offset: " << DestSrc->SrcOffset << "\n";);
+      printDestSrcInfo(*DestSrc);
 
       // Backward Taint Analysis.
       bool TaintResult = propagateTaint(*DestSrc);
-      if (!Result && !TaintResult)
-        // Found at least one blame entity.
+      if (!TaintResult)
         Result = true;
       if (!TaintResult && TaintList.empty()) {
         LLVM_DEBUG(dbgs() << "\n Taint Terminated");
@@ -232,6 +253,7 @@ bool crash_blamer::TaintAnalysis::runOnBlameMF(const MachineFunction &MF) {
 // looking for an instruction that has coused a read from null address.
 bool crash_blamer::TaintAnalysis::runOnBlameModule(const BlameModule &BM) {
   bool AnalysisStarted = false;
+  bool Result = false;
 
   // Run the analysis on each blame function.
   for (auto &BF : BM) {
@@ -247,15 +269,18 @@ bool crash_blamer::TaintAnalysis::runOnBlameModule(const BlameModule &BM) {
     // the analysis there, since it is a situation where a frame is missing.
     if (!BF.MF) {
       LLVM_DEBUG(llvm::dbgs() << "### Empty MF: " << BF.Name << "\n";);
-      return false;
+      return Result;
     }
 
     LLVM_DEBUG(llvm::dbgs() << "### MF: " << BF.Name << "\n";);
     if (runOnBlameMF(*(BF.MF))) {
       LLVM_DEBUG(dbgs() << "\nTaint Analysis done.\n");
-      return true;
+      Result = Result || true;
+      if (TaintList.empty())
+        return true;
     }
   }
-
-  return false;
+  // Currently we report SUCCESS even if one Blame Function is found.
+  // Ideally SUCCESS is only when TaintList.empty() is true.
+  return Result;
 }

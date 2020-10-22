@@ -67,18 +67,26 @@ template <class T> class SmallVectorImpl;
 using ParamLoadedValue = std::pair<MachineOperand, DIExpression*>;
 
 struct DestSourcePair {
-  const MachineOperand *Destination;
-  const MachineOperand *Source;
+  const MachineOperand *Destination = nullptr;
+  const MachineOperand *Source = nullptr;
 
   // Used if one of the operands is a memory operand.
   int64_t DestOffset = 0;
   int64_t SrcOffset = 0;
+
+  // Certain instructions (e.g., CMP) can have more than one source operand.
+  const MachineOperand *Source2 = nullptr;
+  int64_t Src2Offset = 0;
+
 
   // Used for scaled addressing mode.
   // e.g.:
   //   movb $0x41,(%rax,%rcx,1) == rax + rcx * 1 = $0x41
   MachineOperand *DestScaledIndex = nullptr;
   MachineOperand *DestOffsetReg = nullptr;
+
+  // Size Factor used in Array Access
+  int64_t SizeFactor = 0;
 
   DestSourcePair(const MachineOperand &Dest, const MachineOperand &Src)
       : Destination(&Dest), Source(&Src) {}
@@ -95,6 +103,19 @@ struct DestSourcePair {
                  MachineOperand &ScaledIndex, const MachineOperand &Src)
       : Destination(&Dest), Source(&Src), DestScaledIndex(&ScaledIndex),
         DestOffsetReg(&DestOff) {}
+
+  // Set All Fields in the structure.
+  DestSourcePair(const MachineOperand *Dest, const MachineOperand *Src,
+		 int64_t DestOff, int64_t SrcOff,
+		 const MachineOperand *Src2, int64_t Src2Off,
+                 MachineOperand *ScaledIndex, MachineOperand *DstOffset,
+		 int64_t Size)
+      : Destination(Dest), Source (Src),
+	DestOffset(DestOff), SrcOffset(SrcOff),
+	Source2(Src2), Src2Offset(Src2Off),
+	DestScaledIndex(ScaledIndex),
+	DestOffsetReg(DstOffset),
+	SizeFactor(Size) {}
 };
 
 /// Used to describe a register and immediate addition.
