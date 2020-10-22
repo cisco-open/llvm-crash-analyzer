@@ -2,12 +2,12 @@
 # RUN:     %S/../Decompiler/Inputs/clang-test00 -debug-only=taint-analysis < %s 2>&1 | FileCheck %s
 
 # CHECK: ### MF: h
-# CHECK:   crash-start MOV32mi $rax, 1, $noreg, 0, $noreg, 0, debug-location !DILocation(line: 7, column: 6, scope: !2); <invalid>:7:6
+# CHECK:   crash-start MOV32mi $rax, 1, $noreg, 0, $noreg, 0, debug-location !DILocation(line: 7, column: 6, scope: !{{.*}}); {{.*}}test.c:7:6
 # CHECK: -----Taint List Begin------
 # CHECK: $rax
 # CHECK: Offset =  0
 # CHECK: ------Taint List End----
-# CHECK:   $rax = MOV64rm $rbp, 1, $noreg, -8, $noreg, debug-location !DILocation(line: 7, column: 4, scope: !2); <invalid>:7:4
+# CHECK:   $rax = MOV64rm $rbp, 1, $noreg, -8, $noreg, debug-location !DILocation(line: 7, column: 4, scope: !{{.*}}); {{.*}}/test.c:7:4
 # CHECK: dest: $rax
 # CHECK: src: $rbp
 # CHECK: src offset: -8
@@ -15,7 +15,7 @@
 # CHECK: $rbp
 # CHECK: Offset =  -8
 # CHECK: ------Taint List End----
-# CHECK:   MOV64mr $rbp, 1, $noreg, -8, $noreg, $rdi, debug-location !DILocation(line: 6, scope: !2); <invalid>:6
+# CHECK:   MOV64mr $rbp, 1, $noreg, -8, $noreg, $rdi, debug-location !DILocation(line: 6, scope: !{{.*}}); {{.*}}/test.c:6
 # CHECK: dest: $rbp
 # CHECK: dest offset: -8
 # CHECK: src: $rdi
@@ -23,21 +23,21 @@
 # CHECK: $rdi
 # CHECK: Offset =  0
 # CHECK: ------Taint List End----
-# CHECK:   $rbp = MOV64rr $rsp, debug-location !DILocation(line: 6, scope: !2); <invalid>:6
+# CHECK:   $rbp = MOV64rr $rsp, debug-location !DILocation(line: 6, scope: !{{.*}}); {{.*}}/test.c:6
 # CHECK: dest: $rbp
 # CHECK: src: $rsp
 # CHECK: -----Taint List Begin------
 # CHECK: $rdi
 # CHECK: Offset =  0
 # CHECK: ------Taint List End----
-# CHECK:   PUSH64r $rbp, implicit-def $rsp, implicit $rsp, debug-location !DILocation(line: 6, scope: !2); <invalid>:6
+# CHECK:   PUSH64r $rbp, implicit-def $rsp, implicit $rsp, debug-location !DILocation(line: 6, scope: !{{.*}}); {{.*}}/test.c:6
 # CHECK: ### MF: g
-# CHECK:   $rsp = crash-start ADD64ri8 $rsp(tied-def 0), 16, implicit-def $eflags, debug-location !DILocation(line: 13, column: 1, scope: !5); <invalid>:13:1
+# CHECK:   $rsp = crash-start ADD64ri8 $rsp(tied-def 0), 16, implicit-def $eflags, debug-location !DILocation(line: 13, column: 1, scope: !{{.*}}); {{.*}}/test.c:13:1
 # CHECK: -----Taint List Begin------
 # CHECK: $rdi
 # CHECK: Offset =  0
 # CHECK: ------Taint List End----
-# CHECK:   $rdi = MOV64rm $rbp, 1, $noreg, -16, $noreg, debug-location !DILocation(line: 12, column: 5, scope: !5); <invalid>:12:5
+# CHECK:   $rdi = MOV64rm $rbp, 1, $noreg, -16, $noreg, debug-location !DILocation(line: 12, column: 5, scope: !{{.*}}); {{.*}}/test.c:12:5
 # CHECK: dest: $rdi
 # CHECK: src: $rbp
 # CHECK: src offset: -16
@@ -45,7 +45,7 @@
 # CHECK: $rbp
 # CHECK: Offset =  -16
 # CHECK: ------Taint List End----
-# CHECK:   MOV64mr $rbp, 1, $noreg, -16, $noreg, $rax, debug-location !DILocation(line: 11, column: 8, scope: !5); <invalid>:11:8
+# CHECK:   MOV64mr $rbp, 1, $noreg, -16, $noreg, $rax, debug-location !DILocation(line: 11, column: 8, scope: !{{.*}}); {{.*}}/test.c:11:8
 # CHECK: dest: $rbp
 # CHECK: dest offset: -16
 # CHECK: src: $rax
@@ -53,14 +53,14 @@
 # CHECK: $rax
 # CHECK: Offset =  0
 # CHECK: ------Taint List End----
-# CHECK:   $rax = MOV64rm $rax, 1, $noreg, 0, $noreg, debug-location !DILocation(line: 11, column: 15, scope: !5); <invalid>:11:15
+# CHECK:   $rax = MOV64rm $rax, 1, $noreg, 0, $noreg, debug-location !DILocation(line: 11, column: 15, scope: !{{.*}}); {{.*}}/test.c:11:15
 # CHECK: dest: $rax
 # CHECK: src: $rax
 # CHECK: -----Taint List Begin------
 # CHECK: $rax
 # CHECK: Offset =  0
 # CHECK: ------Taint List End----
-# CHECK:   $rax = MOV64rm $rbp, 1, $noreg, -8, $noreg, debug-location !DILocation(line: 11, column: 12, scope: !5); <invalid>:11:12
+# CHECK:   $rax = MOV64rm $rbp, 1, $noreg, -8, $noreg, debug-location !DILocation(line: 11, column: 12, scope: !{{.*}}); {{.*}}/test.c:11:12
 # CHECK: dest: $rax
 # CHECK: src: $rbp
 # CHECK: src offset: -8
@@ -68,7 +68,7 @@
 # CHECK: $rbp
 # CHECK: Offset =  -8
 # CHECK: ------Taint List End----
-# CHECK:   MOV64mr $rbp, 1, $noreg, -8, $noreg, $rdi, debug-location !DILocation(line: 10, scope: !5); <invalid>:10
+# CHECK:   MOV64mr $rbp, 1, $noreg, -8, $noreg, $rdi, debug-location !DILocation(line: 10, scope: !{{.*}}); {{.*}}/test.c:10
 # CHECK: dest: $rbp
 # CHECK: dest offset: -8
 # CHECK: src: $rdi
@@ -76,28 +76,28 @@
 # CHECK: $rdi
 # CHECK: Offset =  0
 # CHECK: ------Taint List End----
-# CHECK:   $rsp = SUB64ri8 $rsp(tied-def 0), 16, implicit-def $eflags, debug-location !DILocation(line: 10, scope: !5); <invalid>:10
+# CHECK:   $rsp = SUB64ri8 $rsp(tied-def 0), 16, implicit-def $eflags, debug-location !DILocation(line: 10, scope: !{{.*}}); {{.*}}/test.c:10
 # CHECK: dest: $rsp
 # CHECK: src: 16
 # CHECK: -----Taint List Begin------
 # CHECK: $rdi
 # CHECK: Offset =  0
 # CHECK: ------Taint List End----
-# CHECK:   $rbp = MOV64rr $rsp, debug-location !DILocation(line: 10, scope: !5); <invalid>:10
+# CHECK:   $rbp = MOV64rr $rsp, debug-location !DILocation(line: 10, scope: !{{.*}}); {{.*}}/test.c:10
 # CHECK: dest: $rbp
 # CHECK: src: $rsp
 # CHECK: -----Taint List Begin------
 # CHECK: $rdi
 # CHECK: Offset =  0
 # CHECK: ------Taint List End----
-# CHECK:   PUSH64r $rbp, implicit-def $rsp, implicit $rsp, debug-location !DILocation(line: 10, scope: !5); <invalid>:10
+# CHECK:   PUSH64r $rbp, implicit-def $rsp, implicit $rsp, debug-location !DILocation(line: 10, scope: !{{.*}}); {{.*}}/test.c:10
 # CHECK: ### MF: f
-# CHECK:   $rsp = crash-start ADD64ri8 $rsp(tied-def 0), 16, implicit-def $eflags, debug-location !DILocation(line: 21, column: 1, scope: !6); <invalid>:21:1
+# CHECK:   $rsp = crash-start ADD64ri8 $rsp(tied-def 0), 16, implicit-def $eflags, debug-location !DILocation(line: 21, column: 1, scope: !{{.*}}); {{.*}}/test.c:21:1
 # CHECK: -----Taint List Begin------
 # CHECK: $rdi
 # CHECK: Offset =  0
 # CHECK: ------Taint List End----
-# CHECK:   $rdi = LEA64r $rbp, 1, $noreg, -8, $noreg, debug-location !DILocation(line: 20, column: 3, scope: !6); <invalid>:20:3
+# CHECK:   $rdi = LEA64r $rbp, 1, $noreg, -8, $noreg, debug-location !DILocation(line: 20, column: 3, scope: !{{.*}}); {{.*}}/test.c:20:3
 # CHECK: dest: $rdi
 # CHECK: src: $rbp
 # CHECK: src offset: -8
@@ -105,7 +105,7 @@
 # CHECK: $rbp
 # CHECK: Offset =  -8
 # CHECK: ------Taint List End----
-# CHECK:   MOV64mi32 $rbp, 1, $noreg, -16, $noreg, 0, debug-location !DILocation(line: 19, column: 9, scope: !6); <invalid>:19:9
+# CHECK:   MOV64mi32 $rbp, 1, $noreg, -16, $noreg, 0, debug-location !DILocation(line: 19, column: 9, scope: !{{.*}}); {{.*}}/test.c:19:9
 # CHECK: dest: $rbp
 # CHECK: dest offset: -16
 # CHECK: src: 0
@@ -113,12 +113,12 @@
 # CHECK: $rbp
 # CHECK: Offset =  -8
 # CHECK: ------Taint List End----
-# CHECK:   MOV64mi32 $rbp, 1, $noreg, -8, $noreg, 0, debug-location !DILocation(line: 18, column: 8, scope: !6); <invalid>:18:8
+# CHECK:   MOV64mi32 $rbp, 1, $noreg, -8, $noreg, 0, debug-location !DILocation(line: 18, column: 8, scope: !{{.*}}); {{.*}}/test.c:18:8
 # CHECK: dest: $rbp
 # CHECK: dest offset: -8
 # CHECK: src: 0
 # CHECK: ******** Blame MI is here
-# CHECK:   MOV64mi32 $rbp, 1, $noreg, -8, $noreg, 0, debug-location !DILocation(line: 18, column: 8, scope: !6); <invalid>:18:8
+# CHECK:   MOV64mi32 $rbp, 1, $noreg, -8, $noreg, 0, debug-location !DILocation(line: 18, column: 8, scope: !{{.*}}); {{.*}}/test.c:18:8
 # CHECK:  Taint Terminated
 # CHECK: Taint Analysis done.
 # CHECK: Decompiled.
