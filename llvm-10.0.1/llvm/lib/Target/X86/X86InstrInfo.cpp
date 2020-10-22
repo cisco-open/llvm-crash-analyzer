@@ -605,7 +605,8 @@ X86InstrInfo::getDestAndSrc(const MachineInstr &MI) const {
       if (!getMemOperandWithOffset(MI, BaseOp, Offset, TRI))
         return None;
       return DestSourcePair{nullptr, Src, 0, 0, BaseOp, Offset, nullptr, 0, 0};
-    } case X86::CMP32mi8: {
+    } case X86::CMP8mi:
+      case X86::CMP32mi8: {
       const MachineOperand *Src2 = &(MI.getOperand(5));
       if (!getMemOperandWithOffset(MI, BaseOp, Offset, TRI))
         return None;

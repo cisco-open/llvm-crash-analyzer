@@ -84,7 +84,6 @@ void crash_blamer::TaintAnalysis::printTaintList() {
 }
 
 void crash_blamer::TaintAnalysis::printDestSrcInfo(DestSourcePair &DestSrc) {
-
   LLVM_DEBUG(if (DestSrc.Destination) {
     llvm::dbgs() << "dest: ";
     DestSrc.Destination->dump();
@@ -265,7 +264,7 @@ bool crash_blamer::TaintAnalysis::runOnBlameModule(const BlameModule &BM) {
     LLVM_DEBUG(llvm::dbgs() << "### MF: " << BF.Name << "\n";);
     if (runOnBlameMF(*(BF.MF))) {
       LLVM_DEBUG(dbgs() << "\nTaint Analysis done.\n");
-      Result = Result | true;
+      Result = Result || true;
       if (TaintList.empty())
         return true;
     }
