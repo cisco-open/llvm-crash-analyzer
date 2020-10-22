@@ -1,4 +1,5 @@
-# RUN: %crash-blamer --core-file=%S/Inputs/core.clang-test-O2.88789 \
+# RUN: %crash-blamer -debug-only=taint-analysis \
+# RUN:     --core-file=%S/Inputs/core.clang-test-O2.88789 \
 # RUN:     %S/Inputs/clang-test-O2 < %s 2>&1 | FileCheck %s
 
 # CHECK:  Crash instruction doesn't have blame operands

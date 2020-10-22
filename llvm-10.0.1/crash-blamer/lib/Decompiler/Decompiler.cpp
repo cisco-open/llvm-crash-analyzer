@@ -541,19 +541,6 @@ llvm::Error crash_blamer::Decompiler::run(
       continue;
 
     uint64_t SectionAddr = Section.getAddress();
-    if (!File) {
-      // Get file info.
-      auto LineI =
-          Symbolizer->symbolizeCode(Obj, {SectionAddr, Section.getIndex()});
-      if (!LineI) {
-        errs() << "Unable to find debug lines. Is it compiled with -g?\n";
-        // TODO: return real error here.
-        return Error::success();
-      }
-      File = DIB.createFile(LineI->FileName, "/");
-      CU = DIB.createCompileUnit(dwarf::DW_LANG_C, File, "crash-blamer",
-                                 /*isOptimized=*/true, "", 0);
-    }
 
     uint64_t SectSize = Section.getSize();
     if (!SectSize)
@@ -651,19 +638,6 @@ llvm::Error crash_blamer::Decompiler::run(
         for (auto &reg : Regs->second)
           regInfo.push_back({reg.regName, reg.regValue});
         MF->addCrashRegInfo(regInfo);
-      }
-
-      // Create DI subprogram.
-      if (MF) {
-        auto &F = MF->getFunction();
-        auto SPType = DIB.createSubroutineType(DIB.getOrCreateTypeArray(None));
-        DISubprogram::DISPFlags SPFlags =
-            DISubprogram::SPFlagDefinition | DISubprogram::SPFlagOptimized;
-        auto SP = DIB.createFunction(CU, F.getName(), F.getName(), File, 1,
-                                     SPType, 1, DINode::FlagZero, SPFlags);
-        (const_cast<Function*>(&F))->setSubprogram(SP);
-        DISP = SP;
-        DIB.finalizeSubprogram(SP);
       }
 
       if (Section.isVirtual()) {
@@ -776,14 +750,33 @@ llvm::Error crash_blamer::Decompiler::run(
 
           DILineInfo DbgLineInfo = DILineInfo();
           auto LineInfo = Symbolizer->symbolizeCode(Obj, Addr);
-
           if (!LineInfo) {
             errs() << "Unable to find debug lines. Is it compiled with -g?\n";
             // TODO: return real error here.
             return Error::success();
           }
-          DbgLineInfo = *LineInfo;
 
+          // TODO: Support more CUs.
+          if (LineInfo->Line && !File) {
+            File = DIB.createFile(LineInfo->FileName, "/");
+            CU = DIB.createCompileUnit(dwarf::DW_LANG_C, File, "crash-blamer",
+                                       /*isOptimized=*/true, "", 0);
+          }
+
+          // Once we created the DI file, create DI subprogram.
+          if (!DISP && MF) {
+            auto &F = MF->getFunction();
+            auto SPType = DIB.createSubroutineType(DIB.getOrCreateTypeArray(None));
+            DISubprogram::DISPFlags SPFlags =
+                DISubprogram::SPFlagDefinition | DISubprogram::SPFlagOptimized;
+            auto SP = DIB.createFunction(CU, F.getName(), F.getName(), File, 1,
+                                         SPType, 1, DINode::FlagZero, SPFlags);
+            (const_cast<Function*>(&F))->setSubprogram(SP);
+            DISP = SP;
+            DIB.finalizeSubprogram(SP);
+          }
+
+          DbgLineInfo = *LineInfo;
           MachineInstr *MI = nullptr;
 
           // Fill the Machine Function.
@@ -799,7 +792,7 @@ llvm::Error crash_blamer::Decompiler::run(
               MF->push_back(MBB);
             }
             auto DILoc = DILocation::get(Ctx, DbgLineInfo.Line,
-                                       DbgLineInfo.Column, DISP);
+                                         DbgLineInfo.Column, DISP);
             DebugLoc Loc (DILoc);
             MI = addInstr(MF, MBB, Inst, &Loc, AddrValue == Addr.Address,
                           DefinedRegs, TargetFnName);

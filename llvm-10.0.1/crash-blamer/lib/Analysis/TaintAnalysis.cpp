@@ -7,6 +7,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "Analysis/TaintAnalysis.h"
+#include "llvm/IR/DebugInfoMetadata.h"
 
 using namespace llvm;
 
@@ -131,8 +132,17 @@ bool llvm::crash_blamer::TaintAnalysis::propagateTaint(DestSourcePair &DS) {
       LLVM_DEBUG(DS.Destination->getParent()->dump());
       llvm::outs() << "\nBlame Function is "
                    << DS.Destination->getParent()->getMF()->getName();
-      llvm::outs() << "\nAt Line Number "
-                   << DS.Destination->getParent()->getDebugLoc().getLine();
+      if (DS.Destination->getParent()->getDebugLoc()) {
+        llvm::outs() << "\nAt Line Number "
+                     << DS.Destination->getParent()->getDebugLoc().getLine();
+        llvm::outs() << ", from file "
+            << DS.Destination->getParent()->getDebugLoc()->getFilename();
+      } else {
+        llvm::outs() << "\nWARNING: Please compile with -g to get full line info.";
+        llvm::outs() << "\nBlame instruction is ";
+        DS.Destination->getParent()->print(llvm::outs());
+      }
+
       return false;
     }
     addToTaintList(SrcTi);
@@ -165,7 +175,8 @@ bool crash_blamer::TaintAnalysis::runOnBlameMF(const MachineFunction &MF) {
         LLVM_DEBUG(MI.dump(););
         auto DestSrc = TII->getDestAndSrc(MI);
         if (!DestSrc) {
-          llvm::outs() << "Crash instruction doesn't have blame operands\n";
+          LLVM_DEBUG(
+            llvm::dbgs() << "Crash instruction doesn't have blame operands\n");
           continue;
         }
         startTaint(*DestSrc);
