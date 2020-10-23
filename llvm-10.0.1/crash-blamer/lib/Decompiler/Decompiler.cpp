@@ -475,6 +475,9 @@ llvm::Error crash_blamer::Decompiler::run(
   std::map<SectionRef, SectionSymbolsTy> AllSymbols;
   SectionSymbolsTy AbsoluteSymbols;
 
+  // Store debug info compile units for coresponding files.
+  std::unordered_map<std::string, std::pair<DIFile *, DICompileUnit*>> CUs;
+
   for (const SymbolRef &Symbol : Obj.symbols()) {
     StringRef Name = unwrapOrError(Symbol.getName(), InputFile);
     if (Name.empty())
@@ -528,8 +531,6 @@ llvm::Error crash_blamer::Decompiler::run(
 
   // Create Debug Info.
   DIBuilder DIB(*Module);
-  DIFile *File = nullptr;
-  DICompileUnit *CU = nullptr;
 
   for (const auto &Section : Obj.sections()) {
     if (!Section.isText() || Section.isVirtual())
@@ -756,15 +757,27 @@ llvm::Error crash_blamer::Decompiler::run(
             return Error::success();
           }
 
-          // TODO: Support more CUs.
-          if (LineInfo->Line && !File) {
-            File = DIB.createFile(LineInfo->FileName, "/");
-            CU = DIB.createCompileUnit(dwarf::DW_LANG_C, File, "crash-blamer",
-                                       /*isOptimized=*/true, "", 0);
+          DIFile *File = nullptr;
+          DICompileUnit *CU = nullptr;
+
+          if (LineInfo->FileName != DILineInfo::BadString &&
+              LineInfo->Line) {
+            if (!CUs.count(LineInfo->FileName)) {
+              File = DIB.createFile(LineInfo->FileName, "/");
+              CU = DIB.createCompileUnit(dwarf::DW_LANG_C,
+                  File, "crash-blamer", /*isOptimized=*/true, "", 0,
+                  StringRef(), DICompileUnit::DebugEmissionKind::FullDebug,
+                  0, true, false, DICompileUnit::DebugNameTableKind::Default,
+                  false, true);
+              CUs.insert({LineInfo->FileName, std::make_pair(File, CU)});
+            } else {
+              File = CUs[LineInfo->FileName].first;
+              CU = CUs[LineInfo->FileName].second;
+            }
           }
 
           // Once we created the DI file, create DI subprogram.
-          if (!DISP && MF) {
+          if (!DISP && File && CU && MF) {
             auto &F = MF->getFunction();
             auto SPType = DIB.createSubroutineType(DIB.getOrCreateTypeArray(None));
             DISubprogram::DISPFlags SPFlags =
@@ -791,8 +804,10 @@ llvm::Error crash_blamer::Decompiler::run(
                 OldBB->addSuccessor(MBB);
               MF->push_back(MBB);
             }
+
             auto DILoc = DILocation::get(Ctx, DbgLineInfo.Line,
                                          DbgLineInfo.Column, DISP);
+
             DebugLoc Loc (DILoc);
             MI = addInstr(MF, MBB, Inst, &Loc, AddrValue == Addr.Address,
                           DefinedRegs, TargetFnName);
