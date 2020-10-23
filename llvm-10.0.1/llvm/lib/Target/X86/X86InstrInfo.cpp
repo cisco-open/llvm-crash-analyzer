@@ -517,6 +517,7 @@ X86InstrInfo::getDestAndSrc(const MachineInstr &MI) const {
       case X86::MOVAPSrm:
       case X86::MOVDQUrm:
       case X86::MOVAPDrm:
+      case X86::MOVSSrm:
       case X86::MOVSDrm_alt:
       case X86::MOVSX64rm32:
       case X86::MOVZX32rm8:
@@ -546,7 +547,6 @@ X86InstrInfo::getDestAndSrc(const MachineInstr &MI) const {
       const MachineOperand *Dest = &(MI.getOperand(0));
       if (!getMemOperandWithOffset(MI, BaseOp, Offset, TRI))
         return None;
-
       return DestSourcePair{*Dest, *BaseOp, Offset};
     } case X86::MOV8mr:
       case X86::MOV16mr:
@@ -555,6 +555,7 @@ X86InstrInfo::getDestAndSrc(const MachineInstr &MI) const {
       case X86::MOVDQUmr:
       case X86::MOVUPSmr:
       case X86::MOVAPSmr:
+      case X86::MOVSSmr:
       case X86::MOV8mr_NOREX:
       case X86::SUB32mr:
       case X86::OR8mr:
@@ -596,10 +597,15 @@ X86InstrInfo::getDestAndSrc(const MachineInstr &MI) const {
       case X86::PSHUFHWri:
       case X86::PCMPEQDrr:
       case X86::PSLLDri:
-      case X86::PEXTRWrr: {
+      case X86::PEXTRWrr:
+      case X86::CVTSS2SDrr_Int: {
       const MachineOperand *Dest = &(MI.getOperand(0));
       const MachineOperand *Src = &(MI.getOperand(1));
       return DestSourcePair{*Dest, *Src};
+    } case X86::UCOMISDrr: {
+      const MachineOperand *Src = &(MI.getOperand(0));
+      const MachineOperand *Source2 = &(MI.getOperand(1));
+      return DestSourcePair{nullptr, Src, 0, 0, Source2, 0, nullptr, 0, 0};
     } case X86::CMP32rm: {
       const MachineOperand *Src = &(MI.getOperand(0));
       if (!getMemOperandWithOffset(MI, BaseOp, Offset, TRI))
