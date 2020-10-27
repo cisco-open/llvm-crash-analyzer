@@ -280,6 +280,11 @@ static cl::opt<bool>
                            cl::desc("Emit debug info about parameter's entry values"),
                            cl::init(false));
 
+static cl::opt<bool> ValueTrackingVariableLocations(
+      "experimental-debug-variable-locations",
+      cl::desc("Use experimental new value-tracking variable locations"),
+      cl::init(false));
+
 static cl::opt<bool>
     ForceDwarfFrameSection("force-dwarf-frame-section",
                            cl::desc("Always emit a debug frame section."),
@@ -316,6 +321,7 @@ static TargetOptions InitTargetOptionsFromCodeGenFlags() {
   Options.EmitStackSizeSection = EnableStackSizeSection;
   Options.EmitAddrsig = EnableAddrsig;
   Options.EnableDebugEntryValues = EnableDebugEntryValues;
+  Options.ValueTrackingVariableLocations = ValueTrackingVariableLocations;
   Options.ForceDwarfFrameSection = ForceDwarfFrameSection;
 
   Options.MCOptions = InitMCTargetOptionsFromFlags();

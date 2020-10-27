@@ -35,6 +35,9 @@ class LLVM_LIBRARY_VISIBILITY InstrEmitter {
   MachineBasicBlock *MBB;
   MachineBasicBlock::iterator InsertPos;
 
+  /// Should we try to produce DBG_INSTR_REF instructions?
+  bool EmitDebugInstrRefs;
+
   /// EmitCopyFromReg - Generate machine code for an CopyFromReg node or an
   /// implicit physical register output.
   void EmitCopyFromReg(SDNode *Node, unsigned ResNo,
@@ -107,6 +110,11 @@ public:
   MachineInstr *EmitDbgValue(SDDbgValue *SD,
                              DenseMap<SDValue, unsigned> &VRBaseMap);
 
+  /// Attempt to emit a dbg_value as a DBG_INSTR_REF. May fail and return
+  /// nullptr, in which case we fall back to plain EmitDbgValue.
+  MachineInstr *EmitDbgInstrRef(SDDbgValue *SD,
+                                DenseMap<SDValue, unsigned> &VRBaseMap);
+
   /// Generate machine instruction for a dbg_label node.
   MachineInstr *EmitDbgLabel(SDDbgLabel *SD);
 
@@ -128,7 +136,8 @@ public:
 
   /// InstrEmitter - Construct an InstrEmitter and set it to start inserting
   /// at the given position in the given block.
-  InstrEmitter(MachineBasicBlock *mbb, MachineBasicBlock::iterator insertpos);
+  InstrEmitter(const TargetMachine &TM, MachineBasicBlock *mbb,
+               MachineBasicBlock::iterator insertpos);
 
 private:
   void EmitMachineNode(SDNode *Node, bool IsClone, bool IsCloned,

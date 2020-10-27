@@ -392,6 +392,9 @@ def flto_unit: Flag<["-"], "flto-unit">,
 def fno_lto_unit: Flag<["-"], "fno-lto-unit">;
 def femit_debug_entry_values : Flag<["-"], "femit-debug-entry-values">,
     HelpText<"Enables debug info about call site parameter's entry values">;
+def fexperimental_debug_variable_locations : Flag<["-"],
+    "fexperimental-debug-variable-locations">,
+    HelpText<"Use experimental new value-tracking variable locations">;
 def fdebug_pass_manager : Flag<["-"], "fdebug-pass-manager">,
     HelpText<"Prints debug information for the new pass manager">;
 def fno_debug_pass_manager : Flag<["-"], "fno-debug-pass-manager">,

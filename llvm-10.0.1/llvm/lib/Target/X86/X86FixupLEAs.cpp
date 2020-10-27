@@ -434,6 +434,7 @@ bool FixupLEAPass::optTwoAddrLEA(MachineBasicBlock::iterator &I,
   } else
     return false;
 
+  MBB.getParent()->substituteDebugValuesForInst(*I, *NewMI, 1);
   MBB.erase(I);
   I = NewMI;
   return true;
@@ -469,6 +470,7 @@ void FixupLEAPass::seekLEAFixup(MachineOperand &p,
       LLVM_DEBUG(dbgs() << "FixLEA: Candidate to replace:"; MBI->dump(););
       // now to replace with an equivalent LEA...
       LLVM_DEBUG(dbgs() << "FixLEA: Replaced by: "; NewMI->dump(););
+      MBB.getParent()->substituteDebugValuesForInst(*MBI, *NewMI, 1);
       MBB.erase(MBI);
       MachineBasicBlock::iterator J =
           static_cast<MachineBasicBlock::iterator>(NewMI);
@@ -521,6 +523,7 @@ void FixupLEAPass::processInstructionForSlowLEA(MachineBasicBlock::iterator &I,
     LLVM_DEBUG(NewMI->dump(););
   }
   if (NewMI) {
+    MBB.getParent()->substituteDebugValuesForInst(*I, *NewMI, 1);
     MBB.erase(I);
     I = NewMI;
   }
@@ -626,6 +629,7 @@ void FixupLEAPass::processInstrForSlow3OpLEA(MachineBasicBlock::iterator &I,
       }
     }
 
+    MBB.getParent()->substituteDebugValuesForInst(*I, *NewMI, 1);
     MBB.erase(I);
     I = NewMI;
     return;
@@ -651,6 +655,7 @@ void FixupLEAPass::processInstrForSlow3OpLEA(MachineBasicBlock::iterator &I,
                 .add(Index);
     LLVM_DEBUG(NewMI->dump(););
 
+    MBB.getParent()->substituteDebugValuesForInst(*I, *NewMI, 1);
     MBB.erase(I);
     I = NewMI;
     return;
@@ -673,6 +678,7 @@ void FixupLEAPass::processInstrForSlow3OpLEA(MachineBasicBlock::iterator &I,
               .add(Base);
   LLVM_DEBUG(NewMI->dump(););
 
+  MBB.getParent()->substituteDebugValuesForInst(*I, *NewMI, 1);
   MBB.erase(I);
   I = NewMI;
 }

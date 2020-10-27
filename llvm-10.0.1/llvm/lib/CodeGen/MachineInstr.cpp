@@ -115,7 +115,7 @@ void MachineInstr::addImplicitDefUseOperands(MachineFunction &MF) {
 /// the MCInstrDesc.
 MachineInstr::MachineInstr(MachineFunction &MF, const MCInstrDesc &tid,
                            DebugLoc dl, bool NoImp)
-    : MCID(&tid), debugLoc(std::move(dl)) {
+    : MCID(&tid), debugLoc(std::move(dl)), DebugInstrNum(0) {
   assert(debugLoc.hasTrivialDestructor() && "Expected trivial destructor");
 
   // Reserve space for the expected number of operands.
@@ -129,10 +129,12 @@ MachineInstr::MachineInstr(MachineFunction &MF, const MCInstrDesc &tid,
     addImplicitDefUseOperands(MF);
 }
 
-/// MachineInstr ctor - Copies MachineInstr arg exactly
-///
+/// MachineInstr ctor - Copies MachineInstr arg exactly.
+/// Does not copy the number from debug instruction numbering, to preserve
+/// uniqueness.
 MachineInstr::MachineInstr(MachineFunction &MF, const MachineInstr &MI)
-    : MCID(&MI.getDesc()), Info(MI.Info), debugLoc(MI.getDebugLoc()) {
+    : MCID(&MI.getDesc()), Info(MI.Info), debugLoc(MI.getDebugLoc()),
+      DebugInstrNum(0) {
   assert(debugLoc.hasTrivialDestructor() && "Expected trivial destructor");
 
   CapOperands = OperandCapacity::get(MI.getNumOperands());
@@ -814,12 +816,12 @@ const DILabel *MachineInstr::getDebugLabel() const {
 }
 
 const DILocalVariable *MachineInstr::getDebugVariable() const {
-  assert(isDebugValue() && "not a DBG_VALUE");
+  assert((isDebugValue() || isDebugRef()) && "not a DBG_VALUE");
   return cast<DILocalVariable>(getOperand(2).getMetadata());
 }
 
 const DIExpression *MachineInstr::getDebugExpression() const {
-  assert(isDebugValue() && "not a DBG_VALUE");
+  assert((isDebugValue() || isDebugRef()) && "not a DBG_VALUE");
   return cast<DIExpression>(getOperand(3).getMetadata());
 }
 
@@ -1712,6 +1714,12 @@ void MachineInstr::print(raw_ostream &OS, ModuleSlotTracker &MST,
     HeapAllocMarker->printAsOperand(OS, MST);
   }
 
+  if (DebugInstrNum) {
+    if (!FirstOp)
+      OS << ",";
+    OS << " debug-instr-number " << DebugInstrNum;
+  }
+
   if (!SkipDebugLoc) {
     if (const DebugLoc &DL = getDebugLoc()) {
       if (!FirstOp)
@@ -2194,4 +2202,10 @@ MachineInstr::getFoldedRestoreSize(const TargetInstrInfo *TII) const {
   if (TII->hasLoadFromStackSlot(*this, Accesses))
     return getSpillSlotSize(Accesses, getMF()->getFrameInfo());
   return None;
+}
+
+unsigned MachineInstr::getDebugInstrNum() {
+  if (DebugInstrNum == 0)
+    DebugInstrNum = getParent()->getParent()->getNewDebugInstrNum();
+  return DebugInstrNum;
 }

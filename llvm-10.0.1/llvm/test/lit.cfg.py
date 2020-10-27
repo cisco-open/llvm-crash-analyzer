@@ -156,7 +156,7 @@ tools.extend([
     'llvm-readobj', 'llvm-rtdyld', 'llvm-size', 'llvm-split', 'llvm-strings',
     'llvm-strip', 'llvm-tblgen', 'llvm-undname', 'llvm-c-test', 'llvm-cxxfilt',
     'llvm-xray', 'yaml2obj', 'obj2yaml', 'yaml-bench', 'verify-uselistorder',
-    'bugpoint', 'llc', 'llvm-symbolizer', 'opt', 'sancov', 'sanstats'])
+    'bugpoint', 'llc', 'llvm-symbolizer', 'opt', 'sancov', 'sanstats', 'not'])
 
 # The following tools are optional
 tools.extend([
