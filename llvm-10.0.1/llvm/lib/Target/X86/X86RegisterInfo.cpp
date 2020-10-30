@@ -396,6 +396,18 @@ X86RegisterInfo::getCalleeSavedRegs(const MachineFunction *MF) const {
   return CallsEHReturn ? CSR_32EHRet_SaveList : CSR_32_SaveList;
 }
 
+bool X86RegisterInfo::isCallsRetValReg(unsigned Reg) const {
+  switch(Reg) {
+    case X86::EAX:
+    case X86::RAX:
+    case X86::AL:
+    case X86::XMM0:
+      return true;
+    default:
+      return false;
+  }
+}
+
 const MCPhysReg *X86RegisterInfo::getCalleeSavedRegsViaCopy(
     const MachineFunction *MF) const {
   assert(MF && "Invalid MachineFunction pointer.");

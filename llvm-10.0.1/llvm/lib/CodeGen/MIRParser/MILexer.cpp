@@ -256,6 +256,7 @@ static MIToken::TokenKind getIdentifierKind(StringRef Identifier) {
       .Case("post-instr-symbol", MIToken::kw_post_instr_symbol)
       .Case("heap-alloc-marker", MIToken::kw_heap_alloc_marker)
       .Case("unknown-size", MIToken::kw_unknown_size)
+      .Case("crash-start", MIToken::kw_crash_start)
       .Default(MIToken::Identifier);
 }
 
