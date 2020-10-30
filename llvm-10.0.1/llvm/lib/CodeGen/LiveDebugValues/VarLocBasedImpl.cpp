@@ -1,4 +1,4 @@
-//===- LiveDebugValues.cpp - Tracking Debug Value MIs ---------------------===//
+//===- VarLocBasedImpl.cpp - Tracking Debug Value MIs with VarLoc class----===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -25,6 +25,8 @@
 /// indexes.
 ///
 //===----------------------------------------------------------------------===//
+
+#include "LiveDebugValues.h"
 
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/PostOrderIterator.h"
@@ -112,11 +114,12 @@ namespace {
 
 using DefinedRegsSet = SmallSet<Register, 32>;
 
-class LiveDebugValues : public MachineFunctionPass {
+class VarLocBasedLDV : public LDVImpl {
 private:
   const TargetRegisterInfo *TRI;
   const TargetInstrInfo *TII;
   const TargetFrameLowering *TFI;
+  TargetPassConfig *TPC;
   BitVector CalleeSavedRegs;
   LexicalScopes LS;
 
@@ -320,7 +323,7 @@ private:
         llvm_unreachable(
             "Tried to produce DBG_VALUE for invalid or backup VarLoc");
       }
-      llvm_unreachable("Unrecognized LiveDebugValues.VarLoc.Kind enum");
+      llvm_unreachable("Unrecognized VarLocBasedLDV.VarLoc.Kind enum");
     }
 
     /// Is the Loc field a constant or constant object?
@@ -555,30 +558,18 @@ private:
   /// had their instruction creation deferred.
   void flushPendingLocs(VarLocInMBB &PendingInLocs, VarLocMap &VarLocIDs);
 
-  bool ExtendRanges(MachineFunction &MF);
+  bool ExtendRanges(MachineFunction &MF, TargetPassConfig *TPC);
 
 public:
-  static char ID;
-
   /// Default construct and initialize the pass.
-  LiveDebugValues();
+  VarLocBasedLDV();
 
-  /// Tell the pass manager which passes we depend on and what
-  /// information we preserve.
-  void getAnalysisUsage(AnalysisUsage &AU) const override;
-
-  MachineFunctionProperties getRequiredProperties() const override {
-    return MachineFunctionProperties().set(
-        MachineFunctionProperties::Property::NoVRegs);
-  }
+  ~VarLocBasedLDV();
 
   /// Print to ostream with a message.
   void printVarLocInMBB(const MachineFunction &MF, const VarLocInMBB &V,
                         const VarLocMap &VarLocIDs, const char *msg,
                         raw_ostream &Out) const;
-
-  /// Calculate the liveness information for the given machine function.
-  bool runOnMachineFunction(MachineFunction &MF) override;
 };
 
 } // end anonymous namespace
@@ -587,31 +578,16 @@ public:
 //            Implementation
 //===----------------------------------------------------------------------===//
 
-char LiveDebugValues::ID = 0;
+VarLocBasedLDV::VarLocBasedLDV() { }
 
-char &llvm::LiveDebugValuesID = LiveDebugValues::ID;
-
-INITIALIZE_PASS(LiveDebugValues, DEBUG_TYPE, "Live DEBUG_VALUE analysis",
-                false, false)
-
-/// Default construct and initialize the pass.
-LiveDebugValues::LiveDebugValues() : MachineFunctionPass(ID) {
-  initializeLiveDebugValuesPass(*PassRegistry::getPassRegistry());
-}
-
-/// Tell the pass manager which passes we depend on and what information we
-/// preserve.
-void LiveDebugValues::getAnalysisUsage(AnalysisUsage &AU) const {
-  AU.setPreservesCFG();
-  MachineFunctionPass::getAnalysisUsage(AU);
-}
+VarLocBasedLDV::~VarLocBasedLDV() { }
 
 /// Erase a variable from the set of open ranges, and additionally erase any
 /// fragments that may overlap it. If the VarLoc is a buckup location, erase
 /// the variable from the EntryValuesBackupVars set, indicating we should stop
 /// tracking its backup entry location. Otherwise, if the VarLoc is primary
 /// location, erase the variable from the Vars set.
-void LiveDebugValues::OpenRangesSet::erase(const VarLoc &VL) {
+void VarLocBasedLDV::OpenRangesSet::erase(const VarLoc &VL) {
   // Erasure helper.
   auto DoErase = [VL, this](DebugVariable VarToErase) {
     auto *EraseFrom = VL.isEntryBackupLoc() ? &EntryValuesBackupVars : &Vars;
@@ -637,15 +613,15 @@ void LiveDebugValues::OpenRangesSet::erase(const VarLoc &VL) {
   auto MapIt = OverlappingFragments.find({Var.getVariable(), ThisFragment});
   if (MapIt != OverlappingFragments.end()) {
     for (auto Fragment : MapIt->second) {
-      LiveDebugValues::OptFragmentInfo FragmentHolder;
+      VarLocBasedLDV::OptFragmentInfo FragmentHolder;
       if (!DebugVariable::isDefaultFragment(Fragment))
-        FragmentHolder = LiveDebugValues::OptFragmentInfo(Fragment);
+        FragmentHolder = VarLocBasedLDV::OptFragmentInfo(Fragment);
       DoErase({Var.getVariable(), FragmentHolder, Var.getInlinedAt()});
     }
   }
 }
 
-void LiveDebugValues::OpenRangesSet::erase(const VarLocSet &KillSet,
+void VarLocBasedLDV::OpenRangesSet::erase(const VarLocSet &KillSet,
                                            const VarLocMap &VarLocIDs) {
   VarLocs.intersectWithComplement(KillSet);
   for (unsigned ID : KillSet) {
@@ -655,7 +631,7 @@ void LiveDebugValues::OpenRangesSet::erase(const VarLocSet &KillSet,
   }
 }
 
-void LiveDebugValues::OpenRangesSet::insert(unsigned VarLocID,
+void VarLocBasedLDV::OpenRangesSet::insert(unsigned VarLocID,
                                             const VarLoc &VL) {
   auto *InsertInto = VL.isEntryBackupLoc() ? &EntryValuesBackupVars : &Vars;
   VarLocs.set(VarLocID);
@@ -665,7 +641,7 @@ void LiveDebugValues::OpenRangesSet::insert(unsigned VarLocID,
 /// Return the Loc ID of an entry value backup location, if it exists for the
 /// variable.
 llvm::Optional<unsigned>
-LiveDebugValues::OpenRangesSet::getEntryValueBackup(DebugVariable Var) {
+VarLocBasedLDV::OpenRangesSet::getEntryValueBackup(DebugVariable Var) {
   auto It = EntryValuesBackupVars.find(Var);
   if (It != EntryValuesBackupVars.end())
     return It->second;
@@ -678,7 +654,7 @@ LiveDebugValues::OpenRangesSet::getEntryValueBackup(DebugVariable Var) {
 //===----------------------------------------------------------------------===//
 
 #ifndef NDEBUG
-void LiveDebugValues::printVarLocInMBB(const MachineFunction &MF,
+void VarLocBasedLDV::printVarLocInMBB(const MachineFunction &MF,
                                        const VarLocInMBB &V,
                                        const VarLocMap &VarLocIDs,
                                        const char *msg,
@@ -700,8 +676,8 @@ void LiveDebugValues::printVarLocInMBB(const MachineFunction &MF,
 }
 #endif
 
-LiveDebugValues::VarLoc::SpillLoc
-LiveDebugValues::extractSpillBaseRegAndOffset(const MachineInstr &MI) {
+VarLocBasedLDV::VarLoc::SpillLoc
+VarLocBasedLDV::extractSpillBaseRegAndOffset(const MachineInstr &MI) {
   assert(MI.hasOneMemOperand() &&
          "Spill instruction does not have exactly one memory operand?");
   auto MMOI = MI.memoperands_begin();
@@ -718,7 +694,7 @@ LiveDebugValues::extractSpillBaseRegAndOffset(const MachineInstr &MI) {
 /// Try to salvage the debug entry value if we encounter a new debug value
 /// describing the same parameter, otherwise stop tracking the value. Return
 /// true if we should stop tracking the entry value, otherwise return false.
-bool LiveDebugValues::removeEntryValue(const MachineInstr &MI,
+bool VarLocBasedLDV::removeEntryValue(const MachineInstr &MI,
                                        OpenRangesSet &OpenRanges,
                                        VarLocMap &VarLocIDs,
                                        const VarLoc &EntryVL) {
@@ -773,7 +749,7 @@ bool LiveDebugValues::removeEntryValue(const MachineInstr &MI,
 
 /// End all previous ranges related to @MI and start a new range from @MI
 /// if it is a DBG_VALUE instr.
-void LiveDebugValues::transferDebugValue(const MachineInstr &MI,
+void VarLocBasedLDV::transferDebugValue(const MachineInstr &MI,
                                          OpenRangesSet &OpenRanges,
                                          VarLocMap &VarLocIDs) {
   if (!MI.isDebugValue())
@@ -822,7 +798,7 @@ void LiveDebugValues::transferDebugValue(const MachineInstr &MI,
 }
 
 /// Turn the entry value backup locations into primary locations.
-void LiveDebugValues::emitEntryValues(MachineInstr &MI,
+void VarLocBasedLDV::emitEntryValues(MachineInstr &MI,
                                       OpenRangesSet &OpenRanges,
                                       VarLocMap &VarLocIDs,
                                       TransferMap &Transfers,
@@ -853,7 +829,7 @@ void LiveDebugValues::emitEntryValues(MachineInstr &MI,
 /// new VarLoc. If \p NewReg is different than default zero value then the
 /// new location will be register location created by the copy like instruction,
 /// otherwise it is variable's location on the stack.
-void LiveDebugValues::insertTransferDebugPair(
+void VarLocBasedLDV::insertTransferDebugPair(
     MachineInstr &MI, OpenRangesSet &OpenRanges, TransferMap &Transfers,
     VarLocMap &VarLocIDs, unsigned OldVarID, TransferKind Kind,
     unsigned NewReg) {
@@ -919,7 +895,7 @@ void LiveDebugValues::insertTransferDebugPair(
 }
 
 /// A definition of a register may mark the end of a range.
-void LiveDebugValues::transferRegisterDef(
+void VarLocBasedLDV::transferRegisterDef(
     MachineInstr &MI, OpenRangesSet &OpenRanges, VarLocMap &VarLocIDs,
     TransferMap &Transfers) {
   MachineFunction *MF = MI.getMF();
@@ -952,14 +928,14 @@ void LiveDebugValues::transferRegisterDef(
   }
   OpenRanges.erase(KillSet, VarLocIDs);
 
-  if (auto *TPC = getAnalysisIfAvailable<TargetPassConfig>()) {
+  if (TPC) {
     auto &TM = TPC->getTM<TargetMachine>();
     if (TM.Options.EnableDebugEntryValues)
       emitEntryValues(MI, OpenRanges, VarLocIDs, Transfers, KillSet);
   }
 }
 
-bool LiveDebugValues::isSpillInstruction(const MachineInstr &MI,
+bool VarLocBasedLDV::isSpillInstruction(const MachineInstr &MI,
                                          MachineFunction *MF) {
   // TODO: Handle multiple stores folded into one.
   if (!MI.hasOneMemOperand())
@@ -972,7 +948,7 @@ bool LiveDebugValues::isSpillInstruction(const MachineInstr &MI,
   return true;
 }
 
-bool LiveDebugValues::isLocationSpill(const MachineInstr &MI,
+bool VarLocBasedLDV::isLocationSpill(const MachineInstr &MI,
                                       MachineFunction *MF, unsigned &Reg) {
   if (!isSpillInstruction(MI, MF))
     return false;
@@ -1012,8 +988,8 @@ bool LiveDebugValues::isLocationSpill(const MachineInstr &MI,
   return false;
 }
 
-Optional<LiveDebugValues::VarLoc::SpillLoc>
-LiveDebugValues::isRestoreInstruction(const MachineInstr &MI,
+Optional<VarLocBasedLDV::VarLoc::SpillLoc>
+VarLocBasedLDV::isRestoreInstruction(const MachineInstr &MI,
                                       MachineFunction *MF, unsigned &Reg) {
   if (!MI.hasOneMemOperand())
     return None;
@@ -1034,7 +1010,7 @@ LiveDebugValues::isRestoreInstruction(const MachineInstr &MI,
 /// the DBG_VALUE without inserting it and keep track of it in \p Transfers.
 /// It will be inserted into the BB when we're done iterating over the
 /// instructions.
-void LiveDebugValues::transferSpillOrRestoreInst(MachineInstr &MI,
+void VarLocBasedLDV::transferSpillOrRestoreInst(MachineInstr &MI,
                                                  OpenRangesSet &OpenRanges,
                                                  VarLocMap &VarLocIDs,
                                                  TransferMap &Transfers) {
@@ -1110,7 +1086,7 @@ void LiveDebugValues::transferSpillOrRestoreInst(MachineInstr &MI,
 /// If \p MI is a register copy instruction, that copies a previously tracked
 /// value from one register to another register that is callee saved, we
 /// create new DBG_VALUE instruction  described with copy destination register.
-void LiveDebugValues::transferRegisterCopy(MachineInstr &MI,
+void VarLocBasedLDV::transferRegisterCopy(MachineInstr &MI,
                                            OpenRangesSet &OpenRanges,
                                            VarLocMap &VarLocIDs,
                                            TransferMap &Transfers) {
@@ -1176,7 +1152,7 @@ void LiveDebugValues::transferRegisterCopy(MachineInstr &MI,
 }
 
 /// Terminate all open ranges at the end of the current basic block.
-bool LiveDebugValues::transferTerminator(MachineBasicBlock *CurMBB,
+bool VarLocBasedLDV::transferTerminator(MachineBasicBlock *CurMBB,
                                          OpenRangesSet &OpenRanges,
                                          VarLocInMBB &OutLocs,
                                          const VarLocMap &VarLocIDs) {
@@ -1208,7 +1184,7 @@ bool LiveDebugValues::transferTerminator(MachineBasicBlock *CurMBB,
 ///           Variable which are known to exist.
 /// \param OverlappingFragments The overlap map being constructed, from one
 ///           Var/Fragment pair to a vector of fragments known to overlap.
-void LiveDebugValues::accumulateFragmentMap(MachineInstr &MI,
+void VarLocBasedLDV::accumulateFragmentMap(MachineInstr &MI,
                                             VarToFragments &SeenFragments,
                                             OverlapMap &OverlappingFragments) {
   DebugVariable MIVar(MI.getDebugVariable(), MI.getDebugExpression(),
@@ -1260,7 +1236,7 @@ void LiveDebugValues::accumulateFragmentMap(MachineInstr &MI,
 }
 
 /// This routine creates OpenRanges.
-void LiveDebugValues::process(MachineInstr &MI, OpenRangesSet &OpenRanges,
+void VarLocBasedLDV::process(MachineInstr &MI, OpenRangesSet &OpenRanges,
                               VarLocMap &VarLocIDs, TransferMap &Transfers) {
   transferDebugValue(MI, OpenRanges, VarLocIDs);
   transferRegisterDef(MI, OpenRanges, VarLocIDs, Transfers);
@@ -1271,7 +1247,7 @@ void LiveDebugValues::process(MachineInstr &MI, OpenRangesSet &OpenRanges,
 /// This routine joins the analysis results of all incoming edges in @MBB by
 /// inserting a new DBG_VALUE instruction at the start of the @MBB - if the same
 /// source variable in all the predecessors of @MBB reside in the same location.
-bool LiveDebugValues::join(
+bool VarLocBasedLDV::join(
     MachineBasicBlock &MBB, VarLocInMBB &OutLocs, VarLocInMBB &InLocs,
     const VarLocMap &VarLocIDs,
     SmallPtrSet<const MachineBasicBlock *, 16> &Visited,
@@ -1371,7 +1347,7 @@ bool LiveDebugValues::join(
   return Changed;
 }
 
-void LiveDebugValues::flushPendingLocs(VarLocInMBB &PendingInLocs,
+void VarLocBasedLDV::flushPendingLocs(VarLocInMBB &PendingInLocs,
                                        VarLocMap &VarLocIDs) {
   // PendingInLocs records all locations propagated into blocks, which have
   // not had DBG_VALUE insts created. Go through and create those insts now.
@@ -1395,7 +1371,7 @@ void LiveDebugValues::flushPendingLocs(VarLocInMBB &PendingInLocs,
   }
 }
 
-bool LiveDebugValues::isEntryValueCandidate(
+bool VarLocBasedLDV::isEntryValueCandidate(
     const MachineInstr &MI, const DefinedRegsSet &DefinedRegs) const {
   assert(MI.isDebugValue() && "This must be DBG_VALUE.");
 
@@ -1448,11 +1424,11 @@ static void collectRegDefs(const MachineInstr &MI, DefinedRegsSet &Regs,
 /// This routine records the entry values of function parameters. The values
 /// could be used as backup values. If we loose the track of some unmodified
 /// parameters, the backup values will be used as a primary locations.
-void LiveDebugValues::recordEntryValue(const MachineInstr &MI,
+void VarLocBasedLDV::recordEntryValue(const MachineInstr &MI,
                                        const DefinedRegsSet &DefinedRegs,
                                        OpenRangesSet &OpenRanges,
                                        VarLocMap &VarLocIDs) {
-  if (auto *TPC = getAnalysisIfAvailable<TargetPassConfig>()) {
+  if (TPC) {
     auto &TM = TPC->getTM<TargetMachine>();
     if (!TM.Options.EnableDebugEntryValues)
       return;
@@ -1478,8 +1454,24 @@ void LiveDebugValues::recordEntryValue(const MachineInstr &MI,
 
 /// Calculate the liveness information for the given machine function and
 /// extend ranges across basic blocks.
-bool LiveDebugValues::ExtendRanges(MachineFunction &MF) {
+bool VarLocBasedLDV::ExtendRanges(MachineFunction &MF, TargetPassConfig *TPC) {
   LLVM_DEBUG(dbgs() << "\nDebug Range Extension\n");
+
+  if (!MF.getFunction().getSubprogram())
+    // VarLocBaseLDV will already have removed all DBG_VALUEs.
+    return false;
+
+  // Skip functions from NoDebug compilation units.
+  if (MF.getFunction().getSubprogram()->getUnit()->getEmissionKind() ==
+      DICompileUnit::NoDebug)
+    return false;
+
+  TRI = MF.getSubtarget().getRegisterInfo();
+  TII = MF.getSubtarget().getInstrInfo();
+  TFI = MF.getSubtarget().getFrameLowering();
+  TFI->getCalleeSaves(MF, CalleeSavedRegs);
+  this->TPC = TPC;
+  LS.initialize(MF);
 
   bool Changed = false;
   bool OLChanged = false;
@@ -1622,22 +1614,8 @@ bool LiveDebugValues::ExtendRanges(MachineFunction &MF) {
   return Changed;
 }
 
-bool LiveDebugValues::runOnMachineFunction(MachineFunction &MF) {
-  if (!MF.getFunction().getSubprogram())
-    // LiveDebugValues will already have removed all DBG_VALUEs.
-    return false;
-
-  // Skip functions from NoDebug compilation units.
-  if (MF.getFunction().getSubprogram()->getUnit()->getEmissionKind() ==
-      DICompileUnit::NoDebug)
-    return false;
-
-  TRI = MF.getSubtarget().getRegisterInfo();
-  TII = MF.getSubtarget().getInstrInfo();
-  TFI = MF.getSubtarget().getFrameLowering();
-  TFI->getCalleeSaves(MF, CalleeSavedRegs);
-  LS.initialize(MF);
-
-  bool Changed = ExtendRanges(MF);
-  return Changed;
+LDVImpl *
+llvm::makeVarLocBasedLiveDebugValues()
+{
+  return new VarLocBasedLDV();
 }

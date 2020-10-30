@@ -119,7 +119,8 @@ namespace llvm {
           ExplicitEmulatedTLS(false), EnableIPRA(false),
           EmitStackSizeSection(false), EnableMachineOutliner(false),
           SupportsDefaultOutlining(false), EmitAddrsig(false),
-          EnableDebugEntryValues(false), ForceDwarfFrameSection(false) {}
+          EnableDebugEntryValues(false), ValueTrackingVariableLocations(false),
+          ForceDwarfFrameSection(false) {}
 
     /// PrintMachineCode - This flag is enabled when the -print-machineinstrs
     /// option is specified on the command line, and should enable debugging
@@ -258,6 +259,11 @@ namespace llvm {
 
     /// Emit debug info about parameter's entry values.
     unsigned EnableDebugEntryValues : 1;
+
+    // When set to true, use experimental new debug variable location tracking,
+    // which seeks to follow the values of variables rather than their location,
+    // post isel.
+    unsigned ValueTrackingVariableLocations : 1;
 
     /// Emit DWARF debug frame section.
     unsigned ForceDwarfFrameSection : 1;

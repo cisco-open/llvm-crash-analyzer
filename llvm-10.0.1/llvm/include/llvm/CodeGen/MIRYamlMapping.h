@@ -445,6 +445,36 @@ template <> struct MappingTraits<RegisterCrashInfo> {
   static const bool flow = true;
 };
 
+/// Serializable representation of debug value substitutions.
+struct DebugValueSubstitution {
+  unsigned SrcInst;
+  unsigned SrcOp;
+  unsigned DstInst;
+  unsigned DstOp;
+
+  bool operator==(const DebugValueSubstitution &Other) const {
+    return std::tie(SrcInst, SrcOp, DstInst, DstOp) ==
+           std::tie(Other.SrcInst, Other.SrcOp, Other.DstInst, Other.DstOp);
+  }
+};
+
+template <> struct MappingTraits<DebugValueSubstitution> {
+  static void mapping(IO &YamlIO, DebugValueSubstitution &Sub) {
+    YamlIO.mapRequired("srcinst", Sub.SrcInst);
+    YamlIO.mapRequired("srcop", Sub.SrcOp);
+    YamlIO.mapRequired("dstinst", Sub.DstInst);
+    YamlIO.mapRequired("dstop", Sub.DstOp);
+  }
+
+  static const bool flow = true;
+};
+} // namespace yaml
+} // namespace llvm
+
+LLVM_YAML_IS_SEQUENCE_VECTOR(llvm::yaml::DebugValueSubstitution)
+
+namespace llvm {
+namespace yaml {
 struct MachineConstantPoolValue {
   UnsignedValue ID;
   StringValue Value;
@@ -630,6 +660,7 @@ struct MachineFunction {
   std::vector<MachineConstantPoolValue> Constants; /// Constant pool.
   std::unique_ptr<MachineFunctionInfo> MachineFuncInfo;
   std::vector<CallSiteInfo> CallSitesInfo;
+  std::vector<DebugValueSubstitution> DebugValueSubstitutions;
   RegisterCrashInfo MFRegInfo;
   MachineJumpTable JumpTableInfo;
   BlockStringValue Body;
@@ -659,6 +690,8 @@ template <> struct MappingTraits<MachineFunction> {
                        std::vector<MachineStackObject>());
     YamlIO.mapOptional("callSites", MF.CallSitesInfo,
                        std::vector<CallSiteInfo>());
+    YamlIO.mapOptional("debugValueSubstitutions", MF.DebugValueSubstitutions,
+                       std::vector<DebugValueSubstitution>());
     YamlIO.mapOptional("regInfo", MF.MFRegInfo, RegisterCrashInfo());
     YamlIO.mapOptional("constants", MF.Constants,
                        std::vector<MachineConstantPoolValue>());
