@@ -780,6 +780,8 @@ void MIPrinter::print(const MachineInstr &MI) {
     OS << "exact ";
   if (MI.getFlag(MachineInstr::NoFPExcept))
     OS << "nofpexcept ";
+  if (MI.getFlag(MachineInstr::CrashStart))
+    OS << "crash-start ";
 
   OS << TII->getName(MI.getOpcode());
   if (I < E)

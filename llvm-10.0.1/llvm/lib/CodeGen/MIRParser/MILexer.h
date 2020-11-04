@@ -124,6 +124,7 @@ struct MIToken {
     kw_post_instr_symbol,
     kw_heap_alloc_marker,
     kw_unknown_size,
+    kw_crash_start,
 
     // Named metadata keywords
     md_tbaa,

@@ -10,4 +10,5 @@ set(LLVM_LINK_COMPONENTS
 
 llvm_add_library(CrashBlamerDecompiler
   Decompiler.cpp
+  FixRegStateFlags.cpp
   )

@@ -442,7 +442,8 @@ bool X86InstrInfo::isNoopInstr(const MachineInstr &MI) const {
 
 bool X86InstrInfo::isXORSimplifiedSetToZero(const MachineInstr &MI) const {
   // TODO: Cover more cases.
-  if (MI.getOpcode() != X86::XOR32rr && MI.getOpcode() != X86::XOR64rr)
+  if (MI.getOpcode() != X86::XOR32rr && MI.getOpcode() != X86::XOR64rr &&
+      MI.getOpcode() != X86::XORPSrr)
     return false;
 
   auto Op1 = MI.getOperand(1);
@@ -480,7 +481,7 @@ X86InstrInfo::getDestAndSrc(const MachineInstr &MI) const {
 
   // `xor eax, eax` means: write 0 into $eax.
   if (isXORSimplifiedSetToZero(MI))
-    return DestSourcePair{MI.getOperand(0), MachineOperand::CreateImm(0)};
+    return DestSourcePair{MI.getOperand(0), MI.getOperand(0)};
 
   // NOTE: We cannot use isMoveImmediate() since it does not specify what
   // operand is a source or destination (e.g. see:

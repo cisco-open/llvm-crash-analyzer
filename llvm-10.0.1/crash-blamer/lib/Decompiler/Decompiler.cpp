@@ -11,6 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "Decompiler/Decompiler.h"
+#include "Decompiler/FixRegStateFlags.h"
 
 #include "llvm/ADT/Triple.h"
 #include "llvm/CodeGen/MachineFunction.h"
@@ -317,10 +318,6 @@ MachineInstr* crash_blamer::Decompiler::addInstr(MachineFunction *MF,
     MachineBasicBlock *MBB, MCInst &Inst, DebugLoc *Loc,
     bool IsCrashStart, crash_blamer::RegSet &DefinedRegs,
     StringRef TargetFnName) {
-
-  // TODO: Add frame-setup for the PUSH64r $rbp and
-  // destroy-frame for the $rbp = POP64r.
-
   const unsigned Opcode = Inst.getOpcode();
   const MCInstrDesc &MCID = MII->get(Opcode);
   MachineInstrBuilder Builder = BuildMI(
@@ -335,18 +332,6 @@ MachineInstr* crash_blamer::Decompiler::addInstr(MachineFunction *MF,
     return nullptr;
   }
 
-  // TODO: Revisit this logic. We keep tracking of
-  // all defined registers, so if we face a register
-  // use that isn't defined, we assume the register
-  // was line-in (premise: the final generated
-  // code was properly generated).
-  unsigned NumImplDefs = MCID.getNumImplicitDefs();
-  auto ImplDefs = MCID.getImplicitDefs();
-  for (unsigned i = 0; i < NumImplDefs; ++i) {
-    if (!DefinedRegs.count(ImplDefs[i]))
-      DefinedRegs.insert(ImplDefs[i]);
-  }
-
   bool CSRGenerated = false;
 
   for (unsigned OpIndex = 0, E = Inst.getNumOperands(); OpIndex < E;
@@ -359,13 +344,6 @@ MachineInstr* crash_blamer::Decompiler::addInstr(MachineFunction *MF,
       if (IsDef && !OpInfo.isOptionalDef()) {
         Flags |= RegState::Define;
         DefinedRegs.insert(Op.getReg());
-      } else if (Op.getReg() &&
-                 !MCID.hasImplicitUseOfPhysReg(Op.getReg()) &&
-                 !MCID.hasImplicitDefOfPhysReg(Op.getReg()) &&
-                 !DefinedRegs.count(Op.getReg())) {
-        // This is register use. If it wasn't defined, it could be
-        // line-in.
-        MBB->addLiveIn(Op.getReg());
       }
       Builder.addReg(Op.getReg(), Flags);
     } else if (Op.isImm()) {
@@ -866,6 +844,12 @@ llvm::Error crash_blamer::Decompiler::run(
         }
     }
   }
+
+  // Run FixRegStateFlags pass for each basic block.
+  FixRegStateFlags FRSF;
+  for (auto &f : BlameTrace)
+    if (f.MF)
+      FRSF.run(*(f.MF));
 
   MMI->finalize();
 
