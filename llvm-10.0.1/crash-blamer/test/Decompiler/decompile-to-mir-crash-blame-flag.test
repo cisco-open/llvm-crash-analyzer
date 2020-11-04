@@ -20,18 +20,17 @@
 ##  return 0;
 ##}
 
-# RUN: %crash-blamer -debug-only=crash-blamer-decompiler \
-# RUN:     --core-file=%S/Inputs/core-test-2 %S/Inputs/test-2
+# RUN: %crash-blamer --core-file=%S/Inputs/core-test-2 %S/Inputs/test-2 --print-decompiled-mir=%t.mir
 # RUN: cat %t.mir | FileCheck %s
 
-# CHECK: # Machine code for function h
-# CHECK: crash-start MOV32mi $rax, 1, $noreg, 0, $noreg, 3, debug-location {{.*}}:2:7
+# CHECK: name: h
+# CHECK: crash-start MOV32mi $rax, 1, $noreg, 0, $noreg, 3, debug-location
 
-# CHECK: # Machine code for function g
-# CHECK: $rsp = crash-start ADD64ri8 $rsp(tied-def 0), 16, implicit-def $eflags, debug-location {{.*}}:8:1
+# CHECK: name: g
+# CHECK: $rsp = crash-start ADD64ri8 $rsp, 16, implicit-def $eflags, debug-location
 
-# CHECK: # Machine code for function f
-# CHECK: $rsp = crash-start ADD64ri8 $rsp(tied-def 0), 16, implicit-def $eflags, debug-location {{.*}}:13:1
+# CHECK: name: f
+# CHECK: $rsp = crash-start ADD64ri8 $rsp, 16, implicit-def $eflags, debug-location
 
-# CHECK: # Machine code for function main
-# CHECK: $eax = crash-start XOR32rr undef $eax(tied-def 0), undef $eax, implicit-def $eflags, debug-location {{.*}}:17:3
+# CHECK: name: main
+# CHECK: $eax = crash-start XOR32rr undef $eax, undef $eax, implicit-def $eflags

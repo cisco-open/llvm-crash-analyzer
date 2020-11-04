@@ -1,25 +1,22 @@
 ## Test Machine Functions decompiled.
-# RUN: %crash-blamer -debug-only=crash-blamer-decompiler \
+# RUN: %crash-blamer --print-decompiled-mir=%t.mir \
 # RUN:     --core-file=%S/Inputs/core-test-1 %S/Inputs/test-1
 # RUN: cat %t.mir | FileCheck %s
 
-# CHECK: Machine code for function main: IsSSA, TracksLiveness
+# CHECK: name: f3
 # CHECK: bb.0:
-# CHECK:  ENDBR64 {{.*}}test.c:10:1
-# CHECK:  MOV32mi $noreg, 1, $noreg, 0, $noreg, 0{{.*}}test.c:2:15
-# CHECK:  TRAP{{.*}}test.c:2:15
-# CHECK: End machine code for function main.
+# CHECK:  ENDBR64 debug-location !DILocation(line: 1, column: 26, scope: {{.*}}
+# CHECK:  MOV32mi $rdi, 1, $noreg, 0, $noreg, 0, debug-location !DILocation(line: 2, column: 15, scope: {{.*}}
+# CHECK:  RETQ debug-location !DILocation(line: 3, column: 1, scope: {{.*}}
 
-# CHECK: Machine code for function f3: IsSSA, TracksLiveness
+# CHECK: name: f2
 # CHECK: bb.0:
-# CHECK:  ENDBR64 {{.*}}test.c:1:26
-# CHECK:  MOV32mi $rdi, 1, $noreg, 0, $noreg, 0{{.*}}test.c:2:15
-# CHECK:  RETQ {{.*}}test.c:3:1
-# CHECK: End machine code for function f3.
+# CHECK:  ENDBR64 debug-location !DILocation(line: 3, column: 1, scope: {{.*}}
+# CHECK:  MOV32mi $rdi, 1, $noreg, 0, $noreg, 0, debug-location !DILocation(line: 3, column: 1, scope: {{.*}}
+# CHECK:  RETQ debug-location !DILocation(line: 3, column: 1, scope: {{.*}}
 
-# CHECK: Machine code for function f2: IsSSA, TracksLiveness
+# CHECK: name: main
 # CHECK: bb.0:
-# CHECK:  ENDBR64{{.*}}test.c:3:1
-# CHECK:  MOV32mi $rdi, 1, $noreg, 0, $noreg, 0{{.*}}test.c:3:1
-# CHECK:  RETQ{{.*}}test.c:3:1
-# CHECK: End machine code for function f2.
+# CHECK:  ENDBR64 debug-location !DILocation(line: 10, column: 1, scope: {{.*}}
+# CHECK:  MOV32mi $noreg, 1, $noreg, 0, $noreg, 0, debug-location !DILocation(line: 2, column: 15, scope: {{.*}}
+# CHECK:  TRAP debug-location !DILocation(line: 2, column: 15, scope: {{.*}}
