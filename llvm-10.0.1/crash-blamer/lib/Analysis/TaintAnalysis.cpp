@@ -7,6 +7,8 @@
 //===----------------------------------------------------------------------===//
 
 #include "Analysis/TaintAnalysis.h"
+#include "Analysis/MachineLocTracking.h"
+
 #include "llvm/IR/DebugInfoMetadata.h"
 
 using namespace llvm;
@@ -185,6 +187,16 @@ bool llvm::crash_blamer::TaintAnalysis::propagateTaint(DestSourcePair &DS) {
 // Return true if taint is terminated.
 // Return false otherwise.
 bool crash_blamer::TaintAnalysis::runOnBlameMF(const MachineFunction &MF) {
+  // As a first step, run the forward analysis by tracking values
+  // in the machine locations.
+  MachineLocTracking MLocTracking;
+  MLocTracking.run(const_cast<MachineFunction&>(MF));
+
+  // TODO: Combine the forward analysis with reading of concrete
+  // values from core-file for the purpose of reconstructing
+  // concrete memory addresses when a base register is not
+  // known at the time by going backward.
+
   // Crash Sequence starts after the MI with the crash-blame flag.
   bool CrashSequenceStarted = false;
   bool Result = false;
