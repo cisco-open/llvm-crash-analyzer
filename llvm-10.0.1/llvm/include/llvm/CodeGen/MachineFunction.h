@@ -1044,6 +1044,14 @@ public:
     return MFRegInfo;
   }
 
+  std::string getRegValueFromCrash(std::string Reg) const {
+    for (auto &R : MFRegInfo) {
+      if (R.Name == Reg)
+        return R.Value;
+    }
+    return "";
+  }
+
   /// Following functions update call site info. They should be called before
   /// removing, replacing or copying call instruction.
 

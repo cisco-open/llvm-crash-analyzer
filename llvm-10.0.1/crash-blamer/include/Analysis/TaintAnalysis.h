@@ -34,7 +34,18 @@ namespace crash_blamer {
 //   2) Scaled Index addressing mode
 struct TaintInfo {
   const MachineOperand *Op;
+
+  // For mem operands, we rather choose to taint
+  // real/concrete addresses (by calculating base_reg + off).
   int64_t Offset;
+  uint64_t ConcreteMemoryAddress = 0x0;
+  bool IsConcreteMemory = false;
+  bool IsTaintMemAddr() const {
+    return IsConcreteMemory;
+  }
+  uint64_t GetTaintMemAddr() const {
+    return ConcreteMemoryAddress;
+  }
 
   friend bool operator==(const TaintInfo &T1, const TaintInfo &T2);
   friend bool operator!=(const TaintInfo &T1, const TaintInfo &T2);
@@ -57,6 +68,7 @@ public:
   void printTaintList();
   void printDestSrcInfo(DestSourcePair &DS);
   TaintInfo isTainted(TaintInfo &Op);
+  void calculateMemAddr(TaintInfo &Ti);
 };
 
 } // end crash_blamer namespace
