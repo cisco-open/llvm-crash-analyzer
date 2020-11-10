@@ -55,8 +55,8 @@ void crash_blamer::TaintAnalysis::calculateMemAddr(TaintInfo &Ti) {
   // If the value is not available just taint the base-reg.
   // For the rbp and rsp cases it should be available.
   // FIXME: Should we check if it is rsp or rbp explicitly?
-  if(RegValue == "") {
-    Ti.IsConcreteMemory = true;
+  if(RegValue == "" || (RegName != "rsp" && RegName != "rbp")) {
+    Ti.IsConcreteMemory = false;
     return;
   }
 
