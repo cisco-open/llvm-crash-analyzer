@@ -415,6 +415,8 @@ private:
   CallSiteInfoMap::iterator getCallSiteInfo(const MachineInstr *MI);
 
   RegisterCrashInfo MFRegInfo;
+  
+  unsigned CrashOrder = 0;
 
   // Callbacks for insertion and removal.
   void handleInsertion(MachineInstr &MI);
@@ -1042,6 +1044,13 @@ public:
   }
   const RegisterCrashInfo &getCrashRegInfo() const {
     return MFRegInfo;
+  }
+
+  void setCrashOrder(unsigned num) {
+    CrashOrder = num;
+  }
+  unsigned getCrashOrder() const {
+    return CrashOrder;
   }
 
   std::string getRegValueFromCrash(std::string Reg) const {

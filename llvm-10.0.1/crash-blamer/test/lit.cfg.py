@@ -56,6 +56,7 @@ llvm_config.with_environment('PATH', config.llvm_tools_dir, append_path=True)
 # tools that might happen to be in the user's PATH.
 tool_dirs = [config.llvm_tools_dir]
 
-tools = [ToolSubst('%crash-blamer', command=FindTool('crash-blamer'), unresolved='fatal')]
+tools = [ToolSubst('%crash-blamer', command=FindTool('crash-blamer'), unresolved='fatal'),
+         ToolSubst('%crash-blamer-ta', command=FindTool('crash-blamer-ta'), unresolved='fatal')]
 
 llvm_config.add_tool_substitutions(tools, tool_dirs)

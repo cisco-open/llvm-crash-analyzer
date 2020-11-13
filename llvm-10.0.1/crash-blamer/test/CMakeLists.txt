@@ -15,6 +15,7 @@ configure_lit_site_cfg(
 set(CRASH_BLAMER_TEST_DEPENDS
   FileCheck
   crash-blamer
+  crash-blamer-ta
   CRASHBLAMERUnitTests
   )
 # Show progress bar!
