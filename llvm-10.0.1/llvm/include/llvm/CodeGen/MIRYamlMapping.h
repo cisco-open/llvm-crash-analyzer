@@ -662,6 +662,7 @@ struct MachineFunction {
   std::vector<CallSiteInfo> CallSitesInfo;
   std::vector<DebugValueSubstitution> DebugValueSubstitutions;
   RegisterCrashInfo MFRegInfo;
+  unsigned CrashOrder;
   MachineJumpTable JumpTableInfo;
   BlockStringValue Body;
 };
@@ -698,6 +699,7 @@ template <> struct MappingTraits<MachineFunction> {
     YamlIO.mapOptional("machineFunctionInfo", MF.MachineFuncInfo);
     if (!YamlIO.outputting() || !MF.JumpTableInfo.Entries.empty())
       YamlIO.mapOptional("jumpTable", MF.JumpTableInfo, MachineJumpTable());
+    YamlIO.mapOptional("crashOreder", MF.CrashOrder, (unsigned)0);
     YamlIO.mapOptional("body", MF.Body, BlockStringValue());
   }
 };

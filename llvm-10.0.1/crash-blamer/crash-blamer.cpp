@@ -116,6 +116,7 @@ int main(int argc, char **argv) {
   // This map holds the function-name<->MF mapping from the backtrace
   // (in order the functions were called within the program).
   BlameModule BlameTrace;
+
   // Init the blame trace map.
   for (StringRef Fn : functionsFromCoreFile)
     BlameTrace.push_back({Fn, nullptr});

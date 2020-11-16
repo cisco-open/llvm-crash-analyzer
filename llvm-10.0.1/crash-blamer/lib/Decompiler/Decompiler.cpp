@@ -835,13 +835,18 @@ llvm::Error crash_blamer::Decompiler::run(
       LLVM_DEBUG(if (MF) { dbgs() << "Decompiled MF:\n"; MF->dump();});
 
       // Map the fn from backtrace to the MF.
-      if (checkIfBTContainsFn(functionsFromCoreFile, SymbolName))
+      if (checkIfBTContainsFn(functionsFromCoreFile, SymbolName)) {
+        int index = 0;
         for (auto &f : BlameTrace) {
           if (f.Name == SymbolName) {
+            // Crash order starts from 1.
+            MF->setCrashOrder(index + 1);
             f.MF = MF;
             break;
           }
+          ++index;
         }
+      }
     }
   }
 

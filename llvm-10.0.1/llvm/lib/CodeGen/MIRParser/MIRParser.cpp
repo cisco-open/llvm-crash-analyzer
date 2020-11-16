@@ -535,6 +535,9 @@ MIRParserImpl::initializeMachineFunction(const yaml::MachineFunction &YamlMF,
 
   setupDebugValueTracking(MF, PFS, YamlMF);
 
+  if(YamlMF.CrashOrder)
+    MF.setCrashOrder(YamlMF.CrashOrder);
+
   MF.getSubtarget().mirFileLoaded(MF);
 
   MF.verify();

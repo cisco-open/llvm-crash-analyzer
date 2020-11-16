@@ -221,6 +221,8 @@ void MIRPrinter::print(const MachineFunction &MF) {
   convertCallSiteObjects(YamlMF, MF, MST);
   convertCrashRegObjects(YamlMF, MF, MST);
 
+  YamlMF.CrashOrder = MF.getCrashOrder();
+
   for (auto &Sub : MF.DebugValueSubstitutions)
     YamlMF.DebugValueSubstitutions.push_back({Sub.first.first, Sub.first.second,
                                               Sub.second.first,
