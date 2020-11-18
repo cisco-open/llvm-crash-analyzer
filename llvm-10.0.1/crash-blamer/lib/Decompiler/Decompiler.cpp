@@ -738,7 +738,7 @@ llvm::Error crash_blamer::Decompiler::run(
           DIFile *File = nullptr;
           DICompileUnit *CU = nullptr;
 
-          if (LineInfo->FileName != DILineInfo::BadString &&
+          if (MF && LineInfo->FileName != DILineInfo::BadString &&
               LineInfo->Line) {
             if (!CUs.count(LineInfo->FileName)) {
               File = DIB.createFile(LineInfo->FileName, "/");
