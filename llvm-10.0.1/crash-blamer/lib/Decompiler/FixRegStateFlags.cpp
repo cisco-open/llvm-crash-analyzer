@@ -19,7 +19,6 @@ using namespace llvm;
 bool crash_blamer::FixRegStateFlags::run(MachineFunction &MF) {
   // TODO: Add frame-setup for the PUSH64r $rbp and
   // destroy-frame for the $rbp = POP64r.
-  const auto &TLI = MF.getSubtarget().getTargetLowering();
   const auto &TRI = MF.getSubtarget().getRegisterInfo();
 
   for (auto &MBB : MF) {
