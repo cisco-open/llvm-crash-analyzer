@@ -35,7 +35,7 @@ using namespace lldb_private;
 
 static constexpr const char *GPR = "General Purpose Registers";
 
-void llvm::crash_blamer::CoreFile::read(StringRef InputFile) {
+bool llvm::crash_blamer::CoreFile::read(StringRef InputFile) {
   outs() << "\nLoading core-file " << name << "\n";
 
   SBDebugger::Initialize();
@@ -44,19 +44,19 @@ void llvm::crash_blamer::CoreFile::read(StringRef InputFile) {
   SBTarget target = debugger.CreateTarget(InputFile.data());
   if (!target.IsValid()) {
     WithColor::error() << "invalid target inside debugger\n";
-    return;
+    return false;
   }
 
   SBProcess process = target.LoadCore(name);
   if (!process.IsValid()) {
     WithColor::error() << "invalid core-file\n";
-    return;
+    return false;
   }
 
   SBThread thread = process.GetSelectedThread();
   if (!thread.IsValid()) {
     WithColor::error() << "invalid thread selected within core-file\n";
-    return;
+    return false;
   }
 
   int NumOfFrames = thread.GetNumFrames();
@@ -68,7 +68,7 @@ void llvm::crash_blamer::CoreFile::read(StringRef InputFile) {
     SBFrame frame = thread.GetFrameAtIndex(i);
     if (!frame.IsValid()) {
       WithColor::error() << "invalid frame found within core-file\n";
-      return;
+      return false;
     }
     LLVM_DEBUG(dbgs() << frame.GetFunctionName() << "\n");
     FunctionsFromBacktrace.push_back(frame.GetFunctionName());
@@ -104,4 +104,5 @@ void llvm::crash_blamer::CoreFile::read(StringRef InputFile) {
   SBDebugger::Terminate();
 
   outs() << "core-file processed.\n\n";
+  return true;
 }

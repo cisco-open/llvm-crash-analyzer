@@ -100,7 +100,11 @@ int main(int argc, char **argv) {
   // Read the symbols from core file (e.g. function names from crash backtrace).
   // TODO: Read registers and memory state from core-file.
   CoreFile coreFile(CoreFileName);
-  coreFile.read(InputFilename);
+  if (!coreFile.read(InputFilename)) {
+    llvm::outs() << "\nRESULT: FAIL\n";
+    return -1;
+  }
+
   // Get the functions from backtrace.
   auto functionsFromCoreFile = coreFile.getFunctionsFromBacktrace();
   auto FrameToRegs = coreFile.getGRPsFromFrame();

@@ -46,7 +46,7 @@ class CoreFile {
 public:
   CoreFile(StringRef name) : name(name.data()) { FunctionsFromBacktrace = {}; }
 
-  void read(StringRef InputFile);
+  bool read(StringRef InputFile);
   SmallVector<StringRef, 8> &getFunctionsFromBacktrace() {
     return FunctionsFromBacktrace;
   }
