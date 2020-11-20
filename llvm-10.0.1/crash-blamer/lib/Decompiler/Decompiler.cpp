@@ -578,8 +578,6 @@ llvm::Error crash_blamer::Decompiler::run(
       std::unordered_multimap<uint64_t, MachineInstr *> BranchesToUpdate;
 
       // If the function was not part of the backtrace, just continue.
-      // (an exception is show-disassemble option, used for debugging
-      //  purposes, mostly).
       if (!FunctionsToDecompile.count(SymbolName))
         continue;
 
