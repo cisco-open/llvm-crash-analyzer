@@ -861,7 +861,15 @@ llvm::Error ProcessElfCore::ParseThreadContextsFromNoteSegment(
   auto notes_or_error = parseSegment(segment_data);
   if(!notes_or_error)
     return notes_or_error.takeError();
-  switch (GetArchitecture().GetTriple().getOS()) {
+
+  auto OSType = GetArchitecture().GetTriple().getOS();
+  if (OSType == llvm::Triple::UnknownOS) {
+    llvm::Triple DefaultTriple(
+        llvm::Triple::normalize(llvm::sys::getDefaultTargetTriple()));
+    OSType = DefaultTriple.getOS();
+  }
+
+  switch (OSType) {
   case llvm::Triple::FreeBSD:
     return parseFreeBSDNotes(*notes_or_error);
   case llvm::Triple::Linux:

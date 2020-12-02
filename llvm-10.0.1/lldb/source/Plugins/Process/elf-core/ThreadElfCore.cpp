@@ -78,7 +78,14 @@ ThreadElfCore::CreateRegisterContextForFrame(StackFrame *frame) {
     ArchSpec arch = process->GetArchitecture();
     RegisterInfoInterface *reg_interface = nullptr;
 
-    switch (arch.GetTriple().getOS()) {
+    auto OSType = arch.GetTriple().getOS();
+    if (OSType == llvm::Triple::UnknownOS) {
+      llvm::Triple DefaultTriple(
+          llvm::Triple::normalize(llvm::sys::getDefaultTargetTriple()));
+      OSType = DefaultTriple.getOS();
+    }
+
+    switch (OSType) {
     case llvm::Triple::FreeBSD: {
       switch (arch.GetMachine()) {
       case llvm::Triple::aarch64:
