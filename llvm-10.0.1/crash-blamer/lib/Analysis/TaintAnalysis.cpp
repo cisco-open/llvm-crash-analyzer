@@ -67,7 +67,8 @@ void crash_blamer::TaintAnalysis::calculateMemAddr(TaintInfo &Ti) {
   SS >> RealAddr;
 
   // Apply the offset.
-  RealAddr += Ti.Offset;
+    RealAddr += *Ti.Offset;
+
   Ti.ConcreteMemoryAddress = RealAddr;
 }
 
@@ -153,10 +154,11 @@ void crash_blamer::TaintAnalysis::startTaint(DestSourcePair &DS) {
     calculateMemAddr(Src2Ti);
 
   if (TaintList.empty()) {
+   // We want to taint destination only if it is a mem operand
+    if (DestTi.Op && DestTi.Offset)
+      addToTaintList(DestTi);
     if (SrcTi.Op)
       addToTaintList(SrcTi);
-    if (DestTi.Op)
-      addToTaintList(DestTi);
     if (Src2Ti.Op)
       addToTaintList(Src2Ti);
     printTaintList();

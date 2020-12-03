@@ -32,8 +32,11 @@
 
 # CHECK: ### MF: h
 # CHECK:   crash-start MOV32mi $rax, 1, $noreg, 0, $noreg, 0, debug-location !DILocation(line: 7, column: 6, scope: !{{.*}}); {{.*}}test.c:7:6
+# CHECK: dest: $rax
+# CHECK: dest offset: 0
+# CHECK: src: 0
 # CHECK: -----Taint List Begin------
-# CHECK: $rax
+# CHECK: mem addr: 0
 # CHECK: ------Taint List End----
 # CHECK:   $rax = MOV64rm $rbp, 1, $noreg, -8, $noreg, debug-location !DILocation(line: 7, column: 4, scope: !{{.*}}); {{.*}}/test.c:7:4
 # CHECK: dest: $rax
@@ -78,8 +81,9 @@
 # CHECK:   $rax = MOV64rm $rax, 1, $noreg, 0, $noreg, debug-location !DILocation(line: 11, column: 15, scope: !{{.*}}); {{.*}}/test.c:11:15
 # CHECK: dest: $rax
 # CHECK: src: $rax
+# CHECK: src offset: 0
 # CHECK: -----Taint List Begin------
-# CHECK: $rax
+# CHECK: mem addr: 0
 # CHECK: ------Taint List End----
 # CHECK:   $rax = MOV64rm $rbp, 1, $noreg, -8, $noreg, debug-location !DILocation(line: 11, column: 12, scope: !{{.*}}); {{.*}}/test.c:11:12
 # CHECK: dest: $rax

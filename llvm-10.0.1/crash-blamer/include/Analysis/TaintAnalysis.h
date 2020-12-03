@@ -37,7 +37,7 @@ struct TaintInfo {
 
   // For mem operands, we rather choose to taint
   // real/concrete addresses (by calculating base_reg + off).
-  int64_t Offset;
+  Optional<int64_t> Offset;
   uint64_t ConcreteMemoryAddress = 0x0;
   bool IsConcreteMemory = false;
   bool IsTaintMemAddr() const {

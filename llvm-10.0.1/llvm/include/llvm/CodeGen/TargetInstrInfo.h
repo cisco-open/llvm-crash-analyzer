@@ -71,12 +71,12 @@ struct DestSourcePair {
   const MachineOperand *Source = nullptr;
 
   // Used if one of the operands is a memory operand.
-  int64_t DestOffset = 0;
-  int64_t SrcOffset = 0;
+  Optional<int64_t> DestOffset;
+  Optional<int64_t> SrcOffset;
 
   // Certain instructions (e.g., CMP) can have more than one source operand.
   const MachineOperand *Source2 = nullptr;
-  int64_t Src2Offset = 0;
+  Optional<int64_t> Src2Offset;
 
 
   // Used for scaled addressing mode.
@@ -106,8 +106,8 @@ struct DestSourcePair {
 
   // Set All Fields in the structure.
   DestSourcePair(const MachineOperand *Dest, const MachineOperand *Src,
-		 int64_t DestOff, int64_t SrcOff,
-		 const MachineOperand *Src2, int64_t Src2Off,
+		 Optional<int64_t> DestOff, Optional<int64_t> SrcOff,
+		 const MachineOperand *Src2, Optional<int64_t> Src2Off,
                  MachineOperand *ScaledIndex, MachineOperand *DstOffset,
 		 int64_t Size)
       : Destination(Dest), Source (Src),
