@@ -509,7 +509,7 @@ X86InstrInfo::getDestAndSrc(const MachineInstr &MI) const {
       MachineOperand *DstOffset =
           const_cast<MachineOperand *>(&(MI.getOperand(2)));
 
-      return DestSourcePair{*Dst, *DstScaledIndex, *DstOffset, *Src};
+      return DestSourcePair{Dst, Src, 0, None, nullptr, None, DstScaledIndex, DstOffset, 0};
     } case X86::MOV8rm:
       case X86::MOV32rm:
       case X86::MOV64rm:
@@ -571,11 +571,13 @@ X86InstrInfo::getDestAndSrc(const MachineInstr &MI) const {
       return DestSourcePair{*BaseOp, Offset, *Src};
     } case X86::ADD32ri8:
       case X86::ADD64ri8:
-      case X86::SUB64ri8: {
+      case X86::SUB64ri8:
+      case X86::SUB32ri8:
+      case X86::SUB64ri32: {
       const MachineOperand *Dest = &(MI.getOperand(0));
       const MachineOperand *Src = &(MI.getOperand(1));
       const MachineOperand *Src2 = &(MI.getOperand(2));
-      return DestSourcePair{Dest, Src, 0, 0, Src2, 0, nullptr, 0, 0};
+      return DestSourcePair{Dest, Src, None, None, Src2, None, nullptr, 0, 0};
     } case X86::LEA64r:
       case X86::LEA32r:
       case X86::LEA64_32r: {
@@ -606,18 +608,19 @@ X86InstrInfo::getDestAndSrc(const MachineInstr &MI) const {
     } case X86::UCOMISDrr: {
       const MachineOperand *Src = &(MI.getOperand(0));
       const MachineOperand *Source2 = &(MI.getOperand(1));
-      return DestSourcePair{nullptr, Src, 0, 0, Source2, 0, nullptr, 0, 0};
+      return DestSourcePair{nullptr, Src, None, None, Source2, None, nullptr, 0, 0};
     } case X86::CMP32rm: {
       const MachineOperand *Src = &(MI.getOperand(0));
       if (!getMemOperandWithOffset(MI, BaseOp, Offset, TRI))
         return None;
-      return DestSourcePair{nullptr, Src, 0, 0, BaseOp, Offset, nullptr, 0, 0};
+      return DestSourcePair{nullptr, Src, None, None, BaseOp, Offset, nullptr, 0, 0};
     } case X86::CMP8mi:
       case X86::CMP32mi8: {
       const MachineOperand *Src2 = &(MI.getOperand(5));
       if (!getMemOperandWithOffset(MI, BaseOp, Offset, TRI))
         return None;
-      return DestSourcePair{nullptr, BaseOp, 0, Offset, Src2, 0, nullptr, 0, 0};
+      return DestSourcePair{nullptr, BaseOp, None, Offset, Src2, None, nullptr, 0, 0};
+
     } case X86::CMOV16rm:
       case X86::CMOV32rm:
       case X86::CMOV64rm:
@@ -674,8 +677,6 @@ X86InstrInfo::getDestAndSrc(const MachineInstr &MI) const {
       case X86::SUB16rr:
       case X86::SUB32rr:
       case X86::SUB64rr:
-      case X86::SUB32ri8:
-      case X86::SUB64ri32:
       case X86::SUBPDrr:
       case X86::IMUL16rr:
       case X86::IMUL32rr:
