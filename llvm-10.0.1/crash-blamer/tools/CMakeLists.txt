@@ -1,4 +1,5 @@
-include_directories(${LLVM_MAIN_INCLUDE_DIR}/)
+include_directories(${LLVM_MAIN_INCLUDE_DIR}/
+                    ${LLVM_MAIN_INCLUDE_DIR}/../../lldb/include/)
 
 set(LLVM_LINK_COMPONENTS
   AllTargetsCodeGens

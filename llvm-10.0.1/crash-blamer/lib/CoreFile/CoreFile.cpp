@@ -14,14 +14,9 @@
 
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Debug.h"
-#include "llvm/Support/WithColor.h"
 #include "llvm/Support/raw_ostream.h"
 
-#include "lldb/API/SBDebugger.h"
 #include "lldb/API/SBFileSpec.h"
-#include "lldb/API/SBFrame.h"
-#include "lldb/API/SBProcess.h"
-#include "lldb/API/SBTarget.h"
 #include "lldb/API/SBThread.h"
 #include "lldb/Utility/ConstString.h"
 #include "lldb/Utility/FileSpec.h"
@@ -38,21 +33,6 @@ static constexpr const char *GPR = "General Purpose Registers";
 bool llvm::crash_blamer::CoreFile::read(StringRef InputFile) {
   outs() << "\nLoading core-file " << name << "\n";
 
-  SBDebugger::Initialize();
-  SBDebugger debugger(SBDebugger::Create());
-
-  SBTarget target = debugger.CreateTarget(InputFile.data());
-  if (!target.IsValid()) {
-    WithColor::error() << "invalid target inside debugger\n";
-    return false;
-  }
-
-  SBProcess process = target.LoadCore(name);
-  if (!process.IsValid()) {
-    WithColor::error() << "invalid core-file\n";
-    return false;
-  }
-
   SBThread thread = process.GetSelectedThread();
   if (!thread.IsValid()) {
     WithColor::error() << "invalid thread selected within core-file\n";
@@ -65,18 +45,19 @@ bool llvm::crash_blamer::CoreFile::read(StringRef InputFile) {
   setNumOfFrames(NumOfFrames);
 
   for (int i = 0; i < NumOfFrames; ++i) {
-    SBFrame frame = thread.GetFrameAtIndex(i);
-    if (!frame.IsValid()) {
+    auto Frame = thread.GetFrameAtIndex(i);
+    if (!Frame.IsValid()) {
       WithColor::error() << "invalid frame found within core-file\n";
       return false;
     }
-    LLVM_DEBUG(dbgs() << frame.GetFunctionName() << "\n");
-    FunctionsFromBacktrace.push_back(frame.GetFunctionName());
-  }
 
-  // Get registers state at the point of the crash.
-  for (int i = 0; i < NumOfFrames; ++i) {
-    auto Frame = thread.GetFrameAtIndex(i);
+    LLVM_DEBUG(dbgs() << Frame.GetFunctionName() << "\n");
+    StringRef fnName = Frame.GetFunctionName();
+    // No need to track __libc_start_main and _start from libc.
+    if (fnName == "__libc_start_main")
+      break;
+
+    // Get registers state at the point of the crash.
     auto Regs = Frame.GetRegisters();
     auto GPRegss = Regs.GetFirstValueByName(GPR);
     int NumOfGPRegs = GPRegss.GetNumChildren();
@@ -88,8 +69,10 @@ bool llvm::crash_blamer::CoreFile::read(StringRef InputFile) {
       else
         RegReads.push_back({Reg.GetName(), nullptr});
     }
-    StringRef fnName = Frame.GetFunctionName();
+
     insertIntoGPRsFromFrame(fnName, RegReads);
+    FunctionsFromBacktrace.push_back(fnName);
+    rememberSBFrame(fnName, Frame);
   }
 
   LLVM_DEBUG(auto FrameToRegs = getGRPsFromFrame();
@@ -99,9 +82,6 @@ bool llvm::crash_blamer::CoreFile::read(StringRef InputFile) {
       for (auto &R : fn.second)
         dbgs() << " reg: " << R.regName << " val: " << R.regValue << "\n";
     });
-
-  SBDebugger::Destroy(debugger);
-  SBDebugger::Terminate();
 
   outs() << "core-file processed.\n\n";
   return true;

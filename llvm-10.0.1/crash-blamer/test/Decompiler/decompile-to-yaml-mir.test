@@ -16,7 +16,7 @@
 # CHECK: PUSH64r $rbp, implicit-def $rsp, implicit $rsp
 # CHECK: $rbp = MOV64rr $rsp
 # CHECK: MOV64mr $rbp, 1, $noreg, -8, $noreg, $rdi
-# CHECK:  $rax = MOV64rm $rbp, 1, $noreg, -8, $noreg
+# CHECK: $rax = MOV64rm $rbp, 1, $noreg, -8, $noreg
 # CHECK: MOV32mi $rax, 1, $noreg, 0, $noreg, 0
 # CHECK: $rbp = POP64r implicit-def $rsp, implicit $rsp
 # CEHCK: RETQ

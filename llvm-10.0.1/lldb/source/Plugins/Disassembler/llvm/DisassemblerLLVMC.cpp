@@ -158,6 +158,26 @@ public:
     return m_has_delay_slot == eLazyBoolYes;
   }
 
+  uint64_t GetMCInst(llvm::MCInst &mc_inst) override {
+    DisassemblerScope disasm(*this);
+    if (disasm) {
+      DataExtractor data;
+      if (m_opcode.GetData(data)) {
+        bool is_alternate_isa;
+        lldb::addr_t pc = m_address.GetFileAddress();
+        DisassemblerLLVMC::MCDisasmInstance *mc_disasm_ptr =
+            GetDisasmToUse(is_alternate_isa, disasm);
+        const uint8_t *opcode_data = data.GetDataStart();
+        const size_t opcode_data_len = data.GetByteSize();
+        const size_t inst_size =
+            mc_disasm_ptr->GetMCInst(opcode_data, opcode_data_len, pc, mc_inst);
+        if (inst_size)
+          return inst_size;
+      }
+    }
+    return 0;
+  }
+
   DisassemblerLLVMC::MCDisasmInstance *GetDisasmToUse(bool &is_alternate_isa) {
     DisassemblerScope disasm(*this);
     return GetDisasmToUse(is_alternate_isa, disasm);

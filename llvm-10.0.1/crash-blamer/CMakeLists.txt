@@ -4,7 +4,8 @@ set(CRASH_BLAMER_SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR})
 set(CRASH_BLAMER_BINARY_DIR ${CMAKE_CURRENT_BINARY_DIR})
 
 include_directories(include/
-                    ${LLVM_MAIN_INCLUDE_DIR}/)
+                    ${LLVM_MAIN_INCLUDE_DIR}/
+                    ${LLVM_MAIN_INCLUDE_DIR}/../../lldb/include/)
 
 add_subdirectory(lib)
 add_subdirectory(test)
