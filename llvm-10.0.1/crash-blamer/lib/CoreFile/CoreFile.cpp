@@ -53,9 +53,6 @@ bool llvm::crash_blamer::CoreFile::read(StringRef InputFile) {
 
     LLVM_DEBUG(dbgs() << Frame.GetFunctionName() << "\n");
     StringRef fnName = Frame.GetFunctionName();
-    // No need to track __libc_start_main and _start from libc.
-    if (fnName == "__libc_start_main")
-      break;
 
     // Get registers state at the point of the crash.
     auto Regs = Frame.GetRegisters();
@@ -73,6 +70,10 @@ bool llvm::crash_blamer::CoreFile::read(StringRef InputFile) {
     insertIntoGPRsFromFrame(fnName, RegReads);
     FunctionsFromBacktrace.push_back(fnName);
     rememberSBFrame(fnName, Frame);
+
+    // No need to track __libc_start_main and _start from libc.
+    if (fnName == "main")
+      break;
   }
 
   LLVM_DEBUG(auto FrameToRegs = getGRPsFromFrame();
