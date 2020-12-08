@@ -9,6 +9,8 @@
 #ifndef liblldb_Disassembler_h_
 #define liblldb_Disassembler_h_
 
+#include "llvm/MC/MCInst.h"
+
 #include "lldb/Core/Address.h"
 #include "lldb/Core/EmulateInstruction.h"
 #include "lldb/Core/FormatEntity.h"
@@ -148,6 +150,10 @@ public:
   virtual bool DoesBranch() = 0;
 
   virtual bool HasDelaySlot();
+
+  virtual uint64_t GetMCInst(llvm::MCInst &mc_inst) {
+    return 0;
+  }
 
   bool CanSetBreakpoint ();
 

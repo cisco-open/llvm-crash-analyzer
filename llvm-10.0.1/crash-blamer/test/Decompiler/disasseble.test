@@ -4,23 +4,10 @@
 # CHECK: Crash Blamer -- crash analyzer utility
 # CHECK: Decompiling...
 # CHECK: Dissasemble of the functions from backtrace:
-# CHECK: <main>:
-# CHECK:   endbr64
-# CHECK:   movl    $0, 0
-# CHECK:   ud2
-# CHECK:   nopw    %cs:(%rax,%rax)
-# CHECK:   nopl    (%rax,%rax)
 
-# CHECK: <f3>:
-# CHECK:   endbr64
-# CHECK:   movl    $0, (%rdi)
-# CHECK:   retq
-# CHECK:   nopl    (%rax,%rax)
-
-# CHECK: <f2>:
-# CHECK:   endbr64
-# CHECK:   movl    $0, (%rdi)
-# CHECK:   retq
-# CHECK:   nopl    (%rax,%rax)
+# CHECK: test-1`main:
+# CHECK: <+0>:  endbr64
+# CHECK: <+4>:  movl   $0x0, 0x0
+# CHECK: <+15>: ud2
 
 # CHECK: Decompiled.

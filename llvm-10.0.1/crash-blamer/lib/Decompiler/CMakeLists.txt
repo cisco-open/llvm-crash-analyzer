@@ -1,14 +1,16 @@
-include_directories(${LLVM_MAIN_INCLUDE_DIR}/)
+include_directories(${LLVM_MAIN_INCLUDE_DIR}/
+                    ${LLVM_MAIN_INCLUDE_DIR}/../../lldb/include/
+                     ${LLVM_MAIN_INCLUDE_DIR}/../../lldb/source/)
 
 set(LLVM_LINK_COMPONENTS
   AsmPrinter
-  Object
   Support
-  Symbolize
   Target
   )
 
 llvm_add_library(CrashBlamerDecompiler
   Decompiler.cpp
   FixRegStateFlags.cpp
+  LINK_LIBS
+    lldbPluginDisassemblerLLVM
   )

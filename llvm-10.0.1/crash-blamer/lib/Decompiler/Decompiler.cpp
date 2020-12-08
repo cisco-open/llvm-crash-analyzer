@@ -14,59 +14,54 @@
 #include "Decompiler/FixRegStateFlags.h"
 
 #include "llvm/ADT/Triple.h"
+#include "llvm/CodeGen/MIRPrinter.h"
 #include "llvm/CodeGen/MachineFunction.h"
 #include "llvm/CodeGen/MachineInstr.h"
 #include "llvm/CodeGen/MachineInstrBuilder.h"
 #include "llvm/CodeGen/MachineModuleInfo.h"
-#include "llvm/CodeGen/MIRPrinter.h"
 #include "llvm/CodeGen/TargetInstrInfo.h"
 #include "llvm/CodeGen/TargetRegisterInfo.h"
 #include "llvm/CodeGen/TargetSubtargetInfo.h"
 #include "llvm/DebugInfo/DIContext.h"
-#include "llvm/DebugInfo/Symbolize/Symbolize.h"
 #include "llvm/IR/DIBuilder.h"
 #include "llvm/IR/Function.h"
 #include "llvm/IR/Instructions.h"
 #include "llvm/IR/LLVMContext.h"
 #include "llvm/IR/Module.h"
-#include "llvm/MC/MCAsmInfo.h"
-#include "llvm/MC/MCContext.h"
-#include "llvm/MC/MCInstrAnalysis.h"
-#include "llvm/MC/MCInstPrinter.h"
 #include "llvm/MC/MCInstrInfo.h"
-#include "llvm/MC/MCRegisterInfo.h"
-#include "llvm/MC/MCSubtargetInfo.h"
-#include "llvm/MC/MCTargetOptionsCommandFlags.inc"
-#include "llvm/Object/ELFObjectFile.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/TargetRegistry.h"
 #include "llvm/Support/WithColor.h"
 #include "llvm/Support/raw_ostream.h"
-#include "llvm/Target/TargetLoweringObjectFile.h"
 #include "llvm/Target/TargetMachine.h"
 #include "llvm/Target/TargetOptions.h"
 
+#include "lldb/Core/Address.h"
+#include "lldb/Core/Disassembler.h"
+#include "lldb/Utility/ArchSpec.h"
+#include "lldb/Utility/DataBufferHeap.h"
+#include "lldb/Utility/DataExtractor.h"
+#include "Plugins/Disassembler/llvm/DisassemblerLLVMC.h"
+
 #include <sstream>
-#include <unordered_map>
 #include <unordered_set>
 
 using namespace llvm;
-using namespace llvm::object;
 
 #define DEBUG_TYPE "crash-blamer-decompiler"
 
 static cl::opt<bool> ShowDisassembly("show-disassemble", cl::Hidden,
                                      cl::init(false));
 
-static cl::opt<std::string>
-    PrintDecMIR("print-decompiled-mir",
-                cl::desc("Print decompiled LLVM MIR."),
-                cl::value_desc("filename"), cl::init(""));
+static cl::opt<std::string> PrintDecMIR("print-decompiled-mir",
+                                        cl::desc("Print decompiled LLVM MIR."),
+                                        cl::value_desc("filename"),
+                                        cl::init(""));
 
-static StringSet<> DisasmSymbolSet;
-
-crash_blamer::Decompiler::Decompiler() : TLOF(nullptr) {}
-crash_blamer::Decompiler::~Decompiler() = default;
+crash_blamer::Decompiler::Decompiler() {
+  DisassemblerLLVMC::Initialize();
+}
+crash_blamer::Decompiler::~Decompiler() { DisassemblerLLVMC::Terminate(); }
 
 llvm::Expected<std::unique_ptr<crash_blamer::Decompiler>>
 crash_blamer::Decompiler::create(Triple TheTriple) {
@@ -91,35 +86,11 @@ llvm::Error crash_blamer::Decompiler::init(Triple TheTriple) {
   DefaultArch = TheTarget->getName();
   TripleName = TheTriple.getTriple();
 
-  // Create all the MC Objects.
-  MRI.reset(TheTarget->createMCRegInfo(TripleName));
-  if (!MRI)
-    return make_error<StringError>(Twine("no register info for target ") +
-                                       TripleName,
-                                   inconvertibleErrorCode());
-
-  MCTargetOptions MCOptions = InitMCTargetOptionsFromFlags();
-  MAI.reset(TheTarget->createMCAsmInfo(*MRI, TripleName, MCOptions));
-  if (!MAI)
-    return make_error<StringError>("no asm info for target " + TripleName,
-                                   inconvertibleErrorCode());
-
-  MSTI.reset(TheTarget->createMCSubtargetInfo(TripleName, "", ""));
-  if (!MSTI)
-    return make_error<StringError>("no subtarget info for target " + TripleName,
-                                   inconvertibleErrorCode());
-
   MII.reset(TheTarget->createMCInstrInfo());
   if (!MII)
-    return make_error<StringError>("no instr info info for target " +
-                                       TripleName,
-                                   inconvertibleErrorCode());
-
-  MIA.reset(TheTarget->createMCInstrAnalysis(MII.get()));
-  if (!MIA)
-    return make_error<StringError>("no mc instr analysis info for target " +
-                                       TripleName,
-                                   inconvertibleErrorCode());
+    return make_error<StringError>(
+        "no instr info info for target " + TripleName,
+        inconvertibleErrorCode());
 
   TM.reset(TheTarget->createTargetMachine(TripleName, "", "", TargetOptions(),
                                           None));
@@ -127,202 +98,25 @@ llvm::Error crash_blamer::Decompiler::init(Triple TheTriple) {
     return make_error<StringError>("no target machine for target " + TripleName,
                                    inconvertibleErrorCode());
 
-  TLOF = TM->getObjFileLowering();
-  MC.reset(new MCContext(MAI.get(), MRI.get(), TLOF));
-  TLOF->Initialize(*MC, *TM);
-
-  DisAsm.reset(TheTarget->createMCDisassembler(*MSTI, *MC));
-  if (!DisAsm)
-    return make_error<StringError>("no disassembler for target " + TripleName,
-                                   inconvertibleErrorCode());
-
-  int AsmPrinterVariant = MAI->getAssemblerDialect();
-  InstPrinter.reset(TheTarget->createMCInstPrinter(
-      Triple(TripleName), AsmPrinterVariant, *MAI, *MII, *MRI));
-  if (!InstPrinter)
-    return make_error<StringError>("no mc instr printer for target " +
-                                       TripleName,
-                                   inconvertibleErrorCode());
-
   return Error::success();
 }
 
-static uint8_t getElfSymbolType(const ObjectFile *Obj, const SymbolRef &Sym) {
-  assert(Obj->isELF());
-  if (auto *Elf32LEObj = dyn_cast<ELF32LEObjectFile>(Obj))
-    return Elf32LEObj->getSymbol(Sym.getRawDataRefImpl())->getType();
-  if (auto *Elf64LEObj = dyn_cast<ELF64LEObjectFile>(Obj))
-    return Elf64LEObj->getSymbol(Sym.getRawDataRefImpl())->getType();
-  if (auto *Elf32BEObj = dyn_cast<ELF32BEObjectFile>(Obj))
-    return Elf32BEObj->getSymbol(Sym.getRawDataRefImpl())->getType();
-  if (auto *Elf64BEObj = cast<ELF64BEObjectFile>(Obj))
-    return Elf64BEObj->getSymbol(Sym.getRawDataRefImpl())->getType();
-  llvm_unreachable("Unsupported binary format");
-}
-
-// This is taken from llvm-objdump.
-template <typename T, typename... Ts>
-T unwrapOrError(Expected<T> EO, Ts &&... Args) {
-  if (EO)
-    return std::move(*EO);
-
-  // FIXME: Make this better.
-  outs().flush();
-  WithColor::error(errs(), "crash-blamer") << "\n";
-  exit(1);
-}
-
-void crash_blamer::Decompiler::Disassembler::addPltEntries(
-    const ObjectFile *Obj, std::map<SectionRef, SectionSymbolsTy> &AllSymbols,
-    StringSaver &Saver) {
-  Optional<SectionRef> Plt = None;
-  for (const SectionRef &Section : Obj->sections()) {
-    Expected<StringRef> SecNameOrErr = Section.getName();
-    if (!SecNameOrErr) {
-      consumeError(SecNameOrErr.takeError());
-      continue;
-    }
-    if (*SecNameOrErr == ".plt")
-      Plt = Section;
-  }
-  if (!Plt)
-    return;
-  if (auto *ElfObj = dyn_cast<ELFObjectFileBase>(Obj)) {
-    for (auto PltEntry : ElfObj->getPltAddresses()) {
-      SymbolRef Symbol(PltEntry.first, ElfObj);
-      uint8_t SymbolType = getElfSymbolType(Obj, Symbol);
-
-      StringRef Name = unwrapOrError(Symbol.getName(), Obj->getFileName());
-      if (!Name.empty())
-        AllSymbols[*Plt].emplace_back(
-            PltEntry.second, Saver.save((Name + "@plt").str()), SymbolType);
-    }
-  }
-}
-
-template <class ELFT>
-static void
-addDynamicElfSymbols(const ELFObjectFile<ELFT> *Obj,
-                     std::map<SectionRef, SectionSymbolsTy> &AllSymbols) {
-  for (auto Symbol : Obj->getDynamicSymbolIterators()) {
-    uint8_t SymbolType = Symbol.getELFType();
-    if (SymbolType == ELF::STT_SECTION)
-      continue;
-
-    uint64_t Address = unwrapOrError(Symbol.getAddress(), Obj->getFileName());
-    // ELFSymbolRef::getAddress() returns size instead of value for common
-    // symbols which is not desirable for disassembly output. Overriding.
-    if (SymbolType == ELF::STT_COMMON)
-      Address = Obj->getSymbol(Symbol.getRawDataRefImpl())->st_value;
-
-    StringRef Name = unwrapOrError(Symbol.getName(), Obj->getFileName());
-    if (Name.empty())
-      continue;
-
-    section_iterator SecI =
-        unwrapOrError(Symbol.getSection(), Obj->getFileName());
-    if (SecI == Obj->section_end())
-      continue;
-
-    AllSymbols[*SecI].emplace_back(Address, Name, SymbolType);
-  }
-}
-
-void crash_blamer::Decompiler::Disassembler::addDynamicElfSymbols(
-    const ObjectFile *Obj, std::map<SectionRef, SectionSymbolsTy> &AllSymbols) {
-  assert(Obj->isELF());
-  if (auto *Elf32LEObj = dyn_cast<ELF32LEObjectFile>(Obj))
-    addDynamicElfSymbols(Elf32LEObj, AllSymbols);
-  else if (auto *Elf64LEObj = dyn_cast<ELF64LEObjectFile>(Obj))
-    addDynamicElfSymbols(Elf64LEObj, AllSymbols);
-  else if (auto *Elf32BEObj = dyn_cast<ELF32BEObjectFile>(Obj))
-    addDynamicElfSymbols(Elf32BEObj, AllSymbols);
-  else if (auto *Elf64BEObj = cast<ELF64BEObjectFile>(Obj))
-    addDynamicElfSymbols(Elf64BEObj, AllSymbols);
-  else
-    llvm_unreachable("Unsupported binary format");
-}
-
-static unsigned getInstStartColumn(const MCSubtargetInfo &STI) {
-  return STI.getTargetTriple().isX86() ? 40 : 24;
-}
-
-void crash_blamer::Decompiler::Disassembler::printInst(
-    MCInstPrinter &IP, const MCInst *MI, ArrayRef<uint8_t> Bytes,
-    object::SectionedAddress Address, formatted_raw_ostream &OS,
-    StringRef Annot, MCSubtargetInfo const &STI, StringRef ObjectFilename) {
-  size_t Start = OS.tell();
-  OS << format("%8" PRIx64 ":", Address.Address);
-
-  OS << ' ';
-  dumpBytes(Bytes, OS);
-
-  // The output of printInst starts with a tab. Print some spaces so that
-  // the tab has 1 column and advances to the target tab stop.
-  unsigned TabStop = getInstStartColumn(STI);
-  unsigned Column = OS.tell() - Start;
-  OS.indent(Column < TabStop - 1 ? TabStop - 1 - Column : 7 - Column % 8);
-
-  if (MI) {
-    // See MCInstPrinter::printInst. On targets where a PC relative immediate
-    // is relative to the next instruction and the length of a MCInst is
-    // difficult to measure (x86), this is the address of the next
-    // instruction.
-    uint64_t Addr =
-        Address.Address + (STI.getTargetTriple().isX86() ? Bytes.size() : 0);
-    IP.printInst(MI, Addr, "", STI, OS);
-  } else
-    OS << "\t<unknown>";
-}
-
-size_t crash_blamer::Decompiler::Disassembler::countSkippableZeroBytes(
-    ArrayRef<uint8_t> Buf) {
-  // Find the number of leading zeroes.
-  size_t N = 0;
-  while (N < Buf.size() && !Buf[N])
-    ++N;
-
-  // We may want to skip blocks of zero bytes, but unless we see
-  // at least 8 of them in a row.
-  if (N < 8)
-    return 0;
-
-  // We skip zeroes in multiples of 4 because do not want to truncate an
-  // instruction if it starts with a zero byte.
-  return N & ~0x3;
-}
-
-SymbolInfoTy crash_blamer::Decompiler::Disassembler::createDummySymbolInfo(
-    const ObjectFile *Obj, const uint64_t Addr, StringRef &Name, uint8_t Type) {
-  return SymbolInfoTy(Addr, Name, Type);
-}
-
-SymbolInfoTy crash_blamer::Decompiler::Disassembler::createSymbolInfo(
-    const ObjectFile *Obj, const SymbolRef &Symbol) {
-  const StringRef FileName = Obj->getFileName();
-  const uint64_t Addr = unwrapOrError(Symbol.getAddress(), FileName);
-  const StringRef Name = unwrapOrError(Symbol.getName(), FileName);
-
-  return SymbolInfoTy(Addr, Name,
-                      Obj->isELF() ? getElfSymbolType(Obj, Symbol)
-                                   : (uint8_t)ELF::STT_NOTYPE);
-}
-
-static std::unique_ptr<Module>
-createModule(LLVMContext &Context, const DataLayout DL, StringRef InputFile) {
+static std::unique_ptr<Module> createModule(LLVMContext &Context,
+                                            const DataLayout DL,
+                                            StringRef InputFile) {
   auto Mod = std::make_unique<Module>(InputFile, Context);
   Mod->setDataLayout(DL);
   return Mod;
 }
 
-MachineInstr* crash_blamer::Decompiler::addInstr(MachineFunction *MF,
-    MachineBasicBlock *MBB, MCInst &Inst, DebugLoc *Loc,
+MachineInstr *crash_blamer::Decompiler::addInstr(
+    MachineFunction *MF, MachineBasicBlock *MBB, MCInst &Inst, DebugLoc *Loc,
     bool IsCrashStart, crash_blamer::RegSet &DefinedRegs,
-    StringRef TargetFnName) {
+    std::unordered_map<uint64_t, StringRef> &FuncStartSymbols) {
   const unsigned Opcode = Inst.getOpcode();
   const MCInstrDesc &MCID = MII->get(Opcode);
-  MachineInstrBuilder Builder = BuildMI(
-      MBB, !Loc->getLine() ? DebugLoc() : *Loc, MCID);
+  MachineInstrBuilder Builder =
+      BuildMI(MBB, !Loc->getLine() ? DebugLoc() : *Loc, MCID);
 
   auto TII = MF->getSubtarget().getInstrInfo();
   auto TRI = MF->getSubtarget().getRegisterInfo();
@@ -348,26 +142,40 @@ MachineInstr* crash_blamer::Decompiler::addInstr(MachineFunction *MF,
       }
       Builder.addReg(Op.getReg(), Flags);
     } else if (Op.isImm()) {
-      if (!MCID.isCall() || TargetFnName == "") {
-        Builder.addImm(Op.getImm());
+      Builder.addImm(Op.getImm());
+    } else if (Op.isExpr()) {
+      auto Expr = Op.getExpr();
+      if (auto ConstExpr = dyn_cast<MCConstantExpr>(Expr)) {
+        if (!MCID.isCall()) {
+          Builder.addImm(ConstExpr->getValue());
+          continue;
+        }
+
+        // If it is a call and there is no target symbol.
+        if (!FuncStartSymbols.count(ConstExpr->getValue())) {
+          Builder.addImm(ConstExpr->getValue());
+          continue;
+        }
+        auto &Context = MF->getFunction().getContext();
+        StringRef TargetFnName = FuncStartSymbols[ConstExpr->getValue()];
+        FunctionCallee Callee = Module->getOrInsertFunction(
+            TargetFnName, FunctionType::get(Type::getVoidTy(Context), false));
+        GlobalValue *GV = dyn_cast<GlobalValue>(Callee.getCallee());
+        if (!GV) {
+          Builder.addImm(ConstExpr->getValue());
+          continue;
+        }
+        Builder.addGlobalAddress(GV);
+        // Make sure we generate the csr only once.
+        if (!CSRGenerated) {
+          // TODO: Add the callee saved reg mask for indirect calls.
+          Builder.addRegMask(TRI->getCallPreservedMask(
+              *MF, MF->getFunction().getCallingConv()));
+          CSRGenerated = true;
+        }
         continue;
       }
-      auto &Context = MF->getFunction().getContext();
-      FunctionCallee Callee = Module->getOrInsertFunction(
-          TargetFnName, FunctionType::get(Type::getVoidTy(Context), false));
-      GlobalValue *GV = dyn_cast<GlobalValue>(Callee.getCallee());
-      if (!GV) {
-        Builder.addImm(Op.getImm());
-        continue;
-      }
-      Builder.addGlobalAddress(GV);
-      // Make sure we generate the csr only once.
-      if (!CSRGenerated) {
-        // TODO: Add the callee saved reg mask for indirect calls.
-        Builder.addRegMask(
-          TRI->getCallPreservedMask(*MF, MF->getFunction().getCallingConv()));
-        CSRGenerated = true;
-      }
+      llvm_unreachable("Not yet implemented expr");
     } else if (!Op.isValid()) {
       llvm_unreachable("Operand is not set");
     } else {
@@ -382,13 +190,12 @@ MachineInstr* crash_blamer::Decompiler::addInstr(MachineFunction *MF,
     Builder->getOperand(2).setIsUndef();
   }
 
-  if (IsCrashStart)
-    Builder->setFlag(MachineInstr::CrashStart);
+  if (IsCrashStart) Builder->setFlag(MachineInstr::CrashStart);
 
   return &*Builder;
 }
 
-MachineFunction& crash_blamer::Decompiler::createMF(StringRef FunctionName) {
+MachineFunction &crash_blamer::Decompiler::createMF(StringRef FunctionName) {
   // Create a dummy IR Function.
   auto &Context = Module->getContext();
   Function *F =
@@ -403,33 +210,13 @@ MachineFunction& crash_blamer::Decompiler::createMF(StringRef FunctionName) {
   return MMI->getOrCreateMachineFunction(*F);
 }
 
-static void error(StringRef Prefix, std::error_code EC) {
-  if (!EC)
-    return;
-  WithColor::error() << Prefix << ": " << EC.message() << "\n";
-  exit(1);
-}
-
 llvm::Error crash_blamer::Decompiler::run(
-    StringRef InputFile,
-    SmallVectorImpl<StringRef> &functionsFromCoreFile,
-    FrameToRegsMap &FrameToRegs,
-    SmallVectorImpl<BlameFunction> &BlameTrace) {
+    StringRef InputFile, SmallVectorImpl<StringRef> &functionsFromCoreFile,
+    FrameToRegsMap &FrameToRegs, SmallVectorImpl<BlameFunction> &BlameTrace,
+    std::map<llvm::StringRef, lldb::SBFrame> &FrameInfo, lldb::SBTarget &target,
+    Triple TheTriple) {
   llvm::outs() << "Decompiling...\n";
 
-  std::string ErrorStr;
-  ErrorOr<std::unique_ptr<MemoryBuffer>> BuffOrErr =
-      MemoryBuffer::getFileOrSTDIN(InputFile);
-  error(InputFile, BuffOrErr.getError());
-  std::unique_ptr<MemoryBuffer> Buffer = std::move(BuffOrErr.get());
-  Expected<std::unique_ptr<Binary>> BinOrErr = object::createBinary(*Buffer);
-  error(InputFile, errorToErrorCode(BinOrErr.takeError()));
-
-  auto *ObjFile = dyn_cast<ObjectFile>(BinOrErr->get());
-  if (!ObjFile)
-    return make_error<StringError>("unable to open " + InputFile,
-                                   inconvertibleErrorCode());
-  auto &Obj = *ObjFile;
   static LLVMContext Ctx;
   LLVMTargetMachine &LLVMTM = static_cast<LLVMTargetMachine &>(*TM.get());
 
@@ -442,10 +229,6 @@ llvm::Error crash_blamer::Decompiler::run(
 
   MMI->initialize();
 
-  // Mapping virtual address --> symbol name.
-  std::map<SectionRef, SectionSymbolsTy> AllSymbols;
-  SectionSymbolsTy AbsoluteSymbols;
-
   // Store debug info compile units for coresponding files.
   std::unordered_map<std::string, std::pair<DIFile *, DICompileUnit *>> CUs;
 
@@ -454,405 +237,244 @@ llvm::Error crash_blamer::Decompiler::run(
   for (StringRef f : functionsFromCoreFile)
     FunctionsToDecompile.insert(f.str());
 
-  for (const SymbolRef &Symbol : Obj.symbols()) {
-    StringRef Name = unwrapOrError(Symbol.getName(), InputFile);
-    if (Name.empty()) continue;
-
-    if (Obj.isELF() && getElfSymbolType(&Obj, Symbol) == ELF::STT_SECTION)
-      continue;
-
-    section_iterator SecI = unwrapOrError(Symbol.getSection(), InputFile);
-    if (SecI != Obj.section_end())
-      AllSymbols[*SecI].push_back(Disassembler::createSymbolInfo(&Obj, Symbol));
-    else
-      AbsoluteSymbols.push_back(Disassembler::createSymbolInfo(&Obj, Symbol));
-  }
-
-  if (AllSymbols.empty() && Obj.isELF())
-    Disassembler::addDynamicElfSymbols(&Obj, AllSymbols);
-
-  BumpPtrAllocator A;
-  StringSaver Saver(A);
-
-  Disassembler::addPltEntries(&Obj, AllSymbols, Saver);
-
-  // Create a mapping from virtual address to section.
-  std::vector<std::pair<uint64_t, SectionRef>> SectionAddresses;
-  for (SectionRef Sec : Obj.sections())
-    SectionAddresses.emplace_back(Sec.getAddress(), Sec);
-  llvm::stable_sort(SectionAddresses, [](const auto &LHS, const auto &RHS) {
-    if (LHS.first != RHS.first) return LHS.first < RHS.first;
-    return LHS.second.getSize() < RHS.second.getSize();
-  });
-
-  // Sort all the symbols, this allows us to use a simple binary search to find
-  // Multiple symbols can have the same address. Use a stable sort to stabilize
-  // the output.
-  StringSet<> FoundDisasmSymbolSet;
-  for (std::pair<const SectionRef, SectionSymbolsTy> &SecSyms : AllSymbols)
-    stable_sort(SecSyms.second);
-  stable_sort(AbsoluteSymbols);
-
-  bool Is64Bits = Obj.getBytesInAddress() > 4;
-
-  // Init the LLVM symbolizer used to get debug lines.
-  symbolize::LLVMSymbolizer::Options SymbolizerOpts;
-  std::unique_ptr<symbolize::LLVMSymbolizer> Symbolizer;
-  SymbolizerOpts.PrintFunctions = DILineInfoSpecifier::FunctionNameKind::None;
-  SymbolizerOpts.Demangle = false;
-  SymbolizerOpts.DefaultArch = DefaultArch;
-  Symbolizer.reset(new symbolize::LLVMSymbolizer(SymbolizerOpts));
-
   // Create Debug Info.
   DIBuilder DIB(*Module);
 
-  for (const auto &Section : Obj.sections()) {
-    if (!Section.isText() || Section.isVirtual())
+  lldb_private::ArchSpec arch(TheTriple.normalize());
+
+  lldb::DisassemblerSP Disassembler_sp =
+      lldb_private::Disassembler::FindPlugin(arch, nullptr, nullptr);
+
+  // Used to reconstruct the target from CALLs.
+  // FIXME: Use `image lookup --address` in order to find
+  // all the targets.
+  std::unordered_map<uint64_t, StringRef> FuncStartSymbols;
+  for (auto &frame : FrameInfo) {
+    auto FuncAddr = frame.second.GetFunction().GetStartAddress().GetFileAddress();
+    FuncStartSymbols[FuncAddr] = frame.first;
+  }
+
+  for (auto &frame : FrameInfo) {
+    // Skip inlined frames.
+    if (frame.second.IsInlined() || frame.second.IsArtificial())
       continue;
 
-    StringRef SectionName = unwrapOrError(Section.getName(), Obj.getFileName());
+    auto Func = frame.second.GetFunction();
+    auto Instructions = Func.GetInstructions(target);
+    auto FuncStart = Func.GetStartAddress();
+    auto FuncEnd = Func.GetEndAddress();
 
-    if (SectionName != ".text")
-      continue;
-
-    uint64_t SectionAddr = Section.getAddress();
-
-    uint64_t SectSize = Section.getSize();
-    if (!SectSize)
-      continue;
-
-    // Get the list of all the symbols in this section.
-    SectionSymbolsTy &Symbols = AllSymbols[Section];
-
-    // TODO: Handle ARM, AARCH64 and MACH-O differences
-    //       (e.g. ARM symbol mapping).
-
-    // If the section has no symbol at the start, just insert a dummy one.
-    if (Symbols.empty() || Symbols[0].Addr != 0) {
-      Symbols.insert(Symbols.begin(),
-                     Disassembler::createDummySymbolInfo(
-                         &Obj, SectionAddr, SectionName,
-                         Section.isText() ? ELF::STT_FUNC : ELF::STT_OBJECT));
+    // No debuging info for the module.
+    // TODO: Use CFA and .symtab info in order to make it working.
+    if (!Func.GetName()) {
+      return make_error<StringError>(
+          "No debuging info found for a function from backtrace. Please "
+          "provide debuging info for the exe and all libraries.",
+          inconvertibleErrorCode());
     }
 
-    SmallString<40> Comments;
-    raw_svector_ostream CommentStream(Comments);
+    std::string FileDirInfo =
+        frame.second.GetCompileUnit().GetFileSpec().GetDirectory();
+    std::string FileNameInfo =
+        frame.second.GetCompileUnit().GetFileSpec().GetFilename();
+    std::string AbsFileName =
+        (Twine(FileDirInfo) + Twine("/") + Twine(FileNameInfo)).str();
 
-    ArrayRef<uint8_t> Bytes = arrayRefFromStringRef(
-        unwrapOrError(Section.getContents(), Obj.getFileName()));
-
-    uint64_t Size;
-    uint64_t Index;
-
-    if (ShowDisassembly)
+    if (ShowDisassembly) {
       outs() << "\nDissasemble of the functions from backtrace:\n";
-
-    // Disassemble symbol by symbol.
-    for (unsigned SI = 0, SE = Symbols.size(); SI != SE; ++SI) {
-      std::string SymbolName = Symbols[SI].Name.str();
-
-      uint64_t Start = Symbols[SI].Addr;
-      if (Start < SectionAddr)
-        continue;
-      else
-        FoundDisasmSymbolSet.insert(SymbolName);
-
-      uint64_t End = SectionAddr + SectSize;
-      if (SI + 1 < SE) End = std::min(End, Symbols[SI + 1].Addr);
-      if (Start >= End)
-        continue;
-      Start -= SectionAddr;
-      End -= SectionAddr;
-
-      // Create MFs.
-      MachineFunction *MF = nullptr;
-      MachineBasicBlock *MBB = nullptr;
-      DISubprogram *DISP = nullptr;
-      crash_blamer::RegSet DefinedRegs;
-      std::string InstrAddr;
-      unsigned AddrValue = 0;
-      bool PrevBranch = true;
-
-      // Jumps to be updated with proper targets ( in form of bb).
-      // This maps the target address with the jump.
-      std::unordered_multimap<uint64_t, MachineInstr *> BranchesToUpdate;
-
-      // If the function was not part of the backtrace, just continue.
-      if (!FunctionsToDecompile.count(SymbolName))
-        continue;
-
-      if (ShowDisassembly) {
-        outs() << format(Is64Bits ? "%016" PRIx64 " " : "%08" PRIx64 " ",
-                         SectionAddr + Start);
-        outs() << '<' << SymbolName << ">:\n";
-      }
-
-      MF = &createMF(SymbolName);
-      MBB = MF->CreateMachineBasicBlock();
-      MF->push_back(MBB);
-      // Get the address of the latest instruction executed within a frame.
-      auto Regs = FrameToRegs.find(SymbolName);
-      // Get the value of $rip register, since it holds the address of current
-      // instr being executed.
-      for (auto &reg : Regs->second) {
-        if (reg.regName == "rip") {
-          InstrAddr = reg.regValue;
-          std::istringstream converter(InstrAddr);
-          converter >> std::hex >> AddrValue;
-          break;
-        }
-      }
-
-      // Fill up the register-memory state into coresponding MF attributes.
-      MachineFunction::RegisterCrashInfo regInfo;
-      for (auto &reg : Regs->second)
-        regInfo.push_back({reg.regName, reg.regValue});
-      MF->addCrashRegInfo(regInfo);
-
-      if (Section.isVirtual()) {
-        if (ShowDisassembly)
-          outs() << "...\n";
-        continue;
-      }
-
-      DisAsm->onSymbolStart(SymbolName, Size, Bytes.slice(Start, End - Start),
-                            SectionAddr + Start, CommentStream);
-
-      Start += Size;
-      Index = Start;
-      formatted_raw_ostream FOS(outs());
-
-      while (Index < End) {
-        uint64_t MaxOffset = End - Index;
-        if (size_t N = Disassembler::countSkippableZeroBytes(
-                Bytes.slice(Index, MaxOffset))) {
-          if (ShowDisassembly)
-            FOS << "\t\t..." << '\n';
-          Index += N;
-          continue;
-        }
-
-        // Disassemble a real instruction.
-        MCInst Inst;
-        bool Disassembled = DisAsm->getInstruction(
-            Inst, Size, Bytes.slice(Index), SectionAddr + Index, CommentStream);
-        if (Size == 0)
-          Size = 1;
-
-        if (Disassembled) {
-          LLVM_DEBUG(Inst.dump());
-          object::SectionedAddress Addr = {SectionAddr + Index,
-                                           Section.getIndex()};
-          if (ShowDisassembly)
-            Disassembler::printInst(*InstPrinter, &Inst,
-                                    Bytes.slice(Index, Size), Addr, FOS, "",
-                                    *MSTI, Obj.getFileName());
-
-          uint64_t TargetBBAddr = 0;
-          StringRef TargetFnName = "";
-          const unsigned Opcode = Inst.getOpcode();
-          const MCInstrDesc &MCID = MII->get(Opcode);
-
-          // Try to resolve the target of a call, tail call, etc. to a specific
-          // symbol.
-          if (MIA && (MIA->isCall(Inst) || MIA->isUnconditionalBranch(Inst) ||
-                      MIA->isConditionalBranch(Inst))) {
-            uint64_t Target;
-            if (MIA->evaluateBranch(Inst, SectionAddr + Index, Size, Target)) {
-              // In a relocatable object, the target's section must reside in
-              // the same section as the call instruction or it is accessed
-              // through a relocation.
-              //
-              // In a non-relocatable object, the target may be in any section.
-              //
-              // N.B. We don't walk the relocations in the relocatable case yet.
-              auto *TargetSectionSymbols = &Symbols;
-              if (!Obj.isRelocatableObject()) {
-                auto It = partition_point(
-                    SectionAddresses,
-                    [=](const std::pair<uint64_t, SectionRef> &O) {
-                      return O.first <= Target;
-                    });
-                if (It != SectionAddresses.begin()) {
-                  --It;
-                  TargetSectionSymbols = &AllSymbols[It->second];
-                } else {
-                  TargetSectionSymbols = &AbsoluteSymbols;
-                }
-              }
-
-              // Find the last symbol in the section whose offset is less than
-              // or equal to the target. If there isn't a section that contains
-              // the target, find the nearest preceding absolute symbol.
-              auto TargetSym = partition_point(
-                  *TargetSectionSymbols,
-                  [=](const SymbolInfoTy &O) { return O.Addr <= Target; });
-              if (TargetSym == TargetSectionSymbols->begin()) {
-                TargetSectionSymbols = &AbsoluteSymbols;
-                TargetSym = partition_point(
-                    AbsoluteSymbols,
-                    [=](const SymbolInfoTy &O) { return O.Addr <= Target; });
-              }
-              if (TargetSym != TargetSectionSymbols->begin()) {
-                --TargetSym;
-                uint64_t TargetAddress = TargetSym->Addr;
-                TargetFnName = TargetSym->Name;
-                if (ShowDisassembly)
-                  FOS << " <" << TargetFnName;
-                uint64_t Disp = Target - TargetAddress;
-                if (ShowDisassembly) {
-                  if (Disp) FOS << "+0x" << Twine::utohexstr(Disp);
-                  FOS << '>';
-                }
-
-                if (MF && MCID.isBranch())
-                  TargetBBAddr = Target;
-              }
-            }
-          }
-
-          DILineInfo DbgLineInfo = DILineInfo();
-          auto LineInfo = Symbolizer->symbolizeCode(Obj, Addr);
-          if (!LineInfo) {
-            errs() << "Unable to find debug lines. Is it compiled with -g?\n";
-            // TODO: return real error here.
-            return Error::success();
-          }
-
-          DIFile *File = nullptr;
-          DICompileUnit *CU = nullptr;
-
-          if (MF && LineInfo->FileName != DILineInfo::BadString &&
-              LineInfo->Line) {
-            if (!CUs.count(LineInfo->FileName)) {
-              File = DIB.createFile(LineInfo->FileName, "/");
-              CU = DIB.createCompileUnit(
-                  dwarf::DW_LANG_C, File, "crash-blamer", /*isOptimized=*/true,
-                  "", 0, StringRef(),
-                  DICompileUnit::DebugEmissionKind::FullDebug, 0, true, false,
-                  DICompileUnit::DebugNameTableKind::Default, false, true);
-              CUs.insert({LineInfo->FileName, std::make_pair(File, CU)});
-            } else {
-              File = CUs[LineInfo->FileName].first;
-              CU = CUs[LineInfo->FileName].second;
-            }
-          }
-
-          // Once we created the DI file, create DI subprogram.
-          if (!DISP && File && CU && MF) {
-            auto &F = MF->getFunction();
-            auto SPType =
-                DIB.createSubroutineType(DIB.getOrCreateTypeArray(None));
-            DISubprogram::DISPFlags SPFlags =
-                DISubprogram::SPFlagDefinition | DISubprogram::SPFlagOptimized;
-            auto SP = DIB.createFunction(CU, F.getName(), F.getName(), File, 1,
-                                         SPType, 1, DINode::FlagZero, SPFlags);
-            (const_cast<Function *>(&F))->setSubprogram(SP);
-            DISP = SP;
-            DIB.finalizeSubprogram(SP);
-          }
-
-          DbgLineInfo = *LineInfo;
-          MachineInstr *MI = nullptr;
-
-          // Fill the Machine Function.
-          if (MF) {
-            // If it is not a branch and we previously did not decompile a
-            // branch,
-            // check if this should start a new basic block. For example
-            // default:
-            // label within a switch usually has this structure.
-            if (!MCID.isBranch() && BranchesToUpdate.count(Addr.Address) &&
-                !PrevBranch) {
-              MachineBasicBlock *OldBB = MBB;
-              MBB = MF->CreateMachineBasicBlock();
-              if (!OldBB->isSuccessor(MBB)) OldBB->addSuccessor(MBB);
-              MF->push_back(MBB);
-            }
-
-            auto DILoc = DILocation::get(Ctx, DbgLineInfo.Line,
-                                         DbgLineInfo.Column, DISP);
-
-            DebugLoc Loc(DILoc);
-            MI = addInstr(MF, MBB, Inst, &Loc, AddrValue == Addr.Address,
-                          DefinedRegs, TargetFnName);
-            if (MI) {
-              // There could be multiple branches targeting the same
-              // MBB.
-              while (BranchesToUpdate.count(Addr.Address)) {
-                auto BranchIt = BranchesToUpdate.find(Addr.Address);
-                MachineInstr *BranchInstr = BranchIt->second;
-                // In the first shot it was an imm representing the address.
-                // Now we set the real MBB as an operand.
-                // FIXME: Should call RemoveOperand(0) and then set it to
-                // the MBB.
-                BranchInstr->getOperand(0) = MachineOperand::CreateMBB(MBB);
-                if (!BranchInstr->getParent()->isSuccessor(MBB))
-                  BranchInstr->getParent()->addSuccessor(MBB);
-                BranchesToUpdate.erase(BranchIt);
-              }
-            }
-          }
-
-          // If this is a branch, start new MBB.
-          if (MF && MCID.isBranch()) {
-            MachineBasicBlock *OldBB = MBB;
-            MBB = MF->CreateMachineBasicBlock();
-            if (MI && MI->isConditionalBranch() && !OldBB->isSuccessor(MBB))
-              OldBB->addSuccessor(MBB);
-            MF->push_back(MBB);
-            // Rememer the target address, so we can fix it
-            // with the proper BB.
-            BranchesToUpdate.insert({TargetBBAddr, MI});
-            PrevBranch = true;
-          } else
-            PrevBranch = false;
-        }
-
-        if (ShowDisassembly)
-          FOS << CommentStream.str();
-        Comments.clear();
-
-        if (ShowDisassembly)
-          FOS << "\n";
-
-        Index += Size;
-      }
-
-      if (ShowDisassembly)
-        FOS << "\n";
-
-      LLVM_DEBUG(if (MF) {
-        dbgs() << "Decompiled MF:\n";
-        MF->dump();
-      });
-
-      // Map the fn from backtrace to the MF.
-      // FIXME: Improve this by using a hash map.
-      int index = 0;
-      for (auto &f : BlameTrace) {
-        if (f.Name == SymbolName) {
-          // Crash order starts from 1.
-          MF->setCrashOrder(index + 1);
-          f.MF = MF;
-          break;
-        }
-        ++index;
-      }
-
-      // Remove the function from working set.
-      FunctionsToDecompile.erase(SymbolName);
-      // If we decompiled all the functions, break the loop.
-      if (FunctionsToDecompile.empty())
-        break;
+      outs() << frame.second.Disassemble();
     }
+
+    // Create MFs.
+    MachineFunction *MF = nullptr;
+    MachineBasicBlock *MBB = nullptr;
+    DISubprogram *DISP = nullptr;
+    crash_blamer::RegSet DefinedRegs;
+    std::string InstrAddr;
+    unsigned AddrValue = 0;
+    bool PrevBranch = true;
+
+    StringRef FunctionName = frame.first;
+
+    // Jumps to be updated with proper targets ( in form of bb).
+    // This maps the target address with the jump.
+    std::unordered_multimap<uint64_t, MachineInstr *> BranchesToUpdate;
+
+    MF = &createMF(FunctionName);
+    MBB = MF->CreateMachineBasicBlock();
+    MF->push_back(MBB);
+    // Get the address of the latest instruction executed within a frame.
+    auto Regs = FrameToRegs.find(FunctionName);
+    // Get the value of $rip register, since it holds the address of current
+    // instr being executed.
+    for (auto &reg : Regs->second) {
+      if (reg.regName == "rip") {
+        InstrAddr = reg.regValue;
+        std::istringstream converter(InstrAddr);
+        converter >> std::hex >> AddrValue;
+        break;
+      }
+    }
+
+    // Fill up the register-memory state into coresponding MF attributes.
+    MachineFunction::RegisterCrashInfo regInfo;
+    for (auto &reg : Regs->second)
+      regInfo.push_back({reg.regName, reg.regValue});
+    MF->addCrashRegInfo(regInfo);
+
+    std::pair<lldb::addr_t, lldb::addr_t> func_range{FuncStart.GetFileAddress(),
+                                                     FuncEnd.GetFileAddress()};
+    lldb::addr_t FuncLoadAddr = FuncStart.GetLoadAddress(target);
+
+    lldb::DataBufferSP buffer_sp(
+        new lldb_private::DataBufferHeap(func_range.second, 0));
+    lldb::SBError error;
+    target.ReadMemory(FuncStart, buffer_sp->GetBytes(),
+                      buffer_sp->GetByteSize(), error);
+
+    lldb_private::DataExtractor Extractor(buffer_sp, target.GetByteOrder(),
+                                          target.GetAddressByteSize());
+    Disassembler_sp->DecodeInstructions(FuncLoadAddr, Extractor, 0,
+                                        Instructions.GetSize(), false, false);
+
+    lldb_private::InstructionList &instruction_list =
+        Disassembler_sp->GetInstructionList();
+    size_t numInstr = instruction_list.GetSize();
+    for (size_t k = 0; k < numInstr; ++k) {
+      auto InstSP = instruction_list.GetInstructionAtIndex(k);
+      uint64_t InstAddr = InstSP->GetAddress().GetFileAddress();
+
+      auto sbInst = Instructions.GetInstructionAtIndex(k);
+      uint32_t line = sbInst.GetAddress().GetLineEntry().GetLine();
+      uint32_t column = sbInst.GetAddress().GetLineEntry().GetColumn();
+
+      llvm::MCInst Inst;
+      auto InstSize = InstSP->GetMCInst(Inst);
+      if (InstSize == 0) {
+        return make_error<StringError>("unable to decompile an instruction",
+                                       inconvertibleErrorCode());
+      }
+
+      const unsigned Opcode = Inst.getOpcode();
+      const MCInstrDesc &MCID = MII->get(Opcode);
+      object::SectionedAddress Addr = {
+          InstAddr, object::SectionedAddress::UndefSection};
+
+      DIFile *File = nullptr;
+      DICompileUnit *CU = nullptr;
+
+      if (MF) {
+        if (!CUs.count(AbsFileName)) {
+          File = DIB.createFile(AbsFileName, "/");
+          CU = DIB.createCompileUnit(
+              dwarf::DW_LANG_C, File, "crash-blamer", /*isOptimized=*/true, "",
+              0, StringRef(), DICompileUnit::DebugEmissionKind::FullDebug, 0,
+              true, false, DICompileUnit::DebugNameTableKind::Default, false,
+              true);
+          CUs.insert({AbsFileName, std::make_pair(File, CU)});
+        } else {
+          File = CUs[AbsFileName].first;
+          CU = CUs[AbsFileName].second;
+        }
+      }
+
+      // Once we created the DI file, create DI subprogram.
+      if (!DISP && File && CU && MF) {
+        auto &F = MF->getFunction();
+        auto SPType = DIB.createSubroutineType(DIB.getOrCreateTypeArray(None));
+        DISubprogram::DISPFlags SPFlags =
+            DISubprogram::SPFlagDefinition | DISubprogram::SPFlagOptimized;
+        auto SP = DIB.createFunction(CU, F.getName(), F.getName(), File, 1,
+                                     SPType, 1, DINode::FlagZero, SPFlags);
+        (const_cast<Function *>(&F))->setSubprogram(SP);
+        DISP = SP;
+        DIB.finalizeSubprogram(SP);
+      }
+
+      MachineInstr *MI = nullptr;
+
+      // Fill the Machine Function.
+      if (MF) {
+        // If it is not a branch and we previously did not decompile a
+        // branch,
+        // check if this should start a new basic block. For example
+        // default:
+        // label within a switch usually has this structure.
+        if (!MCID.isBranch() && BranchesToUpdate.count(Addr.Address) &&
+            !PrevBranch) {
+          MachineBasicBlock *OldBB = MBB;
+          MBB = MF->CreateMachineBasicBlock();
+          if (!OldBB->isSuccessor(MBB)) OldBB->addSuccessor(MBB);
+          MF->push_back(MBB);
+        }
+
+        auto DILoc = DILocation::get(Ctx, line, column, DISP);
+        DebugLoc Loc(DILoc);
+        MI = addInstr(MF, MBB, Inst, &Loc, frame.second.GetPC() == Addr.Address,
+                      DefinedRegs, FuncStartSymbols);
+
+        if (MI) {
+          // There could be multiple branches targeting the same
+          // MBB.
+          while (BranchesToUpdate.count(Addr.Address)) {
+            auto BranchIt = BranchesToUpdate.find(Addr.Address);
+            MachineInstr *BranchInstr = BranchIt->second;
+            // In the first shot it was an imm representing the address.
+            // Now we set the real MBB as an operand.
+            // FIXME: Should call RemoveOperand(0) and then set it to
+            // the MBB.
+            BranchInstr->getOperand(0) = MachineOperand::CreateMBB(MBB);
+            if (!BranchInstr->getParent()->isSuccessor(MBB))
+              BranchInstr->getParent()->addSuccessor(MBB);
+            BranchesToUpdate.erase(BranchIt);
+          }
+        }
+      }
+
+      // If this is a branch, start new MBB.
+      if (MF && MI && MCID.isBranch()) {
+        uint64_t TargetBBAddr = MI->getOperand(0).getImm();
+        MachineBasicBlock *OldBB = MBB;
+        MBB = MF->CreateMachineBasicBlock();
+        if (MI && MI->isConditionalBranch() && !OldBB->isSuccessor(MBB))
+          OldBB->addSuccessor(MBB);
+        MF->push_back(MBB);
+        // Rememer the target address, so we can fix it
+        // with the proper BB.
+        BranchesToUpdate.insert({TargetBBAddr, MI});
+        PrevBranch = true;
+      } else
+        PrevBranch = false;
+    }
+
+    LLVM_DEBUG(if (MF) {
+      dbgs() << "Decompiled MF:\n";
+      MF->dump();
+    });
+
+    // Map the fn from backtrace to the MF.
+    // FIXME: Improve this by using a hash map.
+    int index = 0;
+    for (auto &f : BlameTrace) {
+      if (f.Name == FunctionName) {
+        // Crash order starts from 1.
+        MF->setCrashOrder(index + 1);
+        f.MF = MF;
+        break;
+      }
+      ++index;
+    }
+
+    // Remove the function from working set.
+    FunctionsToDecompile.erase(FunctionName);
+    // If we decompiled all the functions, break the loop.
+    if (FunctionsToDecompile.empty()) break;
   }
 
   // Run FixRegStateFlags pass for each basic block.
   FixRegStateFlags FRSF;
   for (auto &f : BlameTrace) {
-    if (f.MF)
-      FRSF.run(*(f.MF));
+    if (f.MF) FRSF.run(*(f.MF));
   }
 
   MMI->finalize();
@@ -874,16 +496,14 @@ llvm::Error crash_blamer::Decompiler::run(
     }
     printMIR(OS_FILE, *Module.get());
     for (auto &f : BlameTrace) {
-      if (f.MF)
-        printMIR(OS_FILE, *f.MF);
+      if (f.MF) printMIR(OS_FILE, *f.MF);
     }
   }
 
   // Rememer the MFs for analysis.
   for (auto &F : *(Module.get())) {
     auto MF = MMI->getMachineFunction(F);
-    if (MF)
-      BlameMFs.push_back(MF);
+    if (MF) BlameMFs.push_back(MF);
   }
 
   llvm::outs() << "Decompiled.\n";

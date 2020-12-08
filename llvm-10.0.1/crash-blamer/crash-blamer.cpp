@@ -97,9 +97,15 @@ int main(int argc, char **argv) {
   OutputFile.keep();
   int exit_code = 0;
 
+  auto handleError = [](Error &&e) {
+    handleAllErrors(std::move(e), [](ErrorInfoBase &eib) {
+      WithColor::error() << eib.message() << "\n";
+    });
+  };
+
   // Read the symbols from core file (e.g. function names from crash backtrace).
   // TODO: Read registers and memory state from core-file.
-  CoreFile coreFile(CoreFileName);
+  CoreFile coreFile(CoreFileName, InputFilename);
   if (!coreFile.read(InputFilename)) {
     llvm::outs() << "\nRESULT: FAIL\n";
     return -1;
@@ -126,9 +132,12 @@ int main(int argc, char **argv) {
     BlameTrace.push_back({Fn, nullptr});
 
   auto Err = Dec->run(InputFilename, functionsFromCoreFile, FrameToRegs,
-                      BlameTrace);
-  if (Err)
-    return 1;
+                      BlameTrace, coreFile.getFrameInfo(),
+                      coreFile.getTarget(), Triple);
+  if (Err) {
+    handleError(std::move(Err));
+    return 0;
+  }
 
   LLVM_DEBUG(for (auto &f : BlameTrace) {
     llvm::dbgs() << "** fn: " << f.Name << "\n";

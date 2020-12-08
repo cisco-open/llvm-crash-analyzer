@@ -3,20 +3,9 @@
 # RUN:     --core-file=%S/Inputs/core-test-1 %S/Inputs/test-1
 # RUN: cat %t.mir | FileCheck %s
 
-# CHECK: name: f3
-# CHECK: bb.0:
-# CHECK:  ENDBR64 debug-location !DILocation(line: 1, column: 26, scope: {{.*}}
-# CHECK:  MOV32mi $rdi, 1, $noreg, 0, $noreg, 0, debug-location !DILocation(line: 2, column: 15, scope: {{.*}}
-# CHECK:  RETQ debug-location !DILocation(line: 3, column: 1, scope: {{.*}}
-
-# CHECK: name: f2
-# CHECK: bb.0:
-# CHECK:  ENDBR64 debug-location !DILocation(line: 3, column: 1, scope: {{.*}}
-# CHECK:  MOV32mi $rdi, 1, $noreg, 0, $noreg, 0, debug-location !DILocation(line: 3, column: 1, scope: {{.*}}
-# CHECK:  RETQ debug-location !DILocation(line: 3, column: 1, scope: {{.*}}
-
 # CHECK: name: main
 # CHECK: bb.0:
-# CHECK:  ENDBR64 debug-location !DILocation(line: 10, column: 1, scope: {{.*}}
-# CHECK:  MOV32mi $noreg, 1, $noreg, 0, $noreg, 0, debug-location !DILocation(line: 2, column: 15, scope: {{.*}}
-# CHECK:  TRAP debug-location !DILocation(line: 2, column: 15, scope: {{.*}}
+# CHECK:  ENDBR64
+# CHECK:  MOV32mi $noreg, 1, $noreg, 0, $noreg, 0
+# CHECK:  TRAP
+
