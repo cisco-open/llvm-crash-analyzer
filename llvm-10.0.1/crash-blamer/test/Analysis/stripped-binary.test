@@ -1,0 +1,9 @@
+## strip binary:
+##   $ clang -g -O0 -o main main.clang
+##   $ objcopy --only-keep-debug  main main.debug
+##   $ objcopy --add-gnu-debuglink=main.debug main
+##   $ strip --strip-unneeded main
+
+# RUN: %crash-blamer --core-file=%S/Inputs/core.main.stripped %S/Inputs/main-stripped < %s 2>&1 | FileCheck %s
+
+# CHECK: RESULT: SUCCESS
