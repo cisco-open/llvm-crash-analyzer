@@ -39,6 +39,35 @@ bool llvm::crash_blamer::CoreFile::read(StringRef InputFile) {
     return false;
   }
 
+  int NumModules = target.GetNumModules();
+  for (int i = 0; i < NumModules; ++i) {
+    auto m = target.GetModuleAtIndex(i);
+    if (m.GetNumCompileUnits() == 0) {
+      StringRef mName = m.GetFileSpec().GetFilename();
+      // No need debug info for the libc.
+      if (mName == "[vdso]" || mName == "linux-vdso.so.1" ||
+          mName == "libc.so.6" || mName == "libm.so.6" ||
+          mName == "libpthread.so.0")
+        continue;
+
+      StringRef SymAddCommand = "target symbols add ";
+      auto Dir = m.GetFileSpec().GetDirectory();
+      if (!Dir) Dir = "";
+
+      std::string FullPath = Twine(Dir + Twine("/") + mName + ".debug").str();
+      lldb::SBFileSpec Fspec(FullPath.c_str());
+      std::string FullCommand =
+          Twine(SymAddCommand + Twine(FullPath)).str();
+
+      if (Fspec.Exists())
+        target.GetDebugger().HandleCommand(FullCommand.c_str());
+      else {
+        WithColor::error() << "No debugging symbols found in " << mName << "\n";
+        return false;
+      }
+    }
+  }
+
   int NumOfFrames = thread.GetNumFrames();
   LLVM_DEBUG(dbgs() << "Num of frames " << NumOfFrames << "\n");
 
