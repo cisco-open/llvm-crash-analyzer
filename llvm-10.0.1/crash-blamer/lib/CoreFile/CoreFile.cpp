@@ -22,6 +22,9 @@
 #include "lldb/Utility/FileSpec.h"
 #include "lldb/lldb-forward.h"
 
+#include <sys/stat.h>
+#include <unistd.h>
+
 using namespace llvm;
 using namespace lldb;
 using namespace lldb_private;
@@ -30,8 +33,11 @@ using namespace lldb_private;
 
 static constexpr const char *GPR = "General Purpose Registers";
 
-bool llvm::crash_blamer::CoreFile::read(StringRef InputFile) {
+bool llvm::crash_blamer::CoreFile::read(StringRef SolibSearchPath) {
   outs() << "\nLoading core-file " << name << "\n";
+
+  llvm::SmallVector<StringRef, 8> SysRootPaths;
+  SolibSearchPath.split(SysRootPaths, ':');
 
   SBThread thread = process.GetSelectedThread();
   if (!thread.IsValid()) {
@@ -44,27 +50,105 @@ bool llvm::crash_blamer::CoreFile::read(StringRef InputFile) {
     auto m = target.GetModuleAtIndex(i);
     if (m.GetNumCompileUnits() == 0) {
       StringRef mName = m.GetFileSpec().GetFilename();
-      // No need debug info for the libc.
-      if (mName == "[vdso]" || mName == "linux-vdso.so.1" ||
-          mName == "libc.so.6" || mName == "libm.so.6" ||
-          mName == "libpthread.so.0")
+      // No need debug info for the vdso.
+      if (mName == "[vdso]" || mName == "linux-vdso.so.1")
         continue;
 
       StringRef SymAddCommand = "target symbols add ";
+      std::string FullCommand;
+
+      // Rewrite the module to point to the library from solib-search-path.
+      // The first path that contains the library will be used, so the order
+      // DOES matter.
+      if (SolibSearchPath != "") {
+        bool libFound = false;
+        char link[1024];
+        for (auto &p : SysRootPaths) {
+          std::string path = p.str();
+          if (!p.endswith("/")) path.push_back('/');
+
+          std::string FullLibPath = Twine(path + mName).str();
+          lldb::SBFileSpec FSpecLib(FullLibPath.c_str());
+          if (!FSpecLib.Exists()) continue;
+
+          // Check if the module is a sym link.
+          struct stat statInfo;
+          if (lstat(FullLibPath.c_str(), &statInfo) != -1) {
+            if (S_ISLNK(statInfo.st_mode)) {
+              ssize_t len;
+              if ((len = readlink(FullLibPath.c_str(), link,
+                                  sizeof(link) - 1)) != -1)
+                link[len] = '\0';
+              mName = link;
+              FullLibPath = Twine(path + mName).str();
+            }
+          }
+
+          // Remove old module(libraries), and add the new one, with updated
+          // paths.
+          target.RemoveModule(m);
+          std::string AddModuleCommand =
+              Twine("target modules add " + FullLibPath).str();
+          target.GetDebugger().HandleCommand(AddModuleCommand.c_str());
+
+          std::string FullPathLibDebug = Twine(FullLibPath + ".debug").str();
+          lldb::SBFileSpec FSpecLibDebug(FullPathLibDebug.c_str());
+          if (FSpecLibDebug.Exists()) {
+            FullCommand = Twine(SymAddCommand + Twine(FullPathLibDebug)).str();
+            target.GetDebugger().HandleCommand(FullCommand.c_str());
+            libFound = true;
+            break;
+          }
+
+          // Symbols could be in .debug/ directory.
+          std::string FullPathLibDebugInDbgDir =
+              Twine(path + ".debug/" + mName).str();
+          lldb::SBFileSpec FSpecDebugInDbgDir(FullPathLibDebugInDbgDir.c_str());
+          if (FSpecDebugInDbgDir.Exists()) {
+            FullCommand =
+                Twine(SymAddCommand + Twine(FullPathLibDebugInDbgDir)).str();
+            target.GetDebugger().HandleCommand(FullCommand.c_str());
+            libFound = true;
+            break;
+          }
+
+          WithColor::warning()
+              << "No debugging symbols found in " << mName << "\n";
+          continue;
+        }
+
+        if (libFound) continue;
+
+        WithColor::warning()
+            << "No debugging symbols found in " << mName << "\n";
+        continue;
+      }
+
       auto Dir = m.GetFileSpec().GetDirectory();
       if (!Dir) Dir = "";
 
-      std::string FullPath = Twine(Dir + Twine("/") + mName + ".debug").str();
-      lldb::SBFileSpec Fspec(FullPath.c_str());
-      std::string FullCommand =
-          Twine(SymAddCommand + Twine(FullPath)).str();
+      // Try to find debug symbols if the .gnu_debuglink was not set.
 
-      if (Fspec.Exists())
+      // Check If the module has .debug file in the dir.
+      std::string FullPathDebug = Twine(Dir + Twine("/") + mName + ".debug").str();
+      lldb::SBFileSpec FspecDebug(FullPathDebug.c_str());
+      if (FspecDebug.Exists()) {
+        FullCommand =
+            Twine(SymAddCommand + Twine(FullPathDebug)).str();
         target.GetDebugger().HandleCommand(FullCommand.c_str());
-      else {
-        WithColor::error() << "No debugging symbols found in " << mName << "\n";
-        return false;
+        continue;
       }
+      // Symbols could be in .debug/ directory.
+      FullPathDebug = Twine(Dir + Twine(".debug/") + mName).str();
+      lldb::SBFileSpec FSpecDebugInDbgDir(FullPathDebug.c_str());
+      if (FSpecDebugInDbgDir.Exists()) {
+        FullCommand =
+          Twine(SymAddCommand + Twine(FullPathDebug)).str();
+        target.GetDebugger().HandleCommand(FullCommand.c_str());
+        continue;
+      }
+
+      WithColor::warning() << "No debugging symbols found in " << mName << "\n";
     }
   }
 
@@ -80,7 +164,7 @@ bool llvm::crash_blamer::CoreFile::read(StringRef InputFile) {
       return false;
     }
 
-    LLVM_DEBUG(dbgs() << Frame.GetFunctionName() << "\n");
+    LLVM_DEBUG(dbgs() << "#" << i << " " << Frame.GetFunctionName() << "\n");
     StringRef fnName = Frame.GetFunctionName();
 
     // Get registers state at the point of the crash.
@@ -101,7 +185,14 @@ bool llvm::crash_blamer::CoreFile::read(StringRef InputFile) {
     rememberSBFrame(fnName, Frame);
 
     // No need to track __libc_start_main and _start from libc.
-    if (fnName == "main")
+    // FIXME:
+    //   1) POLARIS has its own version of main(), and the start
+    //      function name is different from main(), so this might
+    //      not be the right way. We should check if the next frame
+    //      is __libc_start_main() and then stop there.
+    //   2) I am seeing that bellow __be_unix_suspend() in the POLARIS
+    //      corefiles, there is no symbols and frames reported in decoder.
+    if (fnName == "main" || fnName == "__be_unix_suspend")
       break;
   }
 

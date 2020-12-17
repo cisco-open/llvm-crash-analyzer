@@ -55,9 +55,15 @@ class CoreFile {
   FrameToRegsMap GPRs;
   std::map<llvm::StringRef, lldb::SBFrame> FrameInfo;
 public:
- CoreFile(StringRef name, StringRef InputFileName) : name(name.data()) {
+ CoreFile(StringRef name, StringRef InputFileName, StringRef SysRoot) : name(name.data()) {
    lldb::SBDebugger::Initialize();
    debugger = lldb::SBDebugger::Create();
+   if (SysRoot != "") {
+     std::string SysRootCommand = "platform select --sysroot ";
+     SysRootCommand = SysRootCommand + SysRoot.str() + " remote-linux";
+     debugger.HandleCommand(SysRootCommand.c_str());
+   }
+
    target = debugger.CreateTarget(InputFileName.data());
 
    if (!target.IsValid()) {
@@ -80,7 +86,7 @@ public:
    lldb::SBDebugger::Terminate();
   }
 
-  bool read(StringRef InputFile);
+  bool read(StringRef SolibSearchPath);
   SmallVector<StringRef, 8> &getFunctionsFromBacktrace() {
     return FunctionsFromBacktrace;
   }
