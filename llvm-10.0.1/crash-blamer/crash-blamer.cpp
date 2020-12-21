@@ -53,6 +53,14 @@ static opt<std::string> CoreFileName("core-file", cl::init(""),
                                      cl::desc("<core-file>"),
                                      cl::value_desc("corefilename"),
                                      cat(CrashBlamer));
+static opt<std::string> SysRoot("sysroot", cl::init(""),
+                                cl::desc("<path>"),
+                                cl::value_desc("sysrootpath"),
+                                cat(CrashBlamer));
+static opt<std::string> SolibSearchPath("solib-search-path", cl::init(""),
+                                cl::desc("<paths>"),
+                                cl::value_desc("solibsearchpath"),
+                                cat(CrashBlamer));
 } // namespace
 /// @}
 //===----------------------------------------------------------------------===//
@@ -105,8 +113,8 @@ int main(int argc, char **argv) {
 
   // Read the symbols from core file (e.g. function names from crash backtrace).
   // TODO: Read registers and memory state from core-file.
-  CoreFile coreFile(CoreFileName, InputFilename);
-  if (!coreFile.read(InputFilename)) {
+  CoreFile coreFile(CoreFileName, InputFilename, SysRoot);
+  if (!coreFile.read(SolibSearchPath)) {
     llvm::outs() << "\nRESULT: FAIL\n";
     return -1;
   }

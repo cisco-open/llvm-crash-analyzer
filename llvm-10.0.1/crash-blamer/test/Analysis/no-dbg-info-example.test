@@ -40,5 +40,5 @@
 # RUN: %crash-blamer --core-file=%S/Inputs/core.no-dbg-example.49881 \
 # RUN:     %S/Inputs/no-dbg-example < %s 2>&1 | FileCheck %s
 
-# CHECK: error: No debuging info found for a function from backtrace. Please provide debuging info for the exe and all libraries.
+# CHECK: error: No debugging info found for a function from backtrace. Please provide debugging info for the exe and all libraries.
 

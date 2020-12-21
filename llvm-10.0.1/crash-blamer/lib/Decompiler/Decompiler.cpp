@@ -264,12 +264,12 @@ llvm::Error crash_blamer::Decompiler::run(
     auto FuncStart = Func.GetStartAddress();
     auto FuncEnd = Func.GetEndAddress();
 
-    // No debuging info for the module.
+    // No debugging info for the module.
     // TODO: Use CFA and .symtab info in order to make it working.
     if (!Func.GetName()) {
       return make_error<StringError>(
-          "No debuging info found for a function from backtrace. Please "
-          "provide debuging info for the exe and all libraries.",
+          "No debugging info found for a function from backtrace. Please "
+          "provide debugging info for the exe and all libraries.",
           inconvertibleErrorCode());
     }
 
