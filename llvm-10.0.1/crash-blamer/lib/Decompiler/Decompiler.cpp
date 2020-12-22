@@ -259,26 +259,39 @@ llvm::Error crash_blamer::Decompiler::run(
     if (frame.second.IsInlined() || frame.second.IsArtificial())
       continue;
 
-    auto Func = frame.second.GetFunction();
-    auto Instructions = Func.GetInstructions(target);
-    auto FuncStart = Func.GetStartAddress();
-    auto FuncEnd = Func.GetEndAddress();
+    lldb::SBInstructionList Instructions;
+    lldb::SBAddress FuncStart, FuncEnd;
+    bool HaveDebugInfo = false;
 
-    // No debugging info for the module.
-    // TODO: Use CFA and .symtab info in order to make it working.
-    if (!Func.GetName()) {
-      return make_error<StringError>(
-          "No debugging info found for a function from backtrace. Please "
-          "provide debugging info for the exe and all libraries.",
-          inconvertibleErrorCode());
+    auto Func = frame.second.GetFunction();
+    if (!Func) {
+      WithColor::warning()
+          << "No debugging info found for a function from backtrace. "
+          << "Please provide debugging info for the exe and all libraries.\n";
+      auto Symbol = frame.second.GetSymbol();
+      if (!Symbol) {
+        return make_error<StringError>(
+            "No symbols found for a function from backtrace. Please "
+            "provide symbols for the exe and all libraries.",
+            inconvertibleErrorCode());
+      }
+      Instructions = Symbol.GetInstructions(target);
+      FuncStart = Symbol.GetStartAddress();
+      FuncEnd = Symbol.GetEndAddress();
+    } else {
+      HaveDebugInfo = true;
+      Instructions = Func.GetInstructions(target);
+      FuncStart = Func.GetStartAddress();
+      FuncEnd = Func.GetEndAddress();
     }
 
-    std::string FileDirInfo =
-        frame.second.GetCompileUnit().GetFileSpec().GetDirectory();
-    std::string FileNameInfo =
-        frame.second.GetCompileUnit().GetFileSpec().GetFilename();
-    std::string AbsFileName =
-        (Twine(FileDirInfo) + Twine("/") + Twine(FileNameInfo)).str();
+    std::string FileDirInfo, FileNameInfo, AbsFileName;
+    if (HaveDebugInfo) {
+      FileDirInfo = frame.second.GetCompileUnit().GetFileSpec().GetDirectory();
+      FileNameInfo = frame.second.GetCompileUnit().GetFileSpec().GetFilename();
+      AbsFileName =
+          (Twine(FileDirInfo) + Twine("/") + Twine(FileNameInfo)).str();
+    }
 
     if (ShowDisassembly) {
       outs() << "\nDissasemble of the functions from backtrace:\n";
@@ -344,9 +357,13 @@ llvm::Error crash_blamer::Decompiler::run(
       auto InstSP = instruction_list.GetInstructionAtIndex(k);
       uint64_t InstAddr = InstSP->GetAddress().GetFileAddress();
 
-      auto sbInst = Instructions.GetInstructionAtIndex(k);
-      uint32_t line = sbInst.GetAddress().GetLineEntry().GetLine();
-      uint32_t column = sbInst.GetAddress().GetLineEntry().GetColumn();
+      uint32_t line = 0;
+      uint32_t column = 0;
+      if (HaveDebugInfo) {
+        auto sbInst = Instructions.GetInstructionAtIndex(k);
+        line = sbInst.GetAddress().GetLineEntry().GetLine();
+        column = sbInst.GetAddress().GetLineEntry().GetColumn();
+      }
 
       llvm::MCInst Inst;
       auto InstSize = InstSP->GetMCInst(Inst);
@@ -363,7 +380,7 @@ llvm::Error crash_blamer::Decompiler::run(
       DIFile *File = nullptr;
       DICompileUnit *CU = nullptr;
 
-      if (MF) {
+      if (MF && HaveDebugInfo) {
         if (!CUs.count(AbsFileName)) {
           File = DIB.createFile(AbsFileName, "/");
           CU = DIB.createCompileUnit(
@@ -379,7 +396,7 @@ llvm::Error crash_blamer::Decompiler::run(
       }
 
       // Once we created the DI file, create DI subprogram.
-      if (!DISP && File && CU && MF) {
+      if (HaveDebugInfo && !DISP && File && CU && MF) {
         auto &F = MF->getFunction();
         auto SPType = DIB.createSubroutineType(DIB.getOrCreateTypeArray(None));
         DISubprogram::DISPFlags SPFlags =
@@ -409,7 +426,7 @@ llvm::Error crash_blamer::Decompiler::run(
         }
 
         auto DILoc = DILocation::get(Ctx, line, column, DISP);
-        DebugLoc Loc(DILoc);
+        DebugLoc Loc = DebugLoc(DILoc);
         MI = addInstr(MF, MBB, Inst, &Loc, frame.second.GetPC() == Addr.Address,
                       DefinedRegs, FuncStartSymbols);
 
