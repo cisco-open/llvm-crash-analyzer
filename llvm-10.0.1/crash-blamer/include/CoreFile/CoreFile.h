@@ -55,13 +55,29 @@ class CoreFile {
   FrameToRegsMap GPRs;
   std::map<llvm::StringRef, lldb::SBFrame> FrameInfo;
 public:
- CoreFile(StringRef name, StringRef InputFileName, StringRef SysRoot) : name(name.data()) {
+ CoreFile(StringRef name, StringRef InputFileName, StringRef SysRoot,
+          StringRef ModulesPath) : name(name.data()) {
    lldb::SBDebugger::Initialize();
    debugger = lldb::SBDebugger::Create();
    if (SysRoot != "") {
      std::string SysRootCommand = "platform select --sysroot ";
      SysRootCommand = SysRootCommand + SysRoot.str() + " remote-linux";
      debugger.HandleCommand(SysRootCommand.c_str());
+   }
+
+   if (ModulesPath != "") {
+     llvm::SmallVector<StringRef, 8> ModulesPaths;
+     ModulesPath.split(ModulesPaths, ':');
+     std::string paths = "";
+     for (auto &p : ModulesPaths) {
+       std::string path = p.str();
+       paths += path;
+       paths += " ";
+     }
+
+     std::string AddSearchPathCommand =
+              Twine("settings set target.exec-search-paths " + paths).str();
+     debugger.HandleCommand(AddSearchPathCommand.c_str());
    }
 
    target = debugger.CreateTarget(InputFileName.data());
