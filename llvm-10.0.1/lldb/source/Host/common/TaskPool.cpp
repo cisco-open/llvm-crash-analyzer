@@ -21,7 +21,7 @@ class TaskPoolImpl {
 public:
   static TaskPoolImpl &GetInstance();
 
-  void AddTask(std::function<void()> &&task_fn);
+  Status AddTask(std::function<void()> &&task_fn);
 
 private:
   TaskPoolImpl();
@@ -43,7 +43,12 @@ TaskPoolImpl &TaskPoolImpl::GetInstance() {
 }
 
 void TaskPool::AddTaskImpl(std::function<void()> &&task_fn) {
-  TaskPoolImpl::GetInstance().AddTask(std::move(task_fn));
+  auto &Inst = TaskPoolImpl::GetInstance();
+  Status err = Inst.AddTask(std::move(task_fn));
+  if (err.Fail()) {
+      LLDB_LOG(lldb_private::GetLogIfAllCategoriesSet(LIBLLDB_LOG_HOST),
+               "failed to launch host thread: {}", err.AsCString());
+  }
 }
 
 TaskPoolImpl::TaskPoolImpl() : m_thread_count(0) {}
@@ -56,7 +61,7 @@ unsigned GetHardwareConcurrencyHint() {
   return g_hardware_concurrency;
 }
 
-void TaskPoolImpl::AddTask(std::function<void()> &&task_fn) {
+Status TaskPoolImpl::AddTask(std::function<void()> &&task_fn) {
   const size_t min_stack_size = 8 * 1024 * 1024;
 
   std::unique_lock<std::mutex> lock(m_tasks_mutex);
@@ -69,14 +74,12 @@ void TaskPoolImpl::AddTask(std::function<void()> &&task_fn) {
     llvm::Expected<HostThread> host_thread =
         lldb_private::ThreadLauncher::LaunchThread(
             "task-pool.worker", WorkerPtr, this, min_stack_size);
-    if (host_thread) {
-      host_thread->Release();
-    } else {
-      LLDB_LOG(lldb_private::GetLogIfAllCategoriesSet(LIBLLDB_LOG_HOST),
-               "failed to launch host thread: {}",
-               llvm::toString(host_thread.takeError()));
-    }
+    if (!host_thread)
+      return Status(host_thread.takeError());;
+
+    host_thread->Release();
   }
+  return Status();
 }
 
 lldb::thread_result_t TaskPoolImpl::WorkerPtr(void *pool) {
