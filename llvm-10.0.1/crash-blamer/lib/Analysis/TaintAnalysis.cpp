@@ -20,8 +20,17 @@ using namespace llvm;
 using TaintInfo = llvm::crash_blamer::TaintInfo;
 
 bool llvm::crash_blamer::operator==(const TaintInfo &T1, const TaintInfo &T2) {
-  if (T1.IsTaintMemAddr() != T2.IsTaintMemAddr())
+  if (T1.IsTaintMemAddr() != T2.IsTaintMemAddr()) {
+    // If we have resgiter $rsp comparing with memory address
+    // that has been calculated as $rsp + 0, we consider these
+    // two as the same operands.
+    if (T1.Op->getReg() == T2.Op->getReg() &&
+        ((T1.IsTaintMemAddr() && *T1.Offset == 0) ||
+         (T2.IsTaintMemAddr() && *T2.Offset == 0))) {
+      return true;
+    }
     return false;
+  }
 
   // For mem taint ops, compare the actuall addresses.
   if (T1.IsTaintMemAddr() && T2.IsTaintMemAddr())
