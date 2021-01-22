@@ -23,12 +23,10 @@ bool llvm::crash_blamer::operator==(const TaintInfo &T1, const TaintInfo &T2) {
   if (T1.IsTaintMemAddr() != T2.IsTaintMemAddr()) {
     // If we have resgiter $rsp comparing with memory address
     // that has been calculated as $rsp + 0, we consider these
-    // two as the same operands.
-    if (T1.Op->getReg() == T2.Op->getReg() &&
-        ((T1.IsTaintMemAddr() && *T1.Offset == 0) ||
-         (T2.IsTaintMemAddr() && *T2.Offset == 0))) {
+    // two as the same operands by comparing base reg only.
+    if (T1.Op->getReg() == T2.Op->getReg())
       return true;
-    }
+
     return false;
   }
 
@@ -62,9 +60,7 @@ void crash_blamer::TaintAnalysis::calculateMemAddr(TaintInfo &Ti) {
   std::string RegValue = MF->getRegValueFromCrash(RegName);
 
   // If the value is not available just taint the base-reg.
-  // For the rbp and rsp cases it should be available.
-  // FIXME: Should we check if it is rsp or rbp explicitly?
-  if(RegValue == "" || (RegName != "rsp" && RegName != "rbp")) {
+  if(RegValue == "") {
     Ti.IsConcreteMemory = false;
     return;
   }
@@ -116,9 +112,11 @@ void crash_blamer::TaintAnalysis::printTaintList() {
   }
   LLVM_DEBUG(dbgs() << "\n-----Taint List Begin------\n";
              for (auto itr = TaintList.begin(); itr != TaintList.end(); ++itr) {
-               if (!itr->Offset)
+               if (!itr->IsTaintMemAddr()) {
                  itr->Op->dump();
-               else
+                 if (itr->Offset)
+                   dbgs() << "offset: " << *(itr->Offset) << '\n';
+               } else
                  dbgs() << "mem addr: " << itr->GetTaintMemAddr() << "\n";
              } dbgs()
              << "\n------Taint List End----\n";);
@@ -208,7 +206,20 @@ bool llvm::crash_blamer::TaintAnalysis::propagateTaint(DestSourcePair &DS) {
     // Remove DestOp from the taint-list.
     // If Src is Immediate, we have reached end of taint.
     // DS.Source is 0 for immediate operands.
+    // Or the instruction involves %rip, which is considered
+    // as a constant.
+    bool ConstantFound = false;
     if (DS.Source->isImm()) {
+      ConstantFound = true;
+    } else if (DS.Source->isReg()) {
+      const MachineFunction *MF = DS.Source->getParent()->getMF();
+      auto TRI = MF->getSubtarget().getRegisterInfo();
+      std::string RegName = TRI->getRegAsmName(DS.Source->getReg()).lower();
+      if (RegName == "rip")
+        ConstantFound = true;
+    }
+
+    if (ConstantFound) {
       // We have reached a terminating condition where
       // dest is tainted and src is a constant operand.
       removeFromTaintList(DestTi);
@@ -229,6 +240,7 @@ bool llvm::crash_blamer::TaintAnalysis::propagateTaint(DestSourcePair &DS) {
 
       return false;
     }
+
     addToTaintList(SrcTi);
     removeFromTaintList(DestTi);
   }
