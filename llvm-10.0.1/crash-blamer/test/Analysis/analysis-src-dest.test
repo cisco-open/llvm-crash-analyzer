@@ -36,14 +36,16 @@
 # CHECK: dest offset: 0
 # CHECK: src: 0
 # CHECK: -----Taint List Begin------
-# CHECK: mem addr: 0
+# CHECK: $rax
+# CHECK: offset: 0
 # CHECK: ------Taint List End----
 # CHECK:   $rax = MOV64rm $rbp, 1, $noreg, -8, $noreg, debug-location !DILocation(line: 7, column: 4, scope: !{{.*}}); {{.*}}/test.c:7:4
 # CHECK: dest: $rax
 # CHECK: src: $rbp
 # CHECK: src offset: -8
 # CHECK: -----Taint List Begin------
-# CHECK: mem addr: 140734071070264
+# CHECK: $rbp
+# CHECK: offset: -8
 # CHECK: ------Taint List End----
 # CHECK:   MOV64mr $rbp, 1, $noreg, -8, $noreg, $rdi, debug-location !DILocation(line: 6, scope: !{{.*}}); {{.*}}/test.c:6
 # CHECK: dest: $rbp
@@ -69,7 +71,8 @@
 # CHECK: src: $rbp
 # CHECK: src offset: -16
 # CHECK: -----Taint List Begin------
-# CHECK: mem addr: 140734071070288
+# CHECK: $rbp
+# CHECK: offset: -16
 # CHECK: ------Taint List End----
 # CHECK:   MOV64mr $rbp, 1, $noreg, -16, $noreg, $rax, debug-location !DILocation(line: 11, column: 8, scope: !{{.*}}); {{.*}}/test.c:11:8
 # CHECK: dest: $rbp
@@ -90,7 +93,8 @@
 # CHECK: src: $rbp
 # CHECK: src offset: -8
 # CHECK: -----Taint List Begin------
-# CHECK: mem addr: 140734071070296
+# CHECK: $rbp
+# CHECK: offset: -8
 # CHECK: ------Taint List End----
 # CHECK:   MOV64mr $rbp, 1, $noreg, -8, $noreg, $rdi, debug-location !DILocation(line: 10, scope: !{{.*}}); {{.*}}/test.c:10
 # CHECK: dest: $rbp
@@ -122,14 +126,16 @@
 # CHECK: src: $rbp
 # CHECK: src offset: -8
 # CHECK: -----Taint List Begin------
-# CHECK: mem addr: 140734071070328
+# CHECK: $rbp
+# CHECK: offset: -8
 # CHECK: ------Taint List End----
 # CHECK:   MOV64mi32 $rbp, 1, $noreg, -16, $noreg, 0, debug-location !DILocation(line: 19, column: 9, scope: !{{.*}}); {{.*}}/test.c:19:9
 # CHECK: dest: $rbp
 # CHECK: dest offset: -16
 # CHECK: src: 0
 # CHECK: -----Taint List Begin------
-# CHECK: mem addr: 140734071070328
+# CHECK: $rbp
+# CHECK: offset: -8
 # CHECK: ------Taint List End----
 # CHECK:   MOV64mi32 $rbp, 1, $noreg, -8, $noreg, 0, debug-location !DILocation(line: 18, column: 8, scope: !{{.*}}); {{.*}}/test.c:18:8
 # CHECK: dest: $rbp

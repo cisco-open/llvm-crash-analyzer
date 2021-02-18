@@ -20,25 +20,24 @@ using namespace llvm;
 using TaintInfo = llvm::crash_blamer::TaintInfo;
 
 bool llvm::crash_blamer::operator==(const TaintInfo &T1, const TaintInfo &T2) {
-  if (T1.IsTaintMemAddr() != T2.IsTaintMemAddr()) {
-    // If we have resgiter $rsp comparing with memory address
-    // that has been calculated as $rsp + 0, we consider these
-    // two as the same operands by comparing base reg only.
-    if (T1.Op->getReg() == T2.Op->getReg())
+  // Consider reg and offset only, since we disabled
+  // concrete mem addr calculation.
+  if (T1.Op->getReg() == T2.Op->getReg()) {
+    if (!T1.Offset && !T2.Offset) {
       return true;
-
-    return false;
+    } else if (!T1.Offset) {
+      if (*T2.Offset == 0) {
+        return true;
+      }
+    } else if (!T2.Offset) {
+      if (*T1.Offset == 0) {
+        return true;
+      }
+    } else if (T1.Offset && T2.Offset)
+      return *T1.Offset == *T2.Offset;
   }
 
-  // For mem taint ops, compare the actuall addresses.
-  if (T1.IsTaintMemAddr() && T2.IsTaintMemAddr())
-    return T1.GetTaintMemAddr() == T2.GetTaintMemAddr();
-
-  // For the reg operands compare the reg numbers.
-  if (T1.Op->getReg() != T2.Op->getReg())
-    return false;
-
-  return true;
+  return false;
 }
 
 bool llvm::crash_blamer::operator!=(const TaintInfo &T1, const TaintInfo &T2) {
@@ -47,34 +46,11 @@ bool llvm::crash_blamer::operator!=(const TaintInfo &T1, const TaintInfo &T2) {
 
 crash_blamer::TaintAnalysis::TaintAnalysis() {}
 
+
 void crash_blamer::TaintAnalysis::calculateMemAddr(TaintInfo &Ti) {
-  if (Ti.Op->isImm() || !Ti.Offset)
-    return;
-
-  Ti.IsConcreteMemory = true;
-  // Calculate real address by reading the context of regInfo MF attr
-  // (read from corefile).
-  const MachineFunction *MF = Ti.Op->getParent()->getMF();
-  auto TRI = MF->getSubtarget().getRegisterInfo();
-  std::string RegName = TRI->getRegAsmName(Ti.Op->getReg()).lower();
-  std::string RegValue = MF->getRegValueFromCrash(RegName);
-
-  // If the value is not available just taint the base-reg.
-  if(RegValue == "") {
-    Ti.IsConcreteMemory = false;
-    return;
-  }
-
-  // Convert the std::string hex number into uint64_t.
-  uint64_t RealAddr = 0;
-  std::stringstream SS;
-  SS << std::hex << RegValue;
-  SS >> RealAddr;
-
-  // Apply the offset.
-    RealAddr += *Ti.Offset;
-
-  Ti.ConcreteMemoryAddress = RealAddr;
+  // This is temporary disabled until Concrete Reverse Execution
+  // is completely implemented.
+  return;
 }
 
 void crash_blamer::TaintAnalysis::addToTaintList(TaintInfo &Ti) {
@@ -147,18 +123,12 @@ void crash_blamer::TaintAnalysis::startTaint(DestSourcePair &DS) {
 
   SrcTi.Op = DS.Source;
   SrcTi.Offset = DS.SrcOffset;
-  if (SrcTi.Offset)
-    calculateMemAddr(SrcTi);
 
   DestTi.Op = DS.Destination;
   DestTi.Offset = DS.DestOffset;
-  if (DestTi.Offset)
-    calculateMemAddr(DestTi);
 
   Src2Ti.Op = DS.Source2;
   Src2Ti.Offset = DS.Src2Offset;
-  if (Src2Ti.Offset)
-    calculateMemAddr(Src2Ti);
 
   if (TaintList.empty()) {
    // We want to taint destination only if it is a mem operand
@@ -188,13 +158,9 @@ bool llvm::crash_blamer::TaintAnalysis::propagateTaint(DestSourcePair &DS) {
   TaintInfo SrcTi, DestTi;
   SrcTi.Op = DS.Source;
   SrcTi.Offset = DS.SrcOffset;
-  if (SrcTi.Offset)
-    calculateMemAddr(SrcTi);
 
   DestTi.Op = DS.Destination;
   DestTi.Offset = DS.DestOffset;
-  if (DestTi.Offset)
-    calculateMemAddr(DestTi);
 
   if (!DestTi.Op)
     return true;
