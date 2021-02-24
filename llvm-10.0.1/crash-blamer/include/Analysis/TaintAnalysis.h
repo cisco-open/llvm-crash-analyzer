@@ -61,13 +61,15 @@ public:
   bool runOnBlameModule(const BlameModule &BM);
   bool runOnBlameMF(const MachineFunction &MF);
 
-  bool propagateTaint(DestSourcePair &DS);
-  void startTaint(DestSourcePair &DS);
-  void removeFromTaintList(TaintInfo &Op);
-  void addToTaintList(TaintInfo &Ti);
-  void printTaintList();
+  void resetTaintList(SmallVectorImpl<TaintInfo> &TL);
+  void mergeTaintList(SmallVectorImpl<TaintInfo> &Dest_TL, SmallVectorImpl<TaintInfo> &Src_TL);
+  bool propagateTaint(DestSourcePair &DS, SmallVectorImpl<TaintInfo> &TL);
+  void startTaint(DestSourcePair &DS, SmallVectorImpl<TaintInfo> &TL);
+  void removeFromTaintList(TaintInfo &Op, SmallVectorImpl<TaintInfo> &TL);
+  void addToTaintList(TaintInfo &Ti, SmallVectorImpl<TaintInfo> &TL);
+  void printTaintList(SmallVectorImpl<TaintInfo> &TL);
   void printDestSrcInfo(DestSourcePair &DS);
-  TaintInfo isTainted(TaintInfo &Op);
+  TaintInfo isTainted(TaintInfo &Op, SmallVectorImpl<TaintInfo> &TL);
   void calculateMemAddr(TaintInfo &Ti);
 };
 

@@ -563,12 +563,18 @@ X86InstrInfo::getDestAndSrc(const MachineInstr &MI) const {
       case X86::OR16mr:
       case X86::OR32mr:
       case X86::OR64mr:
+      case X86::ADD8mr:
       case X86::ADD32mr:
       case X86::ADD64mr: {
       const MachineOperand *Src = &(MI.getOperand(5));
       if (!getMemOperandWithOffset(MI, BaseOp, Offset, TRI))
         return None;
       return DestSourcePair{*BaseOp, Offset, *Src};
+    } case X86::ADD64i32: {
+      const MachineOperand *Dest = &(MI.getOperand(3));
+      const MachineOperand *Src = &(MI.getOperand(0));
+      const MachineOperand *Src2 = &(MI.getOperand(1));
+      return DestSourcePair{Dest, Src, None, None, Src2, None, nullptr, 0, 0};
     } case X86::ADD32ri8:
       case X86::ADD64ri8:
       case X86::SUB64ri8:
