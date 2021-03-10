@@ -7,6 +7,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "Analysis/TaintAnalysis.h"
+#include "Analysis/TaintDataFlowGraph.h"
 #include "Analysis/MachineLocTracking.h"
 
 #include "llvm/ADT/DenseMap.h"
@@ -24,7 +25,8 @@ using TaintInfo = llvm::crash_blamer::TaintInfo;
 bool llvm::crash_blamer::operator==(const TaintInfo &T1, const TaintInfo &T2) {
   // Consider reg and offset only, since we disabled
   // concrete mem addr calculation.
-  if (T1.Op->getReg() == T2.Op->getReg()) {
+  if (T1.Op->isReg() && T2.Op->isReg() &&
+      (T1.Op->getReg() == T2.Op->getReg())) {
     if (!T1.Offset && !T2.Offset) {
       return true;
     } else if (!T1.Offset) {
@@ -44,6 +46,26 @@ bool llvm::crash_blamer::operator==(const TaintInfo &T1, const TaintInfo &T2) {
 
 bool llvm::crash_blamer::operator!=(const TaintInfo &T1, const TaintInfo &T2) {
   return !operator==(T1, T2);
+}
+
+bool llvm::crash_blamer::operator<(const TaintInfo &T1, const TaintInfo &T2) {
+  if (T1.Op->isReg() && T2.Op->isReg() &&
+      T1.Op->getReg() < T2.Op->getReg())
+    return true;
+
+  if (T1.Op->isReg() && T2.Op->isReg() &&
+      T1.Op->getReg() == T2.Op->getReg()) {
+    if (T1.Offset && T2.Offset)
+      return *T1.Offset < *T2.Offset;
+
+    if (T1.Offset && *T1.Offset < 0)
+      return true;
+
+    if (T2.Offset && ((*T2.Offset < 0) || (*T2.Offset ==0)))
+      return false;
+  }
+
+  return false;
 }
 
 crash_blamer::TaintAnalysis::TaintAnalysis() {}
@@ -148,7 +170,9 @@ void crash_blamer::TaintAnalysis::printDestSrcInfo(DestSourcePair &DestSrc) {
 }
 
 void crash_blamer::TaintAnalysis::startTaint(DestSourcePair &DS,
-                                             SmallVectorImpl<TaintInfo> &TL) {
+                                             SmallVectorImpl<TaintInfo> &TL,
+                                             const MachineInstr &MI,
+                                             TaintDataFlowGraph &TaintDFG) {
   TaintInfo SrcTi, DestTi, Src2Ti;
 
   SrcTi.Op = DS.Source;
@@ -162,25 +186,49 @@ void crash_blamer::TaintAnalysis::startTaint(DestSourcePair &DS,
 
   // This condition is true only for frame #0 in back trace
   if (TaintList.empty()) {
+    Node *cNode = new Node (0, nullptr, DestTi, true);
+    std::shared_ptr<Node> crashNode (cNode);
+    const auto &MF = MI.getParent()->getParent();
     // We want to taint destination only if it is a mem operand
-    if (DestTi.Op && DestTi.Offset)
+    if (DestTi.Op && DestTi.Offset) {
+      Node *sNode = new Node(MF->getCrashOrder(), &MI, DestTi, false);
+      std::shared_ptr<Node> startTaintNode(sNode);
+      TaintDFG.addEdge(crashNode, startTaintNode, EdgeType::Dereference);
+      TaintDFG.updateLastTaintedNode(DestTi, startTaintNode);
       addToTaintList(DestTi, TL);
-    if (SrcTi.Op)
+    }
+
+    // FIXME: This should be checking if src is a mem op somehow,
+    // by checking if src2 is an index register.
+    if (SrcTi.Op && SrcTi.Op->isReg()) {
+      Node *sNode2 = new Node(MF->getCrashOrder(), &MI, SrcTi, false);
+      std::shared_ptr<Node> startTaintNode(sNode2);
+      TaintDFG.addEdge(crashNode, startTaintNode, EdgeType::Dereference);
+      TaintDFG.updateLastTaintedNode(SrcTi, startTaintNode);
       addToTaintList(SrcTi, TL);
-    if (Src2Ti.Op)
+    }
+
+    if (Src2Ti.Op && Src2Ti.Op->isReg()) {
+      Node *sNode3 = new Node(MF->getCrashOrder(), &MI, Src2Ti, false);
+      std::shared_ptr<Node> startTaintNode(sNode3);
+      TaintDFG.addEdge(crashNode, startTaintNode, EdgeType::Dereference);
+      TaintDFG.updateLastTaintedNode(Src2Ti, startTaintNode);
       addToTaintList(Src2Ti, TL);
+    }
+
     printTaintList(TL);
   } else {
     // frame #1 onwards
     mergeTaintList(TL, TaintList);
-    propagateTaint(DS, TL);
+    propagateTaint(DS, TL, MI, TaintDFG);
   }
 }
 
 // Return true if taint is propagated.
 // Return false if taint is terminated.
 bool llvm::crash_blamer::TaintAnalysis::propagateTaint(
-    DestSourcePair &DS, SmallVectorImpl<TaintInfo> &TL) {
+    DestSourcePair &DS, SmallVectorImpl<TaintInfo> &TL,
+    const MachineInstr &MI, TaintDataFlowGraph &TaintDFG) {
   // If empty taint list, we do nothing and we continue to
   // to propagate the taint along the other paths
   if (TL.empty()) {
@@ -230,7 +278,15 @@ bool llvm::crash_blamer::TaintAnalysis::propagateTaint(
       ConstantFound = true;
   }
 
+  const auto &MF = MI.getParent()->getParent();
   if (ConstantFound) {
+    Node *constantNode = new Node(MF->getCrashOrder(), &MI, SrcTi, false, true);
+    std::shared_ptr<Node> constNode(constantNode);
+    auto &LastTaintedNodeForTheOp = TaintDFG.lastTaintedNode[DestTi];
+    TaintDFG.addEdge(LastTaintedNodeForTheOp, constNode);
+    // FIXME: The LastTaintedNode won't be used any more, no need for this line?
+    TaintDFG.updateLastTaintedNode(SrcTi, constNode);
+
     // We have reached a terminating condition where
     // dest is tainted and src is a constant operand.
     removeFromTaintList(DestTi, TL);
@@ -254,6 +310,18 @@ bool llvm::crash_blamer::TaintAnalysis::propagateTaint(
   }
 
   addToTaintList(SrcTi, TL);
+
+  Node *newNode = new Node(MF->getCrashOrder(), &MI, SrcTi, false);
+  std::shared_ptr<Node> newTaintNode(newNode);
+  // TODO: Check if this should be a deref edge:
+  //       if we propagate taint from a mem addr (e.g. rbx + 10)
+  //       to its base reg (e.g. rbx).
+  assert(TaintDFG.lastTaintedNode.count(DestTi) &&
+         "Taint Op must be reached already");
+  auto &LastTaintedNodeForTheOp = TaintDFG.lastTaintedNode[DestTi];
+  TaintDFG.addEdge(LastTaintedNodeForTheOp, newTaintNode);
+  TaintDFG.updateLastTaintedNode(SrcTi, newTaintNode);
+
   removeFromTaintList(DestTi, TL);
 
   printTaintList(TL);
@@ -262,7 +330,8 @@ bool llvm::crash_blamer::TaintAnalysis::propagateTaint(
 
 // Return true if taint is terminated.
 // Return false otherwise.
-bool crash_blamer::TaintAnalysis::runOnBlameMF(const MachineFunction &MF) {
+bool crash_blamer::TaintAnalysis::runOnBlameMF(const MachineFunction &MF,
+  TaintDataFlowGraph &TaintDFG) {
   // As a first step, run the forward analysis by tracking values
   // in the machine locations.
   MachineLocTracking MLocTracking;
@@ -322,7 +391,7 @@ bool crash_blamer::TaintAnalysis::runOnBlameMF(const MachineFunction &MF) {
           mergeTaintList(TL_Mbb, TaintList);
           continue;
         }
-        startTaint(*DestSrc, TL_Mbb);
+        startTaint(*DestSrc, TL_Mbb, MI, TaintDFG);
         continue;
       }
 
@@ -352,7 +421,7 @@ bool crash_blamer::TaintAnalysis::runOnBlameMF(const MachineFunction &MF) {
       printDestSrcInfo(*DestSrc);
 
       // Backward Taint Analysis.
-      bool TaintResult = propagateTaint(*DestSrc, TL_Mbb);
+      bool TaintResult = propagateTaint(*DestSrc, TL_Mbb, MI, TaintDFG);
       if (!TaintResult)
         Result = true;
     }
@@ -367,6 +436,8 @@ bool crash_blamer::TaintAnalysis::runOnBlameMF(const MachineFunction &MF) {
 bool crash_blamer::TaintAnalysis::runOnBlameModule(const BlameModule &BM) {
   bool AnalysisStarted = false;
   bool Result = false;
+
+  TaintDataFlowGraph TaintDFG;
 
   // Run the analysis on each blame function.
   for (auto &BF : BM) {
@@ -386,13 +457,17 @@ bool crash_blamer::TaintAnalysis::runOnBlameModule(const BlameModule &BM) {
     }
 
     LLVM_DEBUG(llvm::dbgs() << "### MF: " << BF.Name << "\n";);
-    if (runOnBlameMF(*(BF.MF))) {
+    if (runOnBlameMF(*(BF.MF), TaintDFG)) {
       LLVM_DEBUG(dbgs() << "\nTaint Analysis done.\n");
       Result = Result || true;
-      if (TaintList.empty())
+      if (TaintList.empty()) {
+        TaintDFG.dump();
         return true;
+      }
     }
   }
+
+  TaintDFG.dump();
   // Currently we report SUCCESS even if one Blame Function is found.
   // Ideally SUCCESS is only when TaintList.empty() is true.
   return Result;
