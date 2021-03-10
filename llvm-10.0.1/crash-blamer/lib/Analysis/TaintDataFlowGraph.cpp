@@ -8,8 +8,6 @@
 
 #include "Analysis/TaintDataFlowGraph.h"
 
-#include <algorithm>
-
 #define DEBUG_TYPE "taint-dfg"
 
 void TaintDataFlowGraph::addNode(std::shared_ptr<Node> n) {
