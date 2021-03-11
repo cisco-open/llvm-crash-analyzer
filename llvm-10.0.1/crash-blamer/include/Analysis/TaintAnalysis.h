@@ -6,6 +6,9 @@
 //
 //===----------------------------------------------------------------------===//
 
+#ifndef TAINTANALYSIS_
+#define TAINTANALYSIS_
+
 #include "Decompiler/Decompiler.h"
 
 #include "llvm/ADT/SmallVector.h"
@@ -23,6 +26,9 @@
 #include "llvm/Pass.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/raw_ostream.h"
+
+struct Node;
+class TaintDataFlowGraph;
 
 namespace llvm {
 namespace crash_blamer {
@@ -49,6 +55,7 @@ struct TaintInfo {
 
   friend bool operator==(const TaintInfo &T1, const TaintInfo &T2);
   friend bool operator!=(const TaintInfo &T1, const TaintInfo &T2);
+  friend bool operator<(const TaintInfo &T1, const TaintInfo &T2);
 };
 
 class TaintAnalysis {
@@ -59,12 +66,14 @@ public:
   TaintAnalysis();
 
   bool runOnBlameModule(const BlameModule &BM);
-  bool runOnBlameMF(const MachineFunction &MF);
+  bool runOnBlameMF(const MachineFunction &MF, TaintDataFlowGraph &TaintDFG);
 
   void resetTaintList(SmallVectorImpl<TaintInfo> &TL);
   void mergeTaintList(SmallVectorImpl<TaintInfo> &Dest_TL, SmallVectorImpl<TaintInfo> &Src_TL);
-  bool propagateTaint(DestSourcePair &DS, SmallVectorImpl<TaintInfo> &TL);
-  void startTaint(DestSourcePair &DS, SmallVectorImpl<TaintInfo> &TL);
+  bool propagateTaint(DestSourcePair &DS, SmallVectorImpl<TaintInfo> &TL,
+                      const MachineInstr &MI, TaintDataFlowGraph &TaintDFG);
+  void startTaint(DestSourcePair &DS, SmallVectorImpl<TaintInfo> &TL,
+                  const MachineInstr &MI, TaintDataFlowGraph &TaintDFG);
   void removeFromTaintList(TaintInfo &Op, SmallVectorImpl<TaintInfo> &TL);
   void addToTaintList(TaintInfo &Ti, SmallVectorImpl<TaintInfo> &TL);
   void printTaintList(SmallVectorImpl<TaintInfo> &TL);
@@ -75,3 +84,5 @@ public:
 
 } // end crash_blamer namespace
 } // end llvm namespace
+
+#endif

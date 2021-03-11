@@ -8,6 +8,7 @@ set(LLVM_LINK_COMPONENTS
 llvm_add_library(CrashBlamerTaintAnalysis
   MachineLocTracking.cpp
   TaintAnalysis.cpp
+  TaintDataFlowGraph.cpp
   DEPENDS
     intrinsics_gen
   )
