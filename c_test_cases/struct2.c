@@ -1,3 +1,4 @@
+// a case where rax is tainted and eax is modified. propagation is lost
 #include <stdio.h>
 #include <stdlib.h>
 
