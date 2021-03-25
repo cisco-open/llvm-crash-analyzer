@@ -25,22 +25,21 @@ using TaintInfo = llvm::crash_blamer::TaintInfo;
 bool llvm::crash_blamer::operator==(const TaintInfo &T1, const TaintInfo &T2) {
   // Consider reg and offset only, since we disabled
   // concrete mem addr calculation.
-  if (T1.Op->isReg() && T2.Op->isReg() &&
+  if ((T1.Op->isReg() && T2.Op->isReg()) &&
       (T1.Op->getReg() == T2.Op->getReg())) {
-    if (!T1.Offset && !T2.Offset) {
-      return true;
-    } else if (!T1.Offset) {
-      if (*T2.Offset == 0) {
-        return true;
-      }
-    } else if (!T2.Offset) {
-      if (*T1.Offset == 0) {
-        return true;
-      }
-    } else if (T1.Offset && T2.Offset)
-      return *T1.Offset == *T2.Offset;
+     // Check if both operands have an offset
+     if (T1.Offset && T2.Offset) {
+       const MachineFunction *MF = T1.Op->getParent()->getMF();
+       auto TRI = MF->getSubtarget().getRegisterInfo();
+       std::string RegName = TRI->getRegAsmName(T1.Op->getReg()).lower();
+       // Compare offsets only if they point to a stack location
+       if (RegName == "rsp" || RegName == "rbp") {
+	 return *T1.Offset == *T2.Offset;
+       }
+     }
+     else
+       return true;
   }
-
   return false;
 }
 
@@ -215,13 +214,12 @@ void crash_blamer::TaintAnalysis::startTaint(DestSourcePair &DS,
       TaintDFG.updateLastTaintedNode(Src2Ti, startTaintNode);
       addToTaintList(Src2Ti, TL);
     }
-
-    printTaintList(TL);
   } else {
     // frame #1 onwards
     mergeTaintList(TL, TaintList);
     propagateTaint(DS, TL, MI, TaintDFG);
   }
+  printTaintList(TL);
 }
 
 // Return true if taint is propagated.
