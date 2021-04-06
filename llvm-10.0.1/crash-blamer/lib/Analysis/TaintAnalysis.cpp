@@ -25,20 +25,37 @@ using TaintInfo = llvm::crash_blamer::TaintInfo;
 bool llvm::crash_blamer::operator==(const TaintInfo &T1, const TaintInfo &T2) {
   // Consider reg and offset only, since we disabled
   // concrete mem addr calculation.
-  if ((T1.Op->isReg() && T2.Op->isReg()) &&
-      (T1.Op->getReg() == T2.Op->getReg())) {
-     // Check if both operands have an offset
-     if (T1.Offset && T2.Offset) {
-       const MachineFunction *MF = T1.Op->getParent()->getMF();
-       auto TRI = MF->getSubtarget().getRegisterInfo();
-       std::string RegName = TRI->getRegAsmName(T1.Op->getReg()).lower();
-       // Compare offsets only if they point to a stack location
-       if (RegName == "rsp" || RegName == "rbp") {
-	 return *T1.Offset == *T2.Offset;
-       }
-     }
-     else
-       return true;
+
+  // Both operands needs to be reg operands
+  if (!T1.Op->isReg() || !T2.Op->isReg())
+    return false;
+
+  const MachineFunction *MF = T1.Op->getParent()->getMF();
+  auto TRI = MF->getSubtarget().getRegisterInfo();
+
+  if (T1.Op->getReg() == T2.Op->getReg()) {
+    // Check if both operands have an offset
+    if (T1.Offset && T2.Offset) {
+      const MachineFunction *MF = T1.Op->getParent()->getMF();
+      auto TRI = MF->getSubtarget().getRegisterInfo();
+      std::string RegName = TRI->getRegAsmName(T1.Op->getReg()).lower();
+      // Compare offsets only if they point to a stack location
+      if (RegName == "rsp" || RegName == "rbp") {
+        return *T1.Offset == *T2.Offset;
+      }
+    } else
+      return true;
+  }
+
+  // Check if the registers are alias to each other
+  // eax and rax, for example
+  for (MCRegAliasIterator RAI(T1.Op->getReg(), TRI, true); RAI.isValid();
+       ++RAI) {
+    if ((*RAI).id() == T2.Op->getReg()) {
+      LLVM_DEBUG(dbgs() << "\n spl case "
+                        << TRI->getRegAsmName(T1.Op->getReg()).lower());
+      return true;
+    }
   }
   return false;
 }
