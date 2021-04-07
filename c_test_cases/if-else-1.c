@@ -1,3 +1,5 @@
+// Pointer arithmetic -- cannot find the blame
+
 #include <stdio.h>
 
 char *foo = "hello";

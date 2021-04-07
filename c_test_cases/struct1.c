@@ -1,4 +1,5 @@
 // Retracer cannot find the blame
+// concrete mem address may find the correct blame line
 #include <stdio.h>
 struct node {
 
@@ -14,8 +15,8 @@ int foo(struct node *s) {
 int main() {
 
 struct node n;
-n.a = 10;
 n.c = 0; // blame
+n.a = 10;
 int x = foo(&n);
 printf("\n x = %d", x);
 return 0;

@@ -36,6 +36,7 @@ void TaintDataFlowGraph::getBlameFn() {
 
 void TaintDataFlowGraph::dump() {
   LLVM_DEBUG(llvm::dbgs() << "\n\n === Taint Data Flow Graph === \n";
+  llvm::dbgs() << "\n\n ---> Assignment Edge; ***> Deref Edge \n";
   for (auto &node : Nodes) {
     auto &NodeAdjs = adjacencies[node.get()];
     if (!NodeAdjs.size()) continue;

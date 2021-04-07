@@ -1,3 +1,4 @@
+// Success
 #include <stdio.h>
 
 char *foo = "hello";
