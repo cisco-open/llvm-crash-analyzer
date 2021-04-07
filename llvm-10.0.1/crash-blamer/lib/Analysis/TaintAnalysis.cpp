@@ -52,8 +52,6 @@ bool llvm::crash_blamer::operator==(const TaintInfo &T1, const TaintInfo &T2) {
   for (MCRegAliasIterator RAI(T1.Op->getReg(), TRI, true); RAI.isValid();
        ++RAI) {
     if ((*RAI).id() == T2.Op->getReg()) {
-      LLVM_DEBUG(dbgs() << "\n spl case "
-                        << TRI->getRegAsmName(T1.Op->getReg()).lower());
       return true;
     }
   }
