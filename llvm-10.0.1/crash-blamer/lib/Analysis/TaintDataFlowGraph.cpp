@@ -30,33 +30,33 @@ void TaintDataFlowGraph::updateLastTaintedNode(TaintInfo Op,
   lastTaintedNode[Op] = N;
 }
 
-void TaintDataFlowGraph::getBlameFn() {
-  // All nodes at the max level (with the max length up to deref edge).
-  std::unordered_map<unsigned, llvm::SmallVector<Node *, 8>> blameNodes;
-  unsigned maxLevel = 0;
+// Using DFS.
+void TaintDataFlowGraph::findBlameFunction(Node *v, unsigned level) {
+  visited[v] = true;
+  level++;
 
-  unsigned nodeReachedLvl = 0;
-  for (auto &node : Nodes) {
-    auto &NodeAdjs = adjacencies[node.get()];
-    if (!NodeAdjs.size()) continue;
+  auto &NodeAdjs = adjacencies[v];
+  if (!NodeAdjs.size()) return;
 
-    for (auto &a : NodeAdjs) {
-      auto &adjNode = a.first;
+  for (auto &a : NodeAdjs) {
+    auto &adjNode = a.first;
+    if (!visited[adjNode]) {
       auto &edgeType = a.second;
       if (edgeType == EdgeType::Dereference) {
-        if (nodeReachedLvl > maxLevel) {
-          maxLevel = nodeReachedLvl;
-          blameNodes[maxLevel].push_back(adjNode);
+        if (level > MaxLevel) {
+          MaxLevel = level;
+          blameNodes[MaxLevel].push_back(adjNode);
         }
-      } else {
-        nodeReachedLvl++;
       }
+      findBlameFunction(adjNode, level);
     }
-  }
+ }
+}
 
-  LLVM_DEBUG(llvm::dbgs() << "Blame Nodes:\n";
+void TaintDataFlowGraph::printBlameFunction() {
+    LLVM_DEBUG(llvm::dbgs() << "Blame Nodes:\n";
     StringRef BlameFn = "";
-    auto &BlameNodes = blameNodes[maxLevel];
+    auto &BlameNodes = blameNodes[MaxLevel];
     for (auto &a : BlameNodes) {
       a->print();
       llvm::dbgs() << "\nBlame line: " << a->MI->getDebugLoc().getLine()

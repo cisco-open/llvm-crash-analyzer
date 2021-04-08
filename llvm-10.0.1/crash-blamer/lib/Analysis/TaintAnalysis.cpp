@@ -487,14 +487,20 @@ bool crash_blamer::TaintAnalysis::runOnBlameModule(const BlameModule &BM) {
       Result = Result || true;
       if (TaintList.empty()) {
         TaintDFG.dump();
-        TaintDFG.getBlameFn();
+        //TaintDFG.getBlameFn();
+        auto crashNode = TaintDFG.getCrashNode();
+        TaintDFG.findBlameFunction(crashNode, 0);
+        TaintDFG.printBlameFunction();
         return true;
       }
     }
   }
 
   TaintDFG.dump();
-  TaintDFG.getBlameFn();
+  //TaintDFG.getBlameFn();
+  auto crashNode = TaintDFG.getCrashNode();
+  TaintDFG.findBlameFunction(crashNode, 0);
+  TaintDFG.printBlameFunction();
 
   // Currently we report SUCCESS even if one Blame Function is found.
   // Ideally SUCCESS is only when TaintList.empty() is true.
