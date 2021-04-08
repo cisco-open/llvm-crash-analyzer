@@ -110,7 +110,7 @@ class TaintDataFlowGraph {
 
   void findBlameFunction(Node *v, unsigned level);
   void printBlameFunction();
-  
+
   void dump();
 };
 

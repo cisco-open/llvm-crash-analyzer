@@ -487,7 +487,6 @@ bool crash_blamer::TaintAnalysis::runOnBlameModule(const BlameModule &BM) {
       Result = Result || true;
       if (TaintList.empty()) {
         TaintDFG.dump();
-        //TaintDFG.getBlameFn();
         auto crashNode = TaintDFG.getCrashNode();
         TaintDFG.findBlameFunction(crashNode, 0);
         TaintDFG.printBlameFunction();
@@ -497,7 +496,6 @@ bool crash_blamer::TaintAnalysis::runOnBlameModule(const BlameModule &BM) {
   }
 
   TaintDFG.dump();
-  //TaintDFG.getBlameFn();
   auto crashNode = TaintDFG.getCrashNode();
   TaintDFG.findBlameFunction(crashNode, 0);
   TaintDFG.printBlameFunction();
