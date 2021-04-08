@@ -22,6 +22,8 @@ using namespace llvm;
 
 using TaintInfo = llvm::crash_blamer::TaintInfo;
 
+unsigned Node::NextID = 0;
+
 bool llvm::crash_blamer::operator==(const TaintInfo &T1, const TaintInfo &T2) {
   // Consider reg and offset only, since we disabled
   // concrete mem addr calculation.

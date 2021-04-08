@@ -26,17 +26,24 @@ struct Node {
   unsigned frameNum;
   const MachineInstr *MI;
   TaintInfo TaintOp;
+  unsigned ID;
+  static unsigned NextID;
   bool IsCrashNode;
   bool IsContant;
 
   Node(unsigned f, const MachineInstr *I, TaintInfo T, bool b,
        bool isCnst = false)
-      : frameNum(f), MI(I), TaintOp(T), IsCrashNode(b), IsContant(isCnst) {}
+      : frameNum(f), MI(I), TaintOp(T), ID(NextID++),
+      IsCrashNode(b), IsContant(isCnst) {}
+
+  unsigned getID() const { return ID; }
 
   void print() {
     if (IsCrashNode) {
       llvm::dbgs() << "{crash-node}";
     } else {
+      unsigned id = getID();
+      llvm::dbgs() << "!" << id;
       llvm::dbgs() << "{" << frameNum << "; ";
       if (MI)
         MI->print(llvm::dbgs(), /*IsStandalone*/ true, /*SkipOpers*/ false,
