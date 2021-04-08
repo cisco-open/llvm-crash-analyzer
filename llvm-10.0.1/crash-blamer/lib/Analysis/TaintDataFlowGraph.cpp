@@ -31,12 +31,50 @@ void TaintDataFlowGraph::updateLastTaintedNode(TaintInfo Op,
 }
 
 void TaintDataFlowGraph::getBlameFn() {
-  // TODO: Implement this.
+  // All nodes at the max level (with the max length up to deref edge).
+  std::unordered_map<unsigned, llvm::SmallVector<Node *, 8>> blameNodes;
+  unsigned maxLevel = 0;
+
+  unsigned nodeReachedLvl = 0;
+  for (auto &node : Nodes) {
+    auto &NodeAdjs = adjacencies[node.get()];
+    if (!NodeAdjs.size()) continue;
+
+    for (auto &a : NodeAdjs) {
+      auto &adjNode = a.first;
+      auto &edgeType = a.second;
+      if (edgeType == EdgeType::Dereference) {
+        if (nodeReachedLvl > maxLevel) {
+          maxLevel = nodeReachedLvl;
+          blameNodes[maxLevel].push_back(adjNode);
+        }
+      } else {
+        nodeReachedLvl++;
+      }
+    }
+  }
+
+  LLVM_DEBUG(llvm::dbgs() << "Blame Nodes:\n";
+    StringRef BlameFn = "";
+    auto &BlameNodes = blameNodes[maxLevel];
+    for (auto &a : BlameNodes) {
+      a->print();
+      llvm::dbgs() << "\nBlame line: " << a->MI->getDebugLoc().getLine()
+                   << "\n";
+      if (BlameFn == "")
+        BlameFn = a->MI->getMF()->getName();
+      else {
+        assert((BlameFn == a->MI->getMF()->getName()) &&
+               "All blame nodes should come from the same fn.");
+      }
+    }
+    llvm::dbgs() << "****Blame function: " << BlameFn << '\n';
+  );
 }
 
 void TaintDataFlowGraph::dump() {
   LLVM_DEBUG(llvm::dbgs() << "\n\n === Taint Data Flow Graph === \n";
-  llvm::dbgs() << "\n\n ---> Assignment Edge; ***> Deref Edge \n";
+  llvm::dbgs() << "---> Assignment Edge; ***> Deref Edge \n";
   for (auto &node : Nodes) {
     auto &NodeAdjs = adjacencies[node.get()];
     if (!NodeAdjs.size()) continue;

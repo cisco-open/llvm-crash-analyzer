@@ -85,6 +85,10 @@ struct DestSourcePair {
   MachineOperand *DestScaledIndex = nullptr;
   MachineOperand *DestOffsetReg = nullptr;
 
+  // mov (%rax,%rcx,4),%esi  ==> esi = rax + rcx * 4
+  MachineOperand *SrcScaledIndex = nullptr;
+  MachineOperand *SrcOffsetReg = nullptr;
+
   // Size Factor used in Array Access
   int64_t SizeFactor = 0;
 
@@ -108,13 +112,17 @@ struct DestSourcePair {
   DestSourcePair(const MachineOperand *Dest, const MachineOperand *Src,
 		 Optional<int64_t> DestOff, Optional<int64_t> SrcOff,
 		 const MachineOperand *Src2, Optional<int64_t> Src2Off,
-                 MachineOperand *ScaledIndex, MachineOperand *DstOffset,
-		 int64_t Size)
+         MachineOperand *DestScaledIndex, MachineOperand *DstOffset,
+		 int64_t Size,
+         MachineOperand *SrcScaledIndex = nullptr,
+         MachineOperand *SrcOffsetReg = nullptr)
       : Destination(Dest), Source (Src),
 	DestOffset(DestOff), SrcOffset(SrcOff),
 	Source2(Src2), Src2Offset(Src2Off),
-	DestScaledIndex(ScaledIndex),
+	DestScaledIndex(DestScaledIndex),
 	DestOffsetReg(DstOffset),
+	SrcScaledIndex(SrcScaledIndex),
+	SrcOffsetReg(SrcOffsetReg),
 	SizeFactor(Size) {}
 };
 
