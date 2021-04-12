@@ -26,17 +26,24 @@ struct Node {
   unsigned frameNum;
   const MachineInstr *MI;
   TaintInfo TaintOp;
+  unsigned ID;
+  static unsigned NextID;
   bool IsCrashNode;
   bool IsContant;
 
   Node(unsigned f, const MachineInstr *I, TaintInfo T, bool b,
        bool isCnst = false)
-      : frameNum(f), MI(I), TaintOp(T), IsCrashNode(b), IsContant(isCnst) {}
+      : frameNum(f), MI(I), TaintOp(T), ID(NextID++),
+      IsCrashNode(b), IsContant(isCnst) {}
+
+  unsigned getID() const { return ID; }
 
   void print() {
     if (IsCrashNode) {
       llvm::dbgs() << "{crash-node}";
     } else {
+      unsigned id = getID();
+      llvm::dbgs() << "!" << id;
       llvm::dbgs() << "{" << frameNum << "; ";
       if (MI)
         MI->print(llvm::dbgs(), /*IsStandalone*/ true, /*SkipOpers*/ false,
@@ -80,6 +87,14 @@ class TaintDataFlowGraph {
   // Represents adjacence map.
   std::map<Node *, SmallVector<EdgeToNode, 8>> adjacencies;
 
+  // Used for graph algorithms.
+  std::map<Node *, bool> visited;
+
+  // Used for finding blame node.
+  std::unordered_map<unsigned, llvm::SmallVector<Node *, 8>> blameNodes;
+
+  unsigned MaxLevel = 0;
+
  public:
   // Map operand to the latest taint node.
   // FIXME: This should be private.
@@ -91,8 +106,11 @@ class TaintDataFlowGraph {
 
   void updateLastTaintedNode(TaintInfo Op,
                              std::shared_ptr<Node> N);
+  Node *getCrashNode() { return Nodes[0].get(); }
 
-  void getBlameFn();
+  void findBlameFunction(Node *v, unsigned level);
+  void printBlameFunction();
+
   void dump();
 };
 

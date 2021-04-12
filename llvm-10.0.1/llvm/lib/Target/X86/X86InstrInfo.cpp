@@ -546,9 +546,18 @@ X86InstrInfo::getDestAndSrc(const MachineInstr &MI) const {
       case X86::XOR32rm:
       case X86::XOR64rm: {
       const MachineOperand *Dest = &(MI.getOperand(0));
-      if (!getMemOperandWithOffset(MI, BaseOp, Offset, TRI))
-        return None;
-      return DestSourcePair{*Dest, *BaseOp, Offset};
+      if (getMemOperandWithOffset(MI, BaseOp, Offset, TRI))
+        return DestSourcePair{*Dest, *BaseOp, Offset};;
+
+      // This should be scaled indexing addressing mode.
+      // $esi = crash-start MOV32rm $rax, 4, $rcx, 0, $noreg
+      const MachineOperand *Src = &(MI.getOperand(1));
+      const MachineOperand *Dst = &(MI.getOperand(0));
+      MachineOperand *SrcScaledIndex =
+          const_cast<MachineOperand *>(&(MI.getOperand(3)));
+
+      return DestSourcePair{Dst, Src, None, None, nullptr, None, nullptr, nullptr, 0,
+                            SrcScaledIndex};
     } case X86::MOV8mr:
       case X86::MOV16mr:
       case X86::MOV32mr:
