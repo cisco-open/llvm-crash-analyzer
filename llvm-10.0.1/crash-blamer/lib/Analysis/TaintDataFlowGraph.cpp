@@ -8,6 +8,8 @@
 
 #include "Analysis/TaintDataFlowGraph.h"
 
+#include "llvm/IR/DebugInfoMetadata.h"
+
 #define DEBUG_TYPE "taint-dfg"
 
 void TaintDataFlowGraph::addNode(std::shared_ptr<Node> n) {
@@ -53,23 +55,56 @@ void TaintDataFlowGraph::findBlameFunction(Node *v, unsigned level) {
  }
 }
 
-void TaintDataFlowGraph::printBlameFunction() {
+bool TaintDataFlowGraph::printBlameFunction() {
+    bool Res = false;
     LLVM_DEBUG(llvm::dbgs() << "Blame Nodes:\n";
     StringRef BlameFn = "";
+    const MachineFunction *MF = nullptr;
     auto &BlameNodes = blameNodes[MaxLevel];
     for (auto &a : BlameNodes) {
       a->print();
       llvm::dbgs() << "\nBlame line: " << a->MI->getDebugLoc().getLine()
                    << "\n";
-      if (BlameFn == "")
+      if (BlameFn == "") {
         BlameFn = a->MI->getMF()->getName();
-      else {
+        MF = a->MI->getMF();
+      } else {
         assert((BlameFn == a->MI->getMF()->getName()) &&
                "All blame nodes should come from the same fn.");
       }
     }
-    llvm::dbgs() << "****Blame function: " << BlameFn << '\n';
+    if (MF) {
+      llvm::dbgs() << "****Blame function: " << BlameFn << '\n';
+      if (MF->getFunction().getSubprogram())
+        llvm::dbgs() << "****From file: " <<
+          MF->getFunction().getSubprogram()->getFile()->getFilename() << "\n";
+    }
   );
+
+  StringRef BlameFn = "";
+  const MachineFunction *MF = nullptr;
+  auto &BlameNodes = blameNodes[MaxLevel];
+  for (auto &a : BlameNodes) {
+    if (BlameFn == "") {
+      BlameFn = a->MI->getMF()->getName();
+      MF = a->MI->getMF();
+    } else {
+      assert((BlameFn == a->MI->getMF()->getName()) &&
+             "All blame nodes should come from the same fn.");
+    }
+  }
+
+  if (MF) {
+    llvm::outs() << "\nBlame Function is " << BlameFn << '\n';
+    if (MF->getFunction().getSubprogram())
+      llvm::outs() << "From File " <<
+        MF->getFunction().getSubprogram()->getFile()->getFilename() << "\n";
+    Res = true;
+  } else {
+    llvm::outs() << "Failed to find Blame function\n";
+  }
+
+  return Res;
 }
 
 void TaintDataFlowGraph::dump() {

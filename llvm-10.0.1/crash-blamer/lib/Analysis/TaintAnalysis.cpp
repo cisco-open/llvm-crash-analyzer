@@ -306,22 +306,6 @@ bool llvm::crash_blamer::TaintAnalysis::propagateTaint(
     // We have reached a terminating condition where
     // dest is tainted and src is a constant operand.
     removeFromTaintList(DestTi, TL);
-    LLVM_DEBUG(dbgs() << "\n******** Blame MI is here\n");
-    LLVM_DEBUG(DS.Destination->getParent()->dump());
-    llvm::outs() << "\nBlame Function is "
-                 << DS.Destination->getParent()->getMF()->getName();
-    if (DS.Destination->getParent()->getDebugLoc()) {
-      llvm::outs() << "\nAt Line Number "
-                   << DS.Destination->getParent()->getDebugLoc().getLine();
-      llvm::outs() << ", from file "
-                   << DS.Destination->getParent()->getDebugLoc()->getFilename();
-    } else {
-      llvm::outs()
-          << "\nWARNING: Please compile with -g to get full line info.";
-      llvm::outs() << "\nBlame instruction is ";
-      DS.Destination->getParent()->print(llvm::outs());
-    }
-
     return false;
   }
 
@@ -484,13 +468,12 @@ bool crash_blamer::TaintAnalysis::runOnBlameModule(const BlameModule &BM) {
     LLVM_DEBUG(llvm::dbgs() << "### MF: " << BF.Name << "\n";);
     if (runOnBlameMF(*(BF.MF), TaintDFG)) {
       LLVM_DEBUG(dbgs() << "\nTaint Analysis done.\n");
-      Result = Result || true;
       if (TaintList.empty()) {
         TaintDFG.dump();
         auto crashNode = TaintDFG.getCrashNode();
         TaintDFG.findBlameFunction(crashNode, 0);
-        TaintDFG.printBlameFunction();
-        return true;
+        Result = TaintDFG.printBlameFunction();
+        return Result;
       }
     }
   }
@@ -498,7 +481,7 @@ bool crash_blamer::TaintAnalysis::runOnBlameModule(const BlameModule &BM) {
   TaintDFG.dump();
   auto crashNode = TaintDFG.getCrashNode();
   TaintDFG.findBlameFunction(crashNode, 0);
-  TaintDFG.printBlameFunction();
+  Result = TaintDFG.printBlameFunction();
 
   // Currently we report SUCCESS even if one Blame Function is found.
   // Ideally SUCCESS is only when TaintList.empty() is true.

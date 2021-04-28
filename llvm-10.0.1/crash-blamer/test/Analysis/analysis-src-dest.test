@@ -31,5 +31,3 @@
 # RUN:     %S/../Decompiler/Inputs/clang-test00 < %s 2>&1 | FileCheck %s
 
 # CHECK: Blame Function is f
-# CHECK: At Line Number 18
-# CHECK: RESULT: SUCCESS

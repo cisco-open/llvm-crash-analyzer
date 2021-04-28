@@ -6,4 +6,4 @@
 
 # RUN: %crash-blamer --core-file=%S/Inputs/core.main.stripped %S/Inputs/main-stripped < %s 2>&1 | FileCheck %s
 
-# CHECK: RESULT: SUCCESS
+# CHECK: Blame Function is f

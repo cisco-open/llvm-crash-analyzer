@@ -17,5 +17,3 @@
 # RUN:     %S/Inputs/xor-example < %s 2>&1 | FileCheck %s
 
 # CHECK: Blame Function is main
-# CHECK: At Line Number 9
-# CHECK: RESULT: SUCCESS

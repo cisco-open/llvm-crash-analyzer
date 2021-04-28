@@ -27,5 +27,3 @@
 # CHECK:  Decompiling...
 # CHECK:Decompiled.
 # CHECK: Blame Function is main
-# CHECK: At Line Number 11
-# CHECK: RESULT: SUCCESS

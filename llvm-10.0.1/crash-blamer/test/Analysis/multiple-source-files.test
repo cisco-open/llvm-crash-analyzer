@@ -50,6 +50,3 @@
 # RUN:     %S/Inputs/multiple-sources < %s 2>&1 | FileCheck %s
 
 # CHECK:  Blame Function is f
-# CHECK:At Line Number 8, from file {{.*}}/file2.c
-# CHECK: RESULT: SUCCESS
-

@@ -33,5 +33,3 @@
 # RUN:     %S/../Decompiler/Inputs/multilib-exe < %s 2>&1 | FileCheck %s
 
 # CHECK: Blame Function is f
-# CHECK: At Line Number 16
-# CHECK: RESULT: SUCCESS

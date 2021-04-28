@@ -44,5 +44,3 @@
 # RUN:     %S/Inputs/src-dest-2 < %s 2>&1 | FileCheck %s
 
 # CHECK: Blame Function is f
-# CHECK: At Line Number 11
-# CHECK: RESULT: SUCCESS

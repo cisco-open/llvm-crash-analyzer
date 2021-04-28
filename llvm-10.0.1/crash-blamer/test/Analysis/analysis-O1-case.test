@@ -30,5 +30,3 @@
 # RUN: %crash-blamer --core-file=%S/Inputs/core.testO1 %S/Inputs/testO1 < %s 2>&1 | FileCheck %s
 
 # CHECK: Blame Function is f
-# CHECK: At Line Number 18
-# CHECK: RESULT: SUCCESS

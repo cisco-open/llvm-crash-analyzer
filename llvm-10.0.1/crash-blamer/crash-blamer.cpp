@@ -161,10 +161,7 @@ int main(int argc, char **argv) {
 
   // Run the analysis.
   crash_blamer::TaintAnalysis TA;
-  if (!TA.runOnBlameModule(BlameTrace))
-    llvm::outs() << "\nRESULT: FAIL\n";
-  else
-    llvm::outs() << "\nRESULT: SUCCESS\n";
+  TA.runOnBlameModule(BlameTrace);
 
   return exit_code;
 }

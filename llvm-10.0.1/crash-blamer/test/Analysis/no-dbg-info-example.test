@@ -42,6 +42,3 @@
 
 # CHECK: warning: No debugging info found for a function from backtrace. Please provide debugging info for the exe and all libraries.
 # CHECK: Blame Function is f
-# CHECK: WARNING: Please compile with -g to get full line info.
-# CHECK: Blame instruction is MOV64mi32 $rbp, 1, $noreg, -16, $noreg, 0
-# CHECK: RESULT: SUCCESS
