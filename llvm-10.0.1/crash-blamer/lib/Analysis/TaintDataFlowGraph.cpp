@@ -63,8 +63,12 @@ bool TaintDataFlowGraph::printBlameFunction() {
     auto &BlameNodes = blameNodes[MaxLevel];
     for (auto &a : BlameNodes) {
       a->print();
-      llvm::dbgs() << "\nBlame line: " << a->MI->getDebugLoc().getLine()
-                   << "\n";
+      if (a->MI->getDebugLoc().get())
+        llvm::dbgs() << "\nBlame line: " << a->MI->getDebugLoc().getLine()
+                     << "\n";
+      else
+        llvm::dbgs() << "\nNo blame line to report.\n";
+
       if (BlameFn == "") {
         BlameFn = a->MI->getMF()->getName();
         MF = a->MI->getMF();
@@ -74,7 +78,7 @@ bool TaintDataFlowGraph::printBlameFunction() {
       }
     }
     if (MF) {
-      llvm::dbgs() << "****Blame function: " << BlameFn << '\n';
+      llvm::dbgs() << "\n****Blame function: " << BlameFn << '\n';
       if (MF->getFunction().getSubprogram())
         llvm::dbgs() << "****From file: " <<
           MF->getFunction().getSubprogram()->getFile()->getFilename() << "\n";
@@ -111,6 +115,8 @@ void TaintDataFlowGraph::dump() {
   LLVM_DEBUG(llvm::dbgs() << "\n\n === Taint Data Flow Graph === \n";
   llvm::dbgs() << "---> Assignment Edge; ***> Deref Edge \n";
   for (auto &node : Nodes) {
+    if (!node)
+      continue;
     auto &NodeAdjs = adjacencies[node.get()];
     if (!NodeAdjs.size()) continue;
     node->print();

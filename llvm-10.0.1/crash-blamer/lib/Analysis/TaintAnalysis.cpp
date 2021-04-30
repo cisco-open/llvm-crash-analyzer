@@ -286,12 +286,6 @@ bool llvm::crash_blamer::TaintAnalysis::propagateTaint(
       ConstantFound = true;
     else if (DS.Source2->isImm())
       ConstantFound = true;
-  } else if (DS.Source && DS.Source->isReg()) {
-    const MachineFunction *MF = DS.Source->getParent()->getMF();
-    auto TRI = MF->getSubtarget().getRegisterInfo();
-    std::string RegName = TRI->getRegAsmName(DS.Source->getReg()).lower();
-    if (RegName == "rip")
-      ConstantFound = true;
   }
 
   const auto &MF = MI.getParent()->getParent();
