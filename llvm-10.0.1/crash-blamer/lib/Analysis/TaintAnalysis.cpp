@@ -68,9 +68,20 @@ bool llvm::crash_blamer::operator!=(const TaintInfo &T1, const TaintInfo &T2) {
 }
 
 bool llvm::crash_blamer::operator<(const TaintInfo &T1, const TaintInfo &T2) {
-  if (T1.Op->isReg() && T2.Op->isReg() &&
-      T1.Op->getReg() < T2.Op->getReg())
-    return true;
+  if (T1.Op->isReg() && T2.Op->isReg()) {
+    // Check if the registers are alias to each other
+    // eax and rax, for example
+    const MachineFunction *MF = T1.Op->getParent()->getMF();
+    auto TRI = MF->getSubtarget().getRegisterInfo();
+    for (MCRegAliasIterator RAI(T1.Op->getReg(), TRI, true); RAI.isValid();
+         ++RAI) {
+      if ((*RAI).id() == T2.Op->getReg()) {
+        return false;
+      }
+    }
+    if (T1.Op->getReg() < T2.Op->getReg())
+      return true;
+  }
   return false;
 }
 
@@ -272,6 +283,9 @@ bool llvm::crash_blamer::TaintAnalysis::propagateTaint(
   if (Taint.Op == nullptr)
     return true;
 
+  const auto &MF = MI.getParent()->getParent();
+  auto TII = MF->getSubtarget().getInstrInfo();
+
   // If Destination Op is tainted, do the following.
   // Add SrcOp to the taint-list.
   // Remove DestOp from the taint-list.
@@ -286,9 +300,11 @@ bool llvm::crash_blamer::TaintAnalysis::propagateTaint(
       ConstantFound = true;
     else if (DS.Source2->isImm())
       ConstantFound = true;
+  } else if (TII->isXORSimplifiedSetToZero(MI)) {
+    // xor eax, eax is the same as move eax, 0
+    ConstantFound = true;
   }
 
-  const auto &MF = MI.getParent()->getParent();
   if (ConstantFound) {
     Node *constantNode = new Node(MF->getCrashOrder(), &MI, SrcTi, false, true);
     std::shared_ptr<Node> constNode(constantNode);
