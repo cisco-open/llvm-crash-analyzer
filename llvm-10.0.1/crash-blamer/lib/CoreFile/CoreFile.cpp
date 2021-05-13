@@ -157,6 +157,15 @@ bool llvm::crash_blamer::CoreFile::read(StringRef SolibSearchPath) {
 
   setNumOfFrames(NumOfFrames);
 
+  // There are some cases where debug info for frames is broken,
+  // so backtraces can be very long, so we want to skip such cases
+  // with this.
+  if (NumOfFrames > 64) {
+    WithColor::error() << "backtrace is too long(" << NumOfFrames
+                       << " frames)\n";
+    return false;
+  }
+
   for (int i = 0; i < NumOfFrames; ++i) {
     auto Frame = thread.GetFrameAtIndex(i);
     if (!Frame.IsValid()) {
