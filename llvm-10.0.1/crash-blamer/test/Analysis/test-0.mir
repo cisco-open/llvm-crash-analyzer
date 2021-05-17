@@ -1,0 +1,456 @@
+##include <stdio.h>
+#typedef struct node {
+#  int *fn;
+#} T;
+#
+#void h(int *r) {
+#  *r = 3; // crash
+#}
+#
+#void g (T*q) {
+#  int *t = q->fn;
+#  h(t);
+#}
+#
+#void f() {
+#  T p;
+#  T q2;
+#  p.fn = NULL; // blame point
+#  q2.fn = NULL;
+#  g(&p);
+#}
+#
+#int main() {
+# f();
+# return 0;
+#}
+# RUN: %crash-blamer-ta %s | FileCheck %s
+# CHECK: Blame Function is f
+--- |
+  ; ModuleID = 'bin/test-0'
+  source_filename = "bin/test-0"
+  target datalayout = "e-m:e-p270:32:32-p271:32:32-p272:64:64-i64:64-f80:128-n8:16:32:64-S128"
+  
+  ; Materializable
+  define void @f2() !dbg !2 {
+  entry:
+    unreachable
+  }
+  
+  declare void @f3()
+  
+  ; Materializable
+  define void @f3.1() !dbg !5 {
+  entry:
+    unreachable
+  }
+  
+  ; Materializable
+  define void @main() !dbg !6 {
+  entry:
+    unreachable
+  }
+  
+  !llvm.dbg.cu = !{!0}
+  
+  !0 = distinct !DICompileUnit(language: DW_LANG_C, file: !1, producer: "crash-blamer", isOptimized: true, runtimeVersion: 0, emissionKind: FullDebug)
+  !1 = !DIFile(filename: "/nobackup/bseshadr/llvm-crash-anal/c_test_cases/test.c", directory: "/")
+  !2 = distinct !DISubprogram(name: "f2", linkageName: "f2", scope: null, file: !1, line: 1, type: !3, scopeLine: 1, spFlags: DISPFlagDefinition | DISPFlagOptimized, unit: !0, retainedNodes: !4)
+  !3 = !DISubroutineType(types: !4)
+  !4 = !{}
+  !5 = distinct !DISubprogram(name: "f3.1", linkageName: "f3.1", scope: null, file: !1, line: 1, type: !3, scopeLine: 1, spFlags: DISPFlagDefinition | DISPFlagOptimized, unit: !0, retainedNodes: !4)
+  !6 = distinct !DISubprogram(name: "main", linkageName: "main", scope: null, file: !1, line: 1, type: !3, scopeLine: 1, spFlags: DISPFlagDefinition | DISPFlagOptimized, unit: !0, retainedNodes: !4)
+
+...
+---
+name:            f3.1
+alignment:       16
+exposesReturnsTwice: false
+legalized:       false
+regBankSelected: false
+selected:        false
+failedISel:      false
+tracksRegLiveness: true
+hasWinCFI:       false
+registers:       []
+liveins:         []
+frameInfo:
+  isFrameAddressTaken: false
+  isReturnAddressTaken: false
+  hasStackMap:     false
+  hasPatchPoint:   false
+  stackSize:       0
+  offsetAdjustment: 0
+  maxAlignment:    1
+  adjustsStack:    false
+  hasCalls:        false
+  stackProtector:  ''
+  maxCallFrameSize: 4294967295
+  cvBytesOfCalleeSavedRegisters: 0
+  hasOpaqueSPAdjustment: false
+  hasVAStart:      false
+  hasMustTailInVarArgFunc: false
+  localFrameSize:  0
+  savePoint:       ''
+  restorePoint:    ''
+fixedStack:      []
+stack:           []
+callSites:       []
+debugValueSubstitutions: []
+regInfo:         { GPRegs: 
+    - { reg: rax, value: '0x0000000000000000' }
+    - { reg: rbx, value: '0x0000000000000000' }
+    - { reg: rcx, value: '0x00007f6bc669e738' }
+    - { reg: rdx, value: '0x00007ffcc0c69778' }
+    - { reg: rdi, value: '0x0000000000000000' }
+    - { reg: rsi, value: '0x00007ffcc0c69768' }
+    - { reg: rbp, value: '0x00007ffcc0c69640' }
+    - { reg: rsp, value: '0x00007ffcc0c69640' }
+    - { reg: r8, value: '0x00007f6bc669fda0' }
+    - { reg: r9, value: '0x00007f6bc669fda0' }
+    - { reg: r10, value: '0x0000000000000000' }
+    - { reg: r11, value: '0x00007f6bc6461630' }
+    - { reg: r12, value: '0x0000000000400450' }
+    - { reg: r13, value: '0x00007ffcc0c69760' }
+    - { reg: r14, value: '0x0000000000000000' }
+    - { reg: r15, value: '0x0000000000000000' }
+    - { reg: rip, value: '0x000000000040054c' }
+    - { reg: rflags, value: '0x0000000000010206' }
+    - { reg: cs, value: '0x0000000000000033' }
+    - { reg: fs, value: '0x0000000000000000' }
+    - { reg: gs, value: '0x0000000000000000' }
+    - { reg: ss, value: '0x000000000000002b' }
+    - { reg: ds, value: '0x0000000000000000' }
+    - { reg: es, value: '0x0000000000000000' }
+    - { reg: eax, value: '0x00000000' }
+    - { reg: ebx, value: '0x00000000' }
+    - { reg: ecx, value: '0xc669e738' }
+    - { reg: edx, value: '0xc0c69778' }
+    - { reg: edi, value: '0x00000000' }
+    - { reg: esi, value: '0xc0c69768' }
+    - { reg: ebp, value: '0xc0c69640' }
+    - { reg: esp, value: '0xc0c69640' }
+    - { reg: r8d, value: '0xc669fda0' }
+    - { reg: r9d, value: '0xc669fda0' }
+    - { reg: r10d, value: '0x00000000' }
+    - { reg: r11d, value: '0xc6461630' }
+    - { reg: r12d, value: '0x00400450' }
+    - { reg: r13d, value: '0xc0c69760' }
+    - { reg: r14d, value: '0x00000000' }
+    - { reg: r15d, value: '0x00000000' }
+    - { reg: ax, value: '0x0000' }
+    - { reg: bx, value: '0x0000' }
+    - { reg: cx, value: '0xe738' }
+    - { reg: dx, value: '0x9778' }
+    - { reg: di, value: '0x0000' }
+    - { reg: si, value: '0x9768' }
+    - { reg: bp, value: '0x9640' }
+    - { reg: sp, value: '0x9640' }
+    - { reg: r8w, value: '0xfda0' }
+    - { reg: r9w, value: '0xfda0' }
+    - { reg: r10w, value: '0x0000' }
+    - { reg: r11w, value: '0x1630' }
+    - { reg: r12w, value: '0x0450' }
+    - { reg: r13w, value: '0x9760' }
+    - { reg: r14w, value: '0x0000' }
+    - { reg: r15w, value: '0x0000' }
+    - { reg: ah, value: '0x00' }
+    - { reg: bh, value: '0x00' }
+    - { reg: ch, value: '0xe7' }
+    - { reg: dh, value: '0x97' }
+    - { reg: al, value: '0x00' }
+    - { reg: bl, value: '0x00' }
+    - { reg: cl, value: '0x38' }
+    - { reg: dl, value: '0x78' }
+    - { reg: dil, value: '0x00' }
+    - { reg: sil, value: '0x68' }
+    - { reg: bpl, value: '0x40' }
+    - { reg: spl, value: '0x40' }
+    - { reg: r8l, value: '0xa0' }
+    - { reg: r9l, value: '0xa0' }
+    - { reg: r10l, value: '0x00' }
+    - { reg: r11l, value: '0x30' }
+    - { reg: r12l, value: '0x50' }
+    - { reg: r13l, value: '0x60' }
+    - { reg: r14l, value: '0x00' }
+    - { reg: r15l, value: '0x00' } }
+constants:       []
+machineFunctionInfo: {}
+crashOreder:     1
+body:             |
+  bb.0:
+    liveins: $rbp, $rdi
+  
+    PUSH64r $rbp, implicit-def $rsp, implicit $rsp, debug-location !DILocation(line: 1, scope: !5)
+    $rbp = MOV64rr $rsp, debug-location !DILocation(line: 1, scope: !5)
+    MOV64mr $rbp, 1, $noreg, -8, $noreg, $rdi, debug-location !DILocation(line: 1, scope: !5)
+    $rax = MOV64rm $rbp, 1, $noreg, -8, $noreg, debug-location !DILocation(line: 2, column: 4, scope: !5)
+    crash-start MOV32mi $rax, 1, $noreg, 0, $noreg, 0, debug-location !DILocation(line: 2, column: 15, scope: !5)
+    $rbp = POP64r implicit-def $rsp, implicit $rsp, debug-location !DILocation(line: 3, column: 1, scope: !5)
+    RETQ debug-location !DILocation(line: 3, column: 1, scope: !5)
+
+...
+---
+name:            f2
+alignment:       16
+exposesReturnsTwice: false
+legalized:       false
+regBankSelected: false
+selected:        false
+failedISel:      false
+tracksRegLiveness: true
+hasWinCFI:       false
+registers:       []
+liveins:         []
+frameInfo:
+  isFrameAddressTaken: false
+  isReturnAddressTaken: false
+  hasStackMap:     false
+  hasPatchPoint:   false
+  stackSize:       0
+  offsetAdjustment: 0
+  maxAlignment:    1
+  adjustsStack:    false
+  hasCalls:        false
+  stackProtector:  ''
+  maxCallFrameSize: 4294967295
+  cvBytesOfCalleeSavedRegisters: 0
+  hasOpaqueSPAdjustment: false
+  hasVAStart:      false
+  hasMustTailInVarArgFunc: false
+  localFrameSize:  0
+  savePoint:       ''
+  restorePoint:    ''
+fixedStack:      []
+stack:           []
+callSites:       []
+debugValueSubstitutions: []
+regInfo:         { GPRegs: 
+    - { reg: rax, value: '' }
+    - { reg: rbx, value: '0x0000000000000000' }
+    - { reg: rcx, value: '' }
+    - { reg: rdx, value: '' }
+    - { reg: rdi, value: '' }
+    - { reg: rsi, value: '' }
+    - { reg: rbp, value: '0x00007ffcc0c69660' }
+    - { reg: rsp, value: '0x00007ffcc0c69650' }
+    - { reg: r8, value: '' }
+    - { reg: r9, value: '' }
+    - { reg: r10, value: '' }
+    - { reg: r11, value: '' }
+    - { reg: r12, value: '0x0000000000400450' }
+    - { reg: r13, value: '0x00007ffcc0c69760' }
+    - { reg: r14, value: '0x0000000000000000' }
+    - { reg: r15, value: '0x0000000000000000' }
+    - { reg: rip, value: '0x000000000040057d' }
+    - { reg: rflags, value: '' }
+    - { reg: cs, value: '' }
+    - { reg: fs, value: '' }
+    - { reg: gs, value: '' }
+    - { reg: ss, value: '' }
+    - { reg: ds, value: '' }
+    - { reg: es, value: '' }
+    - { reg: eax, value: '' }
+    - { reg: ebx, value: '0x00000000' }
+    - { reg: ecx, value: '' }
+    - { reg: edx, value: '' }
+    - { reg: edi, value: '' }
+    - { reg: esi, value: '' }
+    - { reg: ebp, value: '0xc0c69640' }
+    - { reg: esp, value: '0xc0c69640' }
+    - { reg: r8d, value: '' }
+    - { reg: r9d, value: '' }
+    - { reg: r10d, value: '' }
+    - { reg: r11d, value: '' }
+    - { reg: r12d, value: '' }
+    - { reg: r13d, value: '' }
+    - { reg: r14d, value: '' }
+    - { reg: r15d, value: '' }
+    - { reg: ax, value: '' }
+    - { reg: bx, value: '' }
+    - { reg: cx, value: '' }
+    - { reg: dx, value: '' }
+    - { reg: di, value: '' }
+    - { reg: si, value: '' }
+    - { reg: bp, value: '' }
+    - { reg: sp, value: '0x9640' }
+    - { reg: r8w, value: '' }
+    - { reg: r9w, value: '' }
+    - { reg: r10w, value: '' }
+    - { reg: r11w, value: '' }
+    - { reg: r12w, value: '' }
+    - { reg: r13w, value: '' }
+    - { reg: r14w, value: '' }
+    - { reg: r15w, value: '' }
+    - { reg: ah, value: '' }
+    - { reg: bh, value: '' }
+    - { reg: ch, value: '' }
+    - { reg: dh, value: '' }
+    - { reg: al, value: '' }
+    - { reg: bl, value: '' }
+    - { reg: cl, value: '' }
+    - { reg: dl, value: '' }
+    - { reg: dil, value: '' }
+    - { reg: sil, value: '' }
+    - { reg: bpl, value: '' }
+    - { reg: spl, value: '' }
+    - { reg: r8l, value: '' }
+    - { reg: r9l, value: '' }
+    - { reg: r10l, value: '' }
+    - { reg: r11l, value: '' }
+    - { reg: r12l, value: '' }
+    - { reg: r13l, value: '' }
+    - { reg: r14l, value: '' }
+    - { reg: r15l, value: '' } }
+constants:       []
+machineFunctionInfo: {}
+crashOreder:     2
+body:             |
+  bb.0:
+    liveins: $rbp, $rdi
+  
+    PUSH64r $rbp, implicit-def $rsp, implicit $rsp, debug-location !DILocation(line: 4, scope: !2)
+    $rbp = MOV64rr $rsp, debug-location !DILocation(line: 4, scope: !2)
+    $rsp = SUB64ri8 $rsp, 16, implicit-def $eflags, debug-location !DILocation(line: 4, scope: !2)
+    MOV64mr $rbp, 1, $noreg, -8, $noreg, $rdi, debug-location !DILocation(line: 4, scope: !2)
+    $rax = MOV64rm $rbp, 1, $noreg, -8, $noreg, debug-location !DILocation(line: 6, column: 10, scope: !2)
+    MOV64mr $rbp, 1, $noreg, -16, $noreg, $rax, debug-location !DILocation(line: 6, column: 8, scope: !2)
+    $rdi = MOV64rm $rbp, 1, $noreg, -16, $noreg, debug-location !DILocation(line: 7, column: 6, scope: !2)
+    CALL64pcrel32 @f3, csr_64, implicit $rsp, implicit $ssp, debug-location !DILocation(line: 7, column: 3, scope: !2)
+    $rsp = crash-start ADD64ri8 $rsp, 16, implicit-def $eflags, debug-location !DILocation(line: 8, column: 1, scope: !2)
+    $rbp = POP64r implicit-def $rsp, implicit $rsp, debug-location !DILocation(line: 8, column: 1, scope: !2)
+    RETQ debug-location !DILocation(line: 8, column: 1, scope: !2)
+
+...
+---
+name:            main
+alignment:       16
+exposesReturnsTwice: false
+legalized:       false
+regBankSelected: false
+selected:        false
+failedISel:      false
+tracksRegLiveness: true
+hasWinCFI:       false
+registers:       []
+liveins:         []
+frameInfo:
+  isFrameAddressTaken: false
+  isReturnAddressTaken: false
+  hasStackMap:     false
+  hasPatchPoint:   false
+  stackSize:       0
+  offsetAdjustment: 0
+  maxAlignment:    1
+  adjustsStack:    false
+  hasCalls:        false
+  stackProtector:  ''
+  maxCallFrameSize: 4294967295
+  cvBytesOfCalleeSavedRegisters: 0
+  hasOpaqueSPAdjustment: false
+  hasVAStart:      false
+  hasMustTailInVarArgFunc: false
+  localFrameSize:  0
+  savePoint:       ''
+  restorePoint:    ''
+fixedStack:      []
+stack:           []
+callSites:       []
+debugValueSubstitutions: []
+regInfo:         { GPRegs: 
+    - { reg: rax, value: '' }
+    - { reg: rbx, value: '0x0000000000000000' }
+    - { reg: rcx, value: '' }
+    - { reg: rdx, value: '' }
+    - { reg: rdi, value: '' }
+    - { reg: rsi, value: '' }
+    - { reg: rbp, value: '0x00007ffcc0c69680' }
+    - { reg: rsp, value: '0x00007ffcc0c69670' }
+    - { reg: r8, value: '' }
+    - { reg: r9, value: '' }
+    - { reg: r10, value: '' }
+    - { reg: r11, value: '' }
+    - { reg: r12, value: '0x0000000000400450' }
+    - { reg: r13, value: '0x00007ffcc0c69760' }
+    - { reg: r14, value: '0x0000000000000000' }
+    - { reg: r15, value: '0x0000000000000000' }
+    - { reg: rip, value: '0x00000000004005b0' }
+    - { reg: rflags, value: '' }
+    - { reg: cs, value: '' }
+    - { reg: fs, value: '' }
+    - { reg: gs, value: '' }
+    - { reg: ss, value: '' }
+    - { reg: ds, value: '' }
+    - { reg: es, value: '' }
+    - { reg: eax, value: '' }
+    - { reg: ebx, value: '0x00000000' }
+    - { reg: ecx, value: '' }
+    - { reg: edx, value: '' }
+    - { reg: edi, value: '' }
+    - { reg: esi, value: '' }
+    - { reg: ebp, value: '0xc0c69640' }
+    - { reg: esp, value: '0xc0c69640' }
+    - { reg: r8d, value: '' }
+    - { reg: r9d, value: '' }
+    - { reg: r10d, value: '' }
+    - { reg: r11d, value: '' }
+    - { reg: r12d, value: '' }
+    - { reg: r13d, value: '' }
+    - { reg: r14d, value: '' }
+    - { reg: r15d, value: '' }
+    - { reg: ax, value: '' }
+    - { reg: bx, value: '' }
+    - { reg: cx, value: '' }
+    - { reg: dx, value: '' }
+    - { reg: di, value: '' }
+    - { reg: si, value: '' }
+    - { reg: bp, value: '' }
+    - { reg: sp, value: '0x9640' }
+    - { reg: r8w, value: '' }
+    - { reg: r9w, value: '' }
+    - { reg: r10w, value: '' }
+    - { reg: r11w, value: '' }
+    - { reg: r12w, value: '' }
+    - { reg: r13w, value: '' }
+    - { reg: r14w, value: '' }
+    - { reg: r15w, value: '' }
+    - { reg: ah, value: '' }
+    - { reg: bh, value: '' }
+    - { reg: ch, value: '' }
+    - { reg: dh, value: '' }
+    - { reg: al, value: '' }
+    - { reg: bl, value: '' }
+    - { reg: cl, value: '' }
+    - { reg: dl, value: '' }
+    - { reg: dil, value: '' }
+    - { reg: sil, value: '' }
+    - { reg: bpl, value: '' }
+    - { reg: spl, value: '' }
+    - { reg: r8l, value: '' }
+    - { reg: r9l, value: '' }
+    - { reg: r10l, value: '' }
+    - { reg: r11l, value: '' }
+    - { reg: r12l, value: '' }
+    - { reg: r13l, value: '' }
+    - { reg: r14l, value: '' }
+    - { reg: r15l, value: '' } }
+constants:       []
+machineFunctionInfo: {}
+crashOreder:     3
+body:             |
+  bb.0:
+    liveins: $rbp
+  
+    PUSH64r $rbp, implicit-def $rsp, implicit $rsp, debug-location !DILocation(line: 10, scope: !6)
+    $rbp = MOV64rr $rsp, debug-location !DILocation(line: 10, scope: !6)
+    $rsp = SUB64ri8 $rsp, 16, implicit-def $eflags, debug-location !DILocation(line: 10, scope: !6)
+    MOV32mi $rbp, 1, $noreg, -4, $noreg, 0, debug-location !DILocation(line: 10, scope: !6)
+    MOV64mi32 $rbp, 1, $noreg, -16, $noreg, 0, debug-location !DILocation(line: 12, column: 7, scope: !6)
+    $rdi = MOV64rm $rbp, 1, $noreg, -16, $noreg, debug-location !DILocation(line: 13, column: 6, scope: !6)
+    CALL64pcrel32 @f2, csr_64, implicit $rsp, implicit $ssp, implicit-def $eax, implicit-def $eax, debug-location !DILocation(line: 13, column: 3, scope: !6)
+    $eax = crash-start XOR32rr undef $eax, undef $eax, implicit-def $eflags, debug-location !DILocation(line: 13, column: 3, scope: !6)
+    $rsp = ADD64ri8 $rsp, 16, implicit-def $eflags, debug-location !DILocation(line: 14, column: 3, scope: !6)
+    $rbp = POP64r implicit-def $rsp, implicit $rsp, debug-location !DILocation(line: 14, column: 3, scope: !6)
+    RETQ debug-location !DILocation(line: 14, column: 3, scope: !6)
+
+...

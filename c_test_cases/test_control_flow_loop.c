@@ -1,5 +1,4 @@
 #include <stdlib.h>
-// Will cause segfault with crash=1
 
 int f2(char *input) { return crasher(input, 1); }
 int crasher(char *input, int crash) {
@@ -18,7 +17,7 @@ int crasher(char *input, int crash) {
 
 int f1() {
   char *input = (char *)malloc(sizeof(char) * 10);
-  return crasher(input, 0);
+  return crasher(input, 1);
 }
 int main(int argc, char **argv) {
   f1();
