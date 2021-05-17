@@ -68,7 +68,8 @@ bool llvm::crash_blamer::operator!=(const TaintInfo &T1, const TaintInfo &T2) {
 }
 
 bool llvm::crash_blamer::operator<(const TaintInfo &T1, const TaintInfo &T2) {
-  if (T1.Op->isReg() && T2.Op->isReg()) {
+  if (T1.Op->isReg() && T2.Op->isReg() &&
+      T1.Op->getReg() && T2.Op->getReg()) {
     // Check if the registers are alias to each other
     // eax and rax, for example
     const MachineFunction *MF = T1.Op->getParent()->getMF();
