@@ -38,11 +38,7 @@
 ## }
 
 # RUN: %crash-blamer-ta %s | FileCheck %s 
-
-# CHECK: Crash Blamer -- Taint Analysis
 # CHECK: Blame Function is f
-# CHECK: At Line Number 10, from file /nobackup/djtodoro/llvm_trunk/NEW/crash-blamer/CISCO-git/examples/fwd-analysis/example3.c
-# CHECK: RESULT: SUCCESS
 
 --- |
   ; ModuleID = 'example'
