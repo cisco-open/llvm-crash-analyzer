@@ -30,11 +30,7 @@
 ##}
 
 # RUN: %crash-blamer-ta %s | FileCheck %s
-
-# CHECK: Crash Blamer -- Taint Analysis
 # CHECK: Blame Function is test_cf 
-# CHECK: At Line Number 12, from file
-# CHECK: RESULT: SUCCESS
 
 --- |
   ; ModuleID = 'test4a'
@@ -58,7 +54,7 @@
   !llvm.dbg.cu = !{!0}
   
   !0 = distinct !DICompileUnit(language: DW_LANG_C, file: !1, producer: "crash-blamer", isOptimized: true, runtimeVersion: 0, emissionKind: FullDebug)
-  !1 = !DIFile(filename: "/auto/compiler-migration/bseshadr/crash-blamer-work/case6/test4a.c", directory: "/")
+  !1 = !DIFile(filename: "if-else.c", directory: "/")
   !2 = distinct !DISubprogram(name: "main", linkageName: "main", scope: null, file: !1, line: 1, type: !3, scopeLine: 1, spFlags: DISPFlagDefinition | DISPFlagOptimized, unit: !0, retainedNodes: !4)
   !3 = !DISubroutineType(types: !4)
   !4 = !{}

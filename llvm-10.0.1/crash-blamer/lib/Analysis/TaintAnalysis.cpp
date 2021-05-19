@@ -400,18 +400,26 @@ bool crash_blamer::TaintAnalysis::runOnBlameMF(const MachineFunction &MF,
 
     for (auto MIIt = MBB->rbegin(); MIIt != MBB->rend(); ++MIIt) {
       auto &MI = *MIIt;
-
       if (MI.getFlag(MachineInstr::CrashStart)) {
         CrashSequenceStarted = true;
-        LLVM_DEBUG(MI.dump(););
-        auto DestSrc = TII->getDestAndSrc(MI);
+	// For frames > 0, skip to the first instruction after the call 
+	// instruction, traversing backwards 
+        if (!TaintList.empty()) {
+	  // Skip crash instruction
+          ++MIIt;
+	  // Skip the call instruction
+          ++MIIt;
+        }
+        auto &MI2 = *MIIt;
+        LLVM_DEBUG(MI2.dump(););
+        auto DestSrc = TII->getDestAndSrc(MI2);
         if (!DestSrc) {
           LLVM_DEBUG(llvm::dbgs()
                      << "Crash instruction doesn't have blame operands\n");
           mergeTaintList(TL_Mbb, TaintList);
           continue;
         }
-        startTaint(*DestSrc, TL_Mbb, MI, TaintDFG);
+        startTaint(*DestSrc, TL_Mbb, MI2, TaintDFG);
         continue;
       }
 
