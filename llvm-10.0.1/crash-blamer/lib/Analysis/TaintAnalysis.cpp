@@ -47,10 +47,15 @@ bool llvm::crash_blamer::operator==(const TaintInfo &T1, const TaintInfo &T2) {
   }
 
   // Check for noreg case.
-  if (!T1.Op->getReg() || !T2.Op->getReg()) {
-    //TODO: Check the offset only, since it is an address?
-    return false;
+  // Check offsets if both operands are noreg
+  if (!T1.Op->getReg() && !T2.Op->getReg()) {
+    if (T1.Offset && T2.Offset)
+      return *T1.Offset == *T2.Offset;
   }
+
+  // Do not check for aliases if one op is noreg
+  if (!T1.Op->getReg() || !T2.Op->getReg())
+    return false;
 
   // Check if the registers are alias to each other
   // eax and rax, for example
