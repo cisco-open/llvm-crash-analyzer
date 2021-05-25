@@ -6,13 +6,15 @@
 //
 //===----------------------------------------------------------------------===//
 
+
 #include "Analysis/TaintAnalysis.h"
 #include "Analysis/TaintDataFlowGraph.h"
 #include "Analysis/MachineLocTracking.h"
-
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/PostOrderIterator.h"
 #include "llvm/IR/DebugInfoMetadata.h"
+
+#include "llvm/CodeGen/Register.h"
 
 #include <sstream>
 
@@ -47,15 +49,14 @@ bool llvm::crash_blamer::operator==(const TaintInfo &T1, const TaintInfo &T2) {
   }
 
   // Check for noreg case.
-  // Check offsets if both operands are noreg
-  if (!T1.Op->getReg() && !T2.Op->getReg()) {
-    if (T1.Offset && T2.Offset)
+  if (!T1.Op->getReg() || !T2.Op->getReg()) {
+    // Check the offset only
+    if (T1.Offset && T2.Offset) {
       return *T1.Offset == *T2.Offset;
+    }
+    else
+     return false;
   }
-
-  // Do not check for aliases if one op is noreg
-  if (!T1.Op->getReg() || !T2.Op->getReg())
-    return false;
 
   // Check if the registers are alias to each other
   // eax and rax, for example
