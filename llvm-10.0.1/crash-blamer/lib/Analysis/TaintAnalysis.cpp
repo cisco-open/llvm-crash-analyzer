@@ -79,7 +79,7 @@ bool llvm::crash_blamer::operator<(const TaintInfo &T1, const TaintInfo &T2) {
       if (T1.Offset && T2.Offset)
         return *T1.Offset < *T2.Offset;
     }
-    
+
     // Check if the registers are alias to each other
     // eax and rax, for example
     const MachineFunction *MF = T1.Op->getParent()->getMF();
