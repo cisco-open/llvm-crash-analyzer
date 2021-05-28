@@ -106,6 +106,8 @@ class TaintDataFlowGraph {
 
   void updateLastTaintedNode(TaintInfo Op,
                              std::shared_ptr<Node> N);
+  unsigned getBlameNodesSize() { return Nodes.size(); }
+
   Node *getCrashNode() { return Nodes[0].get(); }
 
   void findBlameFunction(Node *v, unsigned level);

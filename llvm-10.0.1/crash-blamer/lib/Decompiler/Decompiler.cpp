@@ -232,6 +232,9 @@ llvm::Error crash_blamer::Decompiler::run(
   // Store debug info compile units for coresponding files.
   std::unordered_map<std::string, std::pair<DIFile *, DICompileUnit *>> CUs;
 
+  // Store debug info for subprograms for coresponding functions.
+  std::unordered_map<std::string, DISubprogram *> SPs;
+
   // Map of the functions we are about to decompile.
   std::unordered_set<std::string> FunctionsToDecompile;
   for (StringRef f : functionsFromCoreFile)
@@ -255,8 +258,8 @@ llvm::Error crash_blamer::Decompiler::run(
   }
 
   for (auto &frame : FrameInfo) {
-    // Skip inlined frames.
-    if (frame.second.IsInlined() || frame.second.IsArtificial())
+    // Skip artificial frames.
+    if (frame.second.IsArtificial())
       continue;
 
     lldb::SBInstructionList Instructions;
@@ -316,6 +319,70 @@ llvm::Error crash_blamer::Decompiler::run(
     MF = &createMF(FunctionName);
     MBB = MF->CreateMachineBasicBlock();
     MF->push_back(MBB);
+
+    DIFile *File = nullptr;
+    DICompileUnit *CU = nullptr;
+
+    if (MF && HaveDebugInfo) {
+      if (!CUs.count(AbsFileName)) {
+        File = DIB.createFile(AbsFileName, "/");
+        CU = DIB.createCompileUnit(
+            dwarf::DW_LANG_C, File, "crash-blamer", /*isOptimized=*/true, "",
+            0, StringRef(), DICompileUnit::DebugEmissionKind::FullDebug, 0,
+            true, false, DICompileUnit::DebugNameTableKind::Default, false,
+            true);
+        CUs.insert({AbsFileName, std::make_pair(File, CU)});
+      } else {
+        File = CUs[AbsFileName].first;
+        CU = CUs[AbsFileName].second;
+      }
+    }
+
+    // Once we created the DI file, create DI subprogram.
+    if (HaveDebugInfo && !DISP && File && CU && MF) {
+      auto &F = MF->getFunction();
+      auto SPType = DIB.createSubroutineType(DIB.getOrCreateTypeArray(None));
+      DISubprogram::DISPFlags SPFlags =
+          DISubprogram::SPFlagDefinition | DISubprogram::SPFlagOptimized;
+      auto SP = DIB.createFunction(CU, F.getName(), F.getName(), File, 1,
+                                   SPType, 1, DINode::FlagZero, SPFlags);
+      (const_cast<Function *>(&F))->setSubprogram(SP);
+      DISP = SP;
+      DIB.finalizeSubprogram(SP);
+      if (!SPs.count(FunctionName))
+        SPs.insert({FunctionName, SP});
+    }
+
+    // Here we stop decompiling inlined functions. This MF is dummy fn,
+    // since the instructions of will be in the MF where it got inlined. We need
+    // this MF in order to attach DISubprogram on it.
+    // TODO: We assume that inlined functions is in the same compilation unit as
+    // the function where it got inlined, but there is Cross-CU inlining by using
+    // LTO, but it will be handled as future work.
+    if (frame.second.IsInlined()) {
+      auto TII = MF->getSubtarget().getInstrInfo();
+      MCInst NopInst;
+      TII->getNoop(NopInst);
+      const unsigned Opcode = NopInst.getOpcode();
+      const MCInstrDesc &MCID = MII->get(Opcode);
+      BuildMI(MBB, DebugLoc(), MCID);
+
+      // Map the fn from backtrace to the MF.
+      // FIXME: Improve this by using a hash map.
+      int index = 0;
+      for (auto &f : BlameTrace) {
+        if (f.Name == FunctionName) {
+          // Crash order starts from 1.
+          MF->setCrashOrder(index + 1);
+          f.MF = MF;
+          break;
+        }
+        ++index;
+      }
+
+      continue;
+    }
+
     // Get the address of the latest instruction executed within a frame.
     auto Regs = FrameToRegs.find(FunctionName);
     // Get the value of $rip register, since it holds the address of current
@@ -354,6 +421,9 @@ llvm::Error crash_blamer::Decompiler::run(
         Disassembler_sp->GetInstructionList();
     size_t numInstr = instruction_list.GetSize();
     for (size_t k = 0; k < numInstr; ++k) {
+      // This is used for tracking inlined functions.
+      // The instrs from such fn will be stored in a .text of another fn.
+      StringRef OriginalFunction = frame.first;
       auto InstSP = instruction_list.GetInstructionAtIndex(k);
       uint64_t InstAddr = InstSP->GetAddress().GetFileAddress();
 
@@ -363,6 +433,9 @@ llvm::Error crash_blamer::Decompiler::run(
         auto sbInst = Instructions.GetInstructionAtIndex(k);
         line = sbInst.GetAddress().GetLineEntry().GetLine();
         column = sbInst.GetAddress().GetLineEntry().GetColumn();
+        if (sbInst.GetAddress().GetBlock().IsInlined()) {
+            OriginalFunction = sbInst.GetAddress().GetBlock().GetInlinedName();
+        }
       }
 
       llvm::MCInst Inst;
@@ -376,37 +449,6 @@ llvm::Error crash_blamer::Decompiler::run(
       const MCInstrDesc &MCID = MII->get(Opcode);
       object::SectionedAddress Addr = {
           InstAddr, object::SectionedAddress::UndefSection};
-
-      DIFile *File = nullptr;
-      DICompileUnit *CU = nullptr;
-
-      if (MF && HaveDebugInfo) {
-        if (!CUs.count(AbsFileName)) {
-          File = DIB.createFile(AbsFileName, "/");
-          CU = DIB.createCompileUnit(
-              dwarf::DW_LANG_C, File, "crash-blamer", /*isOptimized=*/true, "",
-              0, StringRef(), DICompileUnit::DebugEmissionKind::FullDebug, 0,
-              true, false, DICompileUnit::DebugNameTableKind::Default, false,
-              true);
-          CUs.insert({AbsFileName, std::make_pair(File, CU)});
-        } else {
-          File = CUs[AbsFileName].first;
-          CU = CUs[AbsFileName].second;
-        }
-      }
-
-      // Once we created the DI file, create DI subprogram.
-      if (HaveDebugInfo && !DISP && File && CU && MF) {
-        auto &F = MF->getFunction();
-        auto SPType = DIB.createSubroutineType(DIB.getOrCreateTypeArray(None));
-        DISubprogram::DISPFlags SPFlags =
-            DISubprogram::SPFlagDefinition | DISubprogram::SPFlagOptimized;
-        auto SP = DIB.createFunction(CU, F.getName(), F.getName(), File, 1,
-                                     SPType, 1, DINode::FlagZero, SPFlags);
-        (const_cast<Function *>(&F))->setSubprogram(SP);
-        DISP = SP;
-        DIB.finalizeSubprogram(SP);
-      }
 
       MachineInstr *MI = nullptr;
 
@@ -424,6 +466,11 @@ llvm::Error crash_blamer::Decompiler::run(
           if (!OldBB->isSuccessor(MBB)) OldBB->addSuccessor(MBB);
           MF->push_back(MBB);
         }
+
+        // This is used to prevent wrong DI SP attached to inlined
+        // instructions.
+        if (SPs.count(OriginalFunction))
+          DISP = SPs[OriginalFunction];
 
         auto DILoc = DILocation::get(Ctx, line, column, DISP);
         DebugLoc Loc = DebugLoc(DILoc);

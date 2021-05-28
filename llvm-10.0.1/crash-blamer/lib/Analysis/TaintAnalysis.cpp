@@ -499,6 +499,11 @@ bool crash_blamer::TaintAnalysis::runOnBlameModule(const BlameModule &BM) {
       LLVM_DEBUG(dbgs() << "\nTaint Analysis done.\n");
       if (TaintList.empty()) {
         TaintDFG.dump();
+        if (!TaintDFG.getBlameNodesSize()) {
+          llvm::outs() << "\nNo blame function found.\n";
+          return false;
+        }
+
         auto crashNode = TaintDFG.getCrashNode();
         TaintDFG.findBlameFunction(crashNode, 0);
         Result = TaintDFG.printBlameFunction();
@@ -508,6 +513,11 @@ bool crash_blamer::TaintAnalysis::runOnBlameModule(const BlameModule &BM) {
   }
 
   TaintDFG.dump();
+  if (!TaintDFG.getBlameNodesSize()) {
+    llvm::outs() << "\nNo blame function found.\n";
+    return false;
+  }
+
   auto crashNode = TaintDFG.getCrashNode();
   TaintDFG.findBlameFunction(crashNode, 0);
   Result = TaintDFG.printBlameFunction();
