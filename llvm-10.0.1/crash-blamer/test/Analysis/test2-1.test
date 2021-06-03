@@ -17,4 +17,4 @@
 # RUN: %crash-blamer --core-file=%S/Inputs/core.test2-1 \
 # RUN:     %S/Inputs/test2-1 < %s 2>&1 | FileCheck %s
 
-# CHECK: Blame Function is f
+# CHECK: Blame Function is main
