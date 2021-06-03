@@ -497,15 +497,20 @@ llvm::Error crash_blamer::Decompiler::run(
 
       // If this is a branch, start new MBB.
       if (MF && MI && MCID.isBranch()) {
-        uint64_t TargetBBAddr = MI->getOperand(0).getImm();
         MachineBasicBlock *OldBB = MBB;
         MBB = MF->CreateMachineBasicBlock();
         if (MI && MI->isConditionalBranch() && !OldBB->isSuccessor(MBB))
           OldBB->addSuccessor(MBB);
         MF->push_back(MBB);
         // Rememer the target address, so we can fix it
-        // with the proper BB.
-        BranchesToUpdate.insert({TargetBBAddr, MI});
+        // with the proper BB in the case of regular jump.
+        // It can be a jump instruction where the target is
+        // in a register:
+        //    JMP64r $r10
+        if (MI->getOperand(0).isImm()) {
+          uint64_t TargetBBAddr = MI->getOperand(0).getImm();
+          BranchesToUpdate.insert({TargetBBAddr, MI});
+        }
         PrevBranch = true;
       } else
         PrevBranch = false;
