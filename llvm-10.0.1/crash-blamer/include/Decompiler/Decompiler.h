@@ -102,6 +102,16 @@ public:
   MachineInstr *addInstr(
       MachineFunction *MF, MachineBasicBlock *MBB, MCInst &Inst, DebugLoc *Loc,
       bool IsCrashStart, RegSet &DefinedRegs,
+      std::unordered_map<uint64_t, StringRef> &FuncStartSymbols,
+      lldb::SBTarget &target);
+
+  bool DecodeIntrsToMIR(
+      Triple TheTriple, lldb::SBInstructionList &Instructions,
+      lldb::SBAddress &FuncStart, lldb::SBAddress &FuncEnd,
+      lldb::SBTarget &target, bool HaveDebugInfo, MachineFunction *MF,
+      MachineBasicBlock *FirstMBB, StringRef OriginalFunction,
+      DISubprogram *DISP, std::unordered_map<std::string, DISubprogram *> &SPs,
+      LLVMContext &Ctx, lldb::addr_t CrashStartAddr,
       std::unordered_map<uint64_t, StringRef> &FuncStartSymbols);
 
   SmallVector<MachineFunction *, 8> &getBlameMFs() { return BlameMFs; }
