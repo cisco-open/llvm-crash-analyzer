@@ -186,6 +186,11 @@ int main(int argc, char **argv) {
     BlameTrace.push_back({MF->getName(), MF});
   }
 
+  // Get functions that are out of backtrace.
+  for (auto &f : BlameMFs)
+    if (f->getCrashOrder() == 0)
+      BlameTrace.push_back({f->getName(), f});
+
   if (!TA.runOnBlameModule(BlameTrace))
     llvm::outs() << "\nRESULT: FAIL\n";
   else

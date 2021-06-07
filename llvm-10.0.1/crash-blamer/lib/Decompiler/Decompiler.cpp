@@ -152,13 +152,24 @@ MachineInstr *crash_blamer::Decompiler::addInstr(
           continue;
         }
 
+        StringRef TargetFnName = "";
         // If it is a call and there is no target symbol.
         if (!FuncStartSymbols.count(ConstExpr->getValue())) {
-          Builder.addImm(ConstExpr->getValue());
-          continue;
+          // Remember this target to process it later.
+          FunctionsThatAreNotInBT.push_back(ConstExpr->getValue());
+           lldb::SBAddress addr(ConstExpr->getValue(), target);
+          auto symCtx = target.ResolveSymbolContextForAddress(
+                           addr, lldb::eSymbolContextEverything);
+          if (symCtx.IsValid() && symCtx.GetSymbol().IsValid())
+            TargetFnName = symCtx.GetSymbol().GetDisplayName();
+          else {
+            Builder.addImm(ConstExpr->getValue());
+            continue;
+          }
         }
         auto &Context = MF->getFunction().getContext();
-        StringRef TargetFnName = FuncStartSymbols[ConstExpr->getValue()];
+        if (TargetFnName == "")
+          TargetFnName = FuncStartSymbols[ConstExpr->getValue()];
         FunctionCallee Callee = Module->getOrInsertFunction(
             TargetFnName, FunctionType::get(Type::getVoidTy(Context), false));
         GlobalValue *GV = dyn_cast<GlobalValue>(Callee.getCallee());
@@ -218,7 +229,8 @@ bool crash_blamer::Decompiler::DecodeIntrsToMIR(
     MachineBasicBlock *FirstMBB, StringRef OriginalFunction, DISubprogram *DISP,
     std::unordered_map<std::string, DISubprogram *> &SPs, LLVMContext &Ctx,
     lldb::addr_t CrashStartAddr,
-    std::unordered_map<uint64_t, StringRef> &FuncStartSymbols) {
+    std::unordered_map<uint64_t, StringRef> &FuncStartSymbols,
+    bool IsFnOutOfBt) {
   MachineBasicBlock *MBB = FirstMBB;
   bool PrevBranch = true;
   crash_blamer::RegSet DefinedRegs;
@@ -298,8 +310,14 @@ bool crash_blamer::Decompiler::DecodeIntrsToMIR(
 
       auto DILoc = DILocation::get(Ctx, line, column, DISP);
       DebugLoc Loc = DebugLoc(DILoc);
-      MI = addInstr(MF, MBB, Inst, &Loc, CrashStartAddr == Addr.Address,
-                    DefinedRegs, FuncStartSymbols, target);
+      // For the functions out of backtrace we should analize whole
+      // function, so crash-start flag should go at the end of the fn.
+      if (IsFnOutOfBt && k == (numInstr - 1))
+        MI = addInstr(MF, MBB, Inst, &Loc, true,
+                      DefinedRegs, FuncStartSymbols, target);
+      else
+        MI = addInstr(MF, MBB, Inst, &Loc, CrashStartAddr == Addr.Address,
+                      DefinedRegs, FuncStartSymbols, target);
 
       if (MI) {
         // There could be multiple branches targeting the same
@@ -552,6 +570,75 @@ llvm::Error crash_blamer::Decompiler::run(
     FunctionsToDecompile.erase(FunctionName);
     // If we decompiled all the functions, break the loop.
     if (FunctionsToDecompile.empty()) break;
+  }
+
+  // Create MFs for function out of backtrace.
+  for (auto NonBTFnAddr : FunctionsThatAreNotInBT) {
+    lldb::SBAddress addr(NonBTFnAddr, target);
+    auto symCtx = target.ResolveSymbolContextForAddress(
+                      addr, lldb::eSymbolContextEverything);
+    if (!(symCtx.IsValid() && symCtx.GetSymbol().IsValid()))
+      continue;
+    lldb::SBInstructionList Instructions;
+    lldb::SBAddress FuncStart, FuncEnd;
+    auto Symbol = symCtx.GetSymbol();
+    Instructions = Symbol.GetInstructions(target);
+    FuncStart = Symbol.GetStartAddress();
+    FuncEnd = Symbol.GetEndAddress();
+
+    bool HasDbgInfo = false;
+    auto Fn = FuncStart.GetFunction();
+    MachineFunction *MF = &createMF(symCtx.GetSymbol().GetDisplayName());
+    MachineBasicBlock *MBB = MF->CreateMachineBasicBlock();
+    MF->push_back(MBB);
+
+    DISubprogram *SP = nullptr;
+
+    // Handle debug info if this comes from another module.
+    if (Fn) {
+      HasDbgInfo = true;
+      DIFile *File = nullptr;
+      DICompileUnit *CU = nullptr;
+      std::string FileDirInfo, FileNameInfo, AbsFileName;
+      FileDirInfo = FuncStart.GetCompileUnit().GetFileSpec().GetDirectory();
+      FileNameInfo = FuncStart.GetCompileUnit().GetFileSpec().GetFilename();
+      AbsFileName =
+          (Twine(FileDirInfo) + Twine("/") + Twine(FileNameInfo)).str();
+
+      if (!CUs.count(AbsFileName)) {
+        File = DIB.createFile(AbsFileName, "/");
+        CU = DIB.createCompileUnit(
+            dwarf::DW_LANG_C, File, "crash-blamer", /*isOptimized=*/true, "",
+            0, StringRef(), DICompileUnit::DebugEmissionKind::FullDebug, 0,
+            true, false, DICompileUnit::DebugNameTableKind::Default, false,
+            true);
+        CUs.insert({AbsFileName, std::make_pair(File, CU)});
+      } else {
+        File = CUs[AbsFileName].first;
+        CU = CUs[AbsFileName].second;
+      }
+
+      auto &F = MF->getFunction();
+      auto SPType = DIB.createSubroutineType(DIB.getOrCreateTypeArray(None));
+      DISubprogram::DISPFlags SPFlags =
+          DISubprogram::SPFlagDefinition | DISubprogram::SPFlagOptimized;
+      auto sp = DIB.createFunction(CU, F.getName(), F.getName(), File, 1,
+                                   SPType, 1, DINode::FlagZero, SPFlags);
+      (const_cast<Function *>(&F))->setSubprogram(sp);
+      SP = sp;
+      DIB.finalizeSubprogram(SP);
+      if (!SPs.count(MF->getName()))
+        SPs.insert({MF->getName(), SP});
+    }
+
+    if (!DecodeIntrsToMIR(TheTriple, Instructions, FuncStart, FuncEnd, target, HasDbgInfo,
+                     MF, MBB, symCtx.GetSymbol().GetDisplayName(), SP,
+                     SPs, Ctx, 0, FuncStartSymbols, true /*IsFnOutOfBt*/))
+      return make_error<StringError>("unable to decompile an instruction",
+                                     inconvertibleErrorCode());
+    BlameTrace.push_back({symCtx.GetSymbol().GetDisplayName(), MF});
+    // Functions that are out of backtrace have 0 crash order.
+    MF->setCrashOrder(0);
   }
 
   // Run FixRegStateFlags pass for each basic block.
