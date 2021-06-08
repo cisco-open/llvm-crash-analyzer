@@ -73,6 +73,8 @@ class Decompiler {
   /// Set up the target.
   llvm::Error init(Triple TheTriple);
 
+  SmallVector<long, 8> FunctionsThatAreNotInBT;
+
 public:
   /// Create a Decompiler or get an appropriate error.
   ///
@@ -102,7 +104,18 @@ public:
   MachineInstr *addInstr(
       MachineFunction *MF, MachineBasicBlock *MBB, MCInst &Inst, DebugLoc *Loc,
       bool IsCrashStart, RegSet &DefinedRegs,
-      std::unordered_map<uint64_t, StringRef> &FuncStartSymbols);
+      std::unordered_map<uint64_t, StringRef> &FuncStartSymbols,
+      lldb::SBTarget &target);
+
+  bool DecodeIntrsToMIR(
+      Triple TheTriple, lldb::SBInstructionList &Instructions,
+      lldb::SBAddress &FuncStart, lldb::SBAddress &FuncEnd,
+      lldb::SBTarget &target, bool HaveDebugInfo, MachineFunction *MF,
+      MachineBasicBlock *FirstMBB, StringRef OriginalFunction,
+      DISubprogram *DISP, std::unordered_map<std::string, DISubprogram *> &SPs,
+      LLVMContext &Ctx, lldb::addr_t CrashStartAddr,
+      std::unordered_map<uint64_t, StringRef> &FuncStartSymbols,
+      bool IsFnOutOfBt = false);
 
   SmallVector<MachineFunction *, 8> &getBlameMFs() { return BlameMFs; }
 };

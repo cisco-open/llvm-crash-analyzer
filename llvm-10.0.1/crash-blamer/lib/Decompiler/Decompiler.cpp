@@ -112,7 +112,8 @@ static std::unique_ptr<Module> createModule(LLVMContext &Context,
 MachineInstr *crash_blamer::Decompiler::addInstr(
     MachineFunction *MF, MachineBasicBlock *MBB, MCInst &Inst, DebugLoc *Loc,
     bool IsCrashStart, crash_blamer::RegSet &DefinedRegs,
-    std::unordered_map<uint64_t, StringRef> &FuncStartSymbols) {
+    std::unordered_map<uint64_t, StringRef> &FuncStartSymbols,
+    lldb::SBTarget &target) {
   const unsigned Opcode = Inst.getOpcode();
   const MCInstrDesc &MCID = MII->get(Opcode);
   MachineInstrBuilder Builder =
@@ -151,13 +152,24 @@ MachineInstr *crash_blamer::Decompiler::addInstr(
           continue;
         }
 
+        StringRef TargetFnName = "";
         // If it is a call and there is no target symbol.
         if (!FuncStartSymbols.count(ConstExpr->getValue())) {
-          Builder.addImm(ConstExpr->getValue());
-          continue;
+          // Remember this target to process it later.
+          FunctionsThatAreNotInBT.push_back(ConstExpr->getValue());
+           lldb::SBAddress addr(ConstExpr->getValue(), target);
+          auto symCtx = target.ResolveSymbolContextForAddress(
+                           addr, lldb::eSymbolContextEverything);
+          if (symCtx.IsValid() && symCtx.GetSymbol().IsValid())
+            TargetFnName = symCtx.GetSymbol().GetDisplayName();
+          else {
+            Builder.addImm(ConstExpr->getValue());
+            continue;
+          }
         }
         auto &Context = MF->getFunction().getContext();
-        StringRef TargetFnName = FuncStartSymbols[ConstExpr->getValue()];
+        if (TargetFnName == "")
+          TargetFnName = FuncStartSymbols[ConstExpr->getValue()];
         FunctionCallee Callee = Module->getOrInsertFunction(
             TargetFnName, FunctionType::get(Type::getVoidTy(Context), false));
         GlobalValue *GV = dyn_cast<GlobalValue>(Callee.getCallee());
@@ -210,6 +222,145 @@ MachineFunction &crash_blamer::Decompiler::createMF(StringRef FunctionName) {
   return MMI->getOrCreateMachineFunction(*F);
 }
 
+bool crash_blamer::Decompiler::DecodeIntrsToMIR(
+    Triple TheTriple, lldb::SBInstructionList &Instructions,
+    lldb::SBAddress &FuncStart, lldb::SBAddress &FuncEnd,
+    lldb::SBTarget &target, bool HaveDebugInfo, MachineFunction *MF,
+    MachineBasicBlock *FirstMBB, StringRef OriginalFunction, DISubprogram *DISP,
+    std::unordered_map<std::string, DISubprogram *> &SPs, LLVMContext &Ctx,
+    lldb::addr_t CrashStartAddr,
+    std::unordered_map<uint64_t, StringRef> &FuncStartSymbols,
+    bool IsFnOutOfBt) {
+  MachineBasicBlock *MBB = FirstMBB;
+  bool PrevBranch = true;
+  crash_blamer::RegSet DefinedRegs;
+
+  lldb_private::ArchSpec arch(TheTriple.normalize());
+  lldb::DisassemblerSP Disassembler_sp =
+      lldb_private::Disassembler::FindPlugin(arch, nullptr, nullptr);
+
+  // Jumps to be updated with proper targets ( in form of bb).
+  // This maps the target address with the jump.
+  std::unordered_multimap<uint64_t, MachineInstr *> BranchesToUpdate;
+
+  std::pair<lldb::addr_t, lldb::addr_t> func_range{FuncStart.GetFileAddress(),
+                                                   FuncEnd.GetFileAddress()};
+  lldb::addr_t FuncLoadAddr = FuncStart.GetLoadAddress(target);
+
+  lldb::DataBufferSP buffer_sp(
+      new lldb_private::DataBufferHeap(func_range.second, 0));
+  lldb::SBError error;
+  target.ReadMemory(FuncStart, buffer_sp->GetBytes(), buffer_sp->GetByteSize(),
+                    error);
+
+  lldb_private::DataExtractor Extractor(buffer_sp, target.GetByteOrder(),
+                                        target.GetAddressByteSize());
+  Disassembler_sp->DecodeInstructions(FuncLoadAddr, Extractor, 0,
+                                      Instructions.GetSize(), false, false);
+
+  lldb_private::InstructionList &instruction_list =
+      Disassembler_sp->GetInstructionList();
+  size_t numInstr = instruction_list.GetSize();
+  for (size_t k = 0; k < numInstr; ++k) {
+    // This is used for tracking inlined functions.
+    // The instrs from such fn will be stored in a .text of another fn.
+    auto InstSP = instruction_list.GetInstructionAtIndex(k);
+    uint64_t InstAddr = InstSP->GetAddress().GetFileAddress();
+
+    uint32_t line = 0;
+    uint32_t column = 0;
+    if (HaveDebugInfo) {
+      auto sbInst = Instructions.GetInstructionAtIndex(k);
+      line = sbInst.GetAddress().GetLineEntry().GetLine();
+      column = sbInst.GetAddress().GetLineEntry().GetColumn();
+      if (sbInst.GetAddress().GetBlock().IsInlined()) {
+        OriginalFunction = sbInst.GetAddress().GetBlock().GetInlinedName();
+      }
+    }
+
+    llvm::MCInst Inst;
+    auto InstSize = InstSP->GetMCInst(Inst);
+    if (InstSize == 0) return false;
+
+    const unsigned Opcode = Inst.getOpcode();
+    const MCInstrDesc &MCID = MII->get(Opcode);
+    object::SectionedAddress Addr = {InstAddr,
+                                     object::SectionedAddress::UndefSection};
+
+    MachineInstr *MI = nullptr;
+
+    // Fill the Machine Function.
+    if (MF) {
+      // If it is not a branch and we previously did not decompile a
+      // branch,
+      // check if this should start a new basic block. For example
+      // default:
+      // label within a switch usually has this structure.
+      if (!MCID.isBranch() && BranchesToUpdate.count(Addr.Address) &&
+          !PrevBranch) {
+        MachineBasicBlock *OldBB = MBB;
+        MBB = MF->CreateMachineBasicBlock();
+        if (!OldBB->isSuccessor(MBB)) OldBB->addSuccessor(MBB);
+        MF->push_back(MBB);
+      }
+
+      // This is used to prevent wrong DI SP attached to inlined
+      // instructions.
+      if (SPs.count(OriginalFunction)) DISP = SPs[OriginalFunction];
+
+      auto DILoc = DILocation::get(Ctx, line, column, DISP);
+      DebugLoc Loc = DebugLoc(DILoc);
+      // For the functions out of backtrace we should analize whole
+      // function, so crash-start flag should go at the end of the fn.
+      if (IsFnOutOfBt && k == (numInstr - 1))
+        MI = addInstr(MF, MBB, Inst, &Loc, true,
+                      DefinedRegs, FuncStartSymbols, target);
+      else
+        MI = addInstr(MF, MBB, Inst, &Loc, CrashStartAddr == Addr.Address,
+                      DefinedRegs, FuncStartSymbols, target);
+
+      if (MI) {
+        // There could be multiple branches targeting the same
+        // MBB.
+        while (BranchesToUpdate.count(Addr.Address)) {
+          auto BranchIt = BranchesToUpdate.find(Addr.Address);
+          MachineInstr *BranchInstr = BranchIt->second;
+          // In the first shot it was an imm representing the address.
+          // Now we set the real MBB as an operand.
+          // FIXME: Should call RemoveOperand(0) and then set it to
+          // the MBB.
+          BranchInstr->getOperand(0) = MachineOperand::CreateMBB(MBB);
+          if (!BranchInstr->getParent()->isSuccessor(MBB))
+            BranchInstr->getParent()->addSuccessor(MBB);
+          BranchesToUpdate.erase(BranchIt);
+        }
+      }
+    }
+
+    // If this is a branch, start new MBB.
+    if (MF && MI && MCID.isBranch()) {
+      MachineBasicBlock *OldBB = MBB;
+      MBB = MF->CreateMachineBasicBlock();
+      if (MI && MI->isConditionalBranch() && !OldBB->isSuccessor(MBB))
+        OldBB->addSuccessor(MBB);
+      MF->push_back(MBB);
+      // Rememer the target address, so we can fix it
+      // with the proper BB in the case of regular jump.
+      // It can be a jump instruction where the target is
+      // in a register:
+      //    JMP64r $r10
+      if (MI->getOperand(0).isImm()) {
+        uint64_t TargetBBAddr = MI->getOperand(0).getImm();
+        BranchesToUpdate.insert({TargetBBAddr, MI});
+      }
+      PrevBranch = true;
+    } else
+      PrevBranch = false;
+  }
+
+  return true;
+}
+
 llvm::Error crash_blamer::Decompiler::run(
     StringRef InputFile, SmallVectorImpl<StringRef> &functionsFromCoreFile,
     FrameToRegsMap &FrameToRegs, SmallVectorImpl<BlameFunction> &BlameTrace,
@@ -242,11 +393,6 @@ llvm::Error crash_blamer::Decompiler::run(
 
   // Create Debug Info.
   DIBuilder DIB(*Module);
-
-  lldb_private::ArchSpec arch(TheTriple.normalize());
-
-  lldb::DisassemblerSP Disassembler_sp =
-      lldb_private::Disassembler::FindPlugin(arch, nullptr, nullptr);
 
   // Used to reconstruct the target from CALLs.
   // FIXME: Use `image lookup --address` in order to find
@@ -305,16 +451,10 @@ llvm::Error crash_blamer::Decompiler::run(
     MachineFunction *MF = nullptr;
     MachineBasicBlock *MBB = nullptr;
     DISubprogram *DISP = nullptr;
-    crash_blamer::RegSet DefinedRegs;
     std::string InstrAddr;
     unsigned AddrValue = 0;
-    bool PrevBranch = true;
 
     StringRef FunctionName = frame.first;
-
-    // Jumps to be updated with proper targets ( in form of bb).
-    // This maps the target address with the jump.
-    std::unordered_multimap<uint64_t, MachineInstr *> BranchesToUpdate;
 
     MF = &createMF(FunctionName);
     MBB = MF->CreateMachineBasicBlock();
@@ -402,119 +542,11 @@ llvm::Error crash_blamer::Decompiler::run(
       regInfo.push_back({reg.regName, reg.regValue});
     MF->addCrashRegInfo(regInfo);
 
-    std::pair<lldb::addr_t, lldb::addr_t> func_range{FuncStart.GetFileAddress(),
-                                                     FuncEnd.GetFileAddress()};
-    lldb::addr_t FuncLoadAddr = FuncStart.GetLoadAddress(target);
-
-    lldb::DataBufferSP buffer_sp(
-        new lldb_private::DataBufferHeap(func_range.second, 0));
-    lldb::SBError error;
-    target.ReadMemory(FuncStart, buffer_sp->GetBytes(),
-                      buffer_sp->GetByteSize(), error);
-
-    lldb_private::DataExtractor Extractor(buffer_sp, target.GetByteOrder(),
-                                          target.GetAddressByteSize());
-    Disassembler_sp->DecodeInstructions(FuncLoadAddr, Extractor, 0,
-                                        Instructions.GetSize(), false, false);
-
-    lldb_private::InstructionList &instruction_list =
-        Disassembler_sp->GetInstructionList();
-    size_t numInstr = instruction_list.GetSize();
-    for (size_t k = 0; k < numInstr; ++k) {
-      // This is used for tracking inlined functions.
-      // The instrs from such fn will be stored in a .text of another fn.
-      StringRef OriginalFunction = frame.first;
-      auto InstSP = instruction_list.GetInstructionAtIndex(k);
-      uint64_t InstAddr = InstSP->GetAddress().GetFileAddress();
-
-      uint32_t line = 0;
-      uint32_t column = 0;
-      if (HaveDebugInfo) {
-        auto sbInst = Instructions.GetInstructionAtIndex(k);
-        line = sbInst.GetAddress().GetLineEntry().GetLine();
-        column = sbInst.GetAddress().GetLineEntry().GetColumn();
-        if (sbInst.GetAddress().GetBlock().IsInlined()) {
-            OriginalFunction = sbInst.GetAddress().GetBlock().GetInlinedName();
-        }
-      }
-
-      llvm::MCInst Inst;
-      auto InstSize = InstSP->GetMCInst(Inst);
-      if (InstSize == 0) {
-        return make_error<StringError>("unable to decompile an instruction",
-                                       inconvertibleErrorCode());
-      }
-
-      const unsigned Opcode = Inst.getOpcode();
-      const MCInstrDesc &MCID = MII->get(Opcode);
-      object::SectionedAddress Addr = {
-          InstAddr, object::SectionedAddress::UndefSection};
-
-      MachineInstr *MI = nullptr;
-
-      // Fill the Machine Function.
-      if (MF) {
-        // If it is not a branch and we previously did not decompile a
-        // branch,
-        // check if this should start a new basic block. For example
-        // default:
-        // label within a switch usually has this structure.
-        if (!MCID.isBranch() && BranchesToUpdate.count(Addr.Address) &&
-            !PrevBranch) {
-          MachineBasicBlock *OldBB = MBB;
-          MBB = MF->CreateMachineBasicBlock();
-          if (!OldBB->isSuccessor(MBB)) OldBB->addSuccessor(MBB);
-          MF->push_back(MBB);
-        }
-
-        // This is used to prevent wrong DI SP attached to inlined
-        // instructions.
-        if (SPs.count(OriginalFunction))
-          DISP = SPs[OriginalFunction];
-
-        auto DILoc = DILocation::get(Ctx, line, column, DISP);
-        DebugLoc Loc = DebugLoc(DILoc);
-        MI = addInstr(MF, MBB, Inst, &Loc, frame.second.GetPC() == Addr.Address,
-                      DefinedRegs, FuncStartSymbols);
-
-        if (MI) {
-          // There could be multiple branches targeting the same
-          // MBB.
-          while (BranchesToUpdate.count(Addr.Address)) {
-            auto BranchIt = BranchesToUpdate.find(Addr.Address);
-            MachineInstr *BranchInstr = BranchIt->second;
-            // In the first shot it was an imm representing the address.
-            // Now we set the real MBB as an operand.
-            // FIXME: Should call RemoveOperand(0) and then set it to
-            // the MBB.
-            BranchInstr->getOperand(0) = MachineOperand::CreateMBB(MBB);
-            if (!BranchInstr->getParent()->isSuccessor(MBB))
-              BranchInstr->getParent()->addSuccessor(MBB);
-            BranchesToUpdate.erase(BranchIt);
-          }
-        }
-      }
-
-      // If this is a branch, start new MBB.
-      if (MF && MI && MCID.isBranch()) {
-        MachineBasicBlock *OldBB = MBB;
-        MBB = MF->CreateMachineBasicBlock();
-        if (MI && MI->isConditionalBranch() && !OldBB->isSuccessor(MBB))
-          OldBB->addSuccessor(MBB);
-        MF->push_back(MBB);
-        // Rememer the target address, so we can fix it
-        // with the proper BB in the case of regular jump.
-        // It can be a jump instruction where the target is
-        // in a register:
-        //    JMP64r $r10
-        if (MI->getOperand(0).isImm()) {
-          uint64_t TargetBBAddr = MI->getOperand(0).getImm();
-          BranchesToUpdate.insert({TargetBBAddr, MI});
-        }
-        PrevBranch = true;
-      } else
-        PrevBranch = false;
-    }
+    if (!DecodeIntrsToMIR(TheTriple, Instructions, FuncStart, FuncEnd, target, HaveDebugInfo,
+                     MF, MBB, frame.first, DISP, SPs, Ctx, frame.second.GetPC(),
+                     FuncStartSymbols))
+      return make_error<StringError>("unable to decompile an instruction",
+                                     inconvertibleErrorCode());
 
     LLVM_DEBUG(if (MF) {
       dbgs() << "Decompiled MF:\n";
@@ -538,6 +570,75 @@ llvm::Error crash_blamer::Decompiler::run(
     FunctionsToDecompile.erase(FunctionName);
     // If we decompiled all the functions, break the loop.
     if (FunctionsToDecompile.empty()) break;
+  }
+
+  // Create MFs for function out of backtrace.
+  for (auto NonBTFnAddr : FunctionsThatAreNotInBT) {
+    lldb::SBAddress addr(NonBTFnAddr, target);
+    auto symCtx = target.ResolveSymbolContextForAddress(
+                      addr, lldb::eSymbolContextEverything);
+    if (!(symCtx.IsValid() && symCtx.GetSymbol().IsValid()))
+      continue;
+    lldb::SBInstructionList Instructions;
+    lldb::SBAddress FuncStart, FuncEnd;
+    auto Symbol = symCtx.GetSymbol();
+    Instructions = Symbol.GetInstructions(target);
+    FuncStart = Symbol.GetStartAddress();
+    FuncEnd = Symbol.GetEndAddress();
+
+    bool HasDbgInfo = false;
+    auto Fn = FuncStart.GetFunction();
+    MachineFunction *MF = &createMF(symCtx.GetSymbol().GetDisplayName());
+    MachineBasicBlock *MBB = MF->CreateMachineBasicBlock();
+    MF->push_back(MBB);
+
+    DISubprogram *SP = nullptr;
+
+    // Handle debug info if this comes from another module.
+    if (Fn) {
+      HasDbgInfo = true;
+      DIFile *File = nullptr;
+      DICompileUnit *CU = nullptr;
+      std::string FileDirInfo, FileNameInfo, AbsFileName;
+      FileDirInfo = FuncStart.GetCompileUnit().GetFileSpec().GetDirectory();
+      FileNameInfo = FuncStart.GetCompileUnit().GetFileSpec().GetFilename();
+      AbsFileName =
+          (Twine(FileDirInfo) + Twine("/") + Twine(FileNameInfo)).str();
+
+      if (!CUs.count(AbsFileName)) {
+        File = DIB.createFile(AbsFileName, "/");
+        CU = DIB.createCompileUnit(
+            dwarf::DW_LANG_C, File, "crash-blamer", /*isOptimized=*/true, "",
+            0, StringRef(), DICompileUnit::DebugEmissionKind::FullDebug, 0,
+            true, false, DICompileUnit::DebugNameTableKind::Default, false,
+            true);
+        CUs.insert({AbsFileName, std::make_pair(File, CU)});
+      } else {
+        File = CUs[AbsFileName].first;
+        CU = CUs[AbsFileName].second;
+      }
+
+      auto &F = MF->getFunction();
+      auto SPType = DIB.createSubroutineType(DIB.getOrCreateTypeArray(None));
+      DISubprogram::DISPFlags SPFlags =
+          DISubprogram::SPFlagDefinition | DISubprogram::SPFlagOptimized;
+      auto sp = DIB.createFunction(CU, F.getName(), F.getName(), File, 1,
+                                   SPType, 1, DINode::FlagZero, SPFlags);
+      (const_cast<Function *>(&F))->setSubprogram(sp);
+      SP = sp;
+      DIB.finalizeSubprogram(SP);
+      if (!SPs.count(MF->getName()))
+        SPs.insert({MF->getName(), SP});
+    }
+
+    if (!DecodeIntrsToMIR(TheTriple, Instructions, FuncStart, FuncEnd, target, HasDbgInfo,
+                     MF, MBB, symCtx.GetSymbol().GetDisplayName(), SP,
+                     SPs, Ctx, 0, FuncStartSymbols, true /*IsFnOutOfBt*/))
+      return make_error<StringError>("unable to decompile an instruction",
+                                     inconvertibleErrorCode());
+    BlameTrace.push_back({symCtx.GetSymbol().GetDisplayName(), MF});
+    // Functions that are out of backtrace have 0 crash order.
+    MF->setCrashOrder(0);
   }
 
   // Run FixRegStateFlags pass for each basic block.
