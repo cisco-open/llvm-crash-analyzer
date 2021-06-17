@@ -197,6 +197,15 @@ void crash_blamer::TaintAnalysis::printDestSrcInfo(DestSourcePair &DestSrc) {
       });
 }
 
+MachineFunction* crash_blamer::TaintAnalysis::getCalledMF(const BlameModule &BM, std::string Name) {
+  for (auto &BF : BM) {
+     std::pair<llvm::StringRef, llvm::StringRef> match  = BF.Name.split('.');
+    if (Name == match.first)
+     return BF.MF;
+  }
+  return nullptr;
+}
+
 void crash_blamer::TaintAnalysis::startTaint(DestSourcePair &DS,
                                              SmallVectorImpl<TaintInfo> &TL,
                                              const MachineInstr &MI,
@@ -360,8 +369,10 @@ bool llvm::crash_blamer::TaintAnalysis::propagateTaint(
 
 // Return true if taint is terminated.
 // Return false otherwise.
-bool crash_blamer::TaintAnalysis::runOnBlameMF(const MachineFunction &MF,
-  TaintDataFlowGraph &TaintDFG) {
+bool crash_blamer::TaintAnalysis::runOnBlameMF(const BlameModule &BM,
+                                               const MachineFunction &MF,
+                                               TaintDataFlowGraph &TaintDFG,
+                                               bool CalleeNotInBT) {
   // As a first step, run the forward analysis by tracking values
   // in the machine locations.
   MachineLocTracking MLocTracking;
@@ -390,8 +401,7 @@ bool crash_blamer::TaintAnalysis::runOnBlameMF(const MachineFunction &MF,
 
   // Perform backward analysis on the MF.
 
-  for (auto MBBIt = po_begin(&MF.front()),
-                                              MBBIt_E = po_end(&MF.front());
+  for (auto MBBIt = po_begin(&MF.front()), MBBIt_E = po_end(&MF.front());
        MBBIt != MBBIt_E; ++MBBIt) {
     auto MBB = *MBBIt;
     SmallVector<TaintInfo, 8> &TL_Mbb = MBB_TL_Map.find(MBB)->second;
@@ -412,20 +422,45 @@ bool crash_blamer::TaintAnalysis::runOnBlameMF(const MachineFunction &MF,
       auto &MI = *MIIt;
       if (MI.getFlag(MachineInstr::CrashStart)) {
         CrashSequenceStarted = true;
-	// For frames > 0, skip to the first instruction after the call 
-	// instruction, traversing backwards 
-        if (!TaintList.empty()) {
-	  // Skip crash instruction
+        // For frames > 0, skip to the first instruction after the call
+        // instruction, traversing backwards
+        if (MF.getCrashOrder() > 1 || CalleeNotInBT) {
+          if (!CalleeNotInBT) {
+            // Skip processing crash instruction
+            ++MIIt;
+            if (MIIt == MBB->rend())
+              return Result;
+            auto &M1 = *MIIt;
+          }
+          // Skip processing the call instruction
           ++MIIt;
-	  // Skip the call instruction
-          ++MIIt;
+          if (MIIt == MBB->rend())
+            return Result;
         }
         auto &MI2 = *MIIt;
-        LLVM_DEBUG(MI2.dump(););
+        // Process the call instruction that is not in the backtrace
+        if (MI2.isCall()) {
+          const MachineOperand &CalleeOp = MI2.getOperand(0);
+          auto TargetName = CalleeOp.getGlobal()->getName();
+          if (CalleeOp.isGlobal()) {
+            MachineFunction *CalledMF = getCalledMF(BM, TargetName);
+            if (CalledMF) {
+              LLVM_DEBUG(llvm::dbgs()
+                             << "#### Processing callee " << TargetName << "\n";);
+              CalledMF->setCrashOrder(MF.getCrashOrder());
+              runOnBlameMF(BM, *CalledMF, TaintDFG, true);
+              CalledMF->setCrashOrder(0);
+              continue;
+            } else
+              LLVM_DEBUG(llvm::dbgs()
+                             << "#### Callee not found: " << TargetName << "\n";);
+          }
+        }
         auto DestSrc = TII->getDestAndSrc(MI2);
         if (!DestSrc) {
           LLVM_DEBUG(llvm::dbgs()
-                     << "Crash instruction doesn't have blame operands\n");
+                     << "Crash instruction doesn't have blame operands\n";
+	  MI2.dump(););
           mergeTaintList(TL_Mbb, TaintList);
           continue;
         }
@@ -435,11 +470,27 @@ bool crash_blamer::TaintAnalysis::runOnBlameMF(const MachineFunction &MF,
 
       if (!CrashSequenceStarted)
         continue;
+      // Process call instruction that is not in backtrace
+      // TODO: Currently we process *all* call instructions. Is this necessary ?
+      if (MI.isCall()) {
+        const MachineOperand &CalleeOp = MI.getOperand(0);
+        auto TargetName = CalleeOp.getGlobal()->getName();
+        if (CalleeOp.isGlobal()) {
+          MachineFunction *CalledMF = getCalledMF(BM, TargetName);
+          if (CalledMF) {
+            CalledMF->setCrashOrder(MF.getCrashOrder());
+            runOnBlameMF(BM, *CalledMF, TaintDFG, true);
+            CalledMF->setCrashOrder(0);
+            continue;
+          } else
+            LLVM_DEBUG(llvm::dbgs()
+                           << "#### func not found: " << TargetName << "\n";);
+        }
+      }
 
-      // TBD : If Call Instruction, we may have to analyze the call
-      // if it modifies a tainted operand.
-      if (MI.isCall() || MI.isBranch())
+      if (MI.isBranch()) {
         continue;
+      }
 
       // Print the instruction from crash-start point
       LLVM_DEBUG(MI.dump(););
@@ -477,11 +528,19 @@ bool crash_blamer::TaintAnalysis::runOnBlameModule(const BlameModule &BM) {
 
   TaintDataFlowGraph TaintDFG;
 
+  for (auto &BF : BM) {
+    llvm::dbgs() << "$$$ " << BF.Name << "  " << BF.MF->getCrashOrder() <<  "\n";
+  }
+
   // Run the analysis on each blame function.
   for (auto &BF : BM) {
     // Skip the libc functions for now, if we haven't started the analysis yet.
     // e.g.: _start() and __libc_start_main().
     if (!AnalysisStarted && BF.Name.startswith("_")) {
+      LLVM_DEBUG(llvm::dbgs() << "### Skip: " << BF.Name << "\n";);
+      continue;
+    }
+    if (!BF.MF->getCrashOrder()) {
       LLVM_DEBUG(llvm::dbgs() << "### Skip: " << BF.Name << "\n";);
       continue;
     }
@@ -494,8 +553,9 @@ bool crash_blamer::TaintAnalysis::runOnBlameModule(const BlameModule &BM) {
       return Result;
     }
 
-    LLVM_DEBUG(llvm::dbgs() << "### MF: " << BF.Name << "\n";);
-    if (runOnBlameMF(*(BF.MF), TaintDFG)) {
+    LLVM_DEBUG(llvm::dbgs() << "### MF: " << BF.Name << " " << BF.MF->getCrashOrder() << " \n";);
+    if (runOnBlameMF(BM, *(BF.MF), TaintDFG, false)) {
+
       LLVM_DEBUG(dbgs() << "\nTaint Analysis done.\n");
       if (TaintList.empty()) {
         TaintDFG.dump();
