@@ -430,7 +430,6 @@ bool crash_blamer::TaintAnalysis::runOnBlameMF(const BlameModule &BM,
             ++MIIt;
             if (MIIt == MBB->rend())
               return Result;
-            auto &M1 = *MIIt;
           }
           // Skip processing the call instruction
           ++MIIt;
@@ -441,6 +440,9 @@ bool crash_blamer::TaintAnalysis::runOnBlameMF(const BlameModule &BM,
         // Process the call instruction that is not in the backtrace
         if (MI2.isCall()) {
           const MachineOperand &CalleeOp = MI2.getOperand(0);
+          // TODO: handle indirect calls.
+          if (!CalleeOp.isGlobal())
+            continue;
           auto TargetName = CalleeOp.getGlobal()->getName();
           if (CalleeOp.isGlobal()) {
             MachineFunction *CalledMF = getCalledMF(BM, TargetName);
@@ -474,18 +476,19 @@ bool crash_blamer::TaintAnalysis::runOnBlameMF(const BlameModule &BM,
       // TODO: Currently we process *all* call instructions. Is this necessary ?
       if (MI.isCall()) {
         const MachineOperand &CalleeOp = MI.getOperand(0);
+        // TODO: handle indirect calls.
+        if (!CalleeOp.isGlobal())
+          continue;
         auto TargetName = CalleeOp.getGlobal()->getName();
-        if (CalleeOp.isGlobal()) {
-          MachineFunction *CalledMF = getCalledMF(BM, TargetName);
-          if (CalledMF) {
-            CalledMF->setCrashOrder(MF.getCrashOrder());
-            runOnBlameMF(BM, *CalledMF, TaintDFG, true);
-            CalledMF->setCrashOrder(0);
-            continue;
-          } else
-            LLVM_DEBUG(llvm::dbgs()
-                           << "#### func not found: " << TargetName << "\n";);
-        }
+        MachineFunction *CalledMF = getCalledMF(BM, TargetName);
+        if (CalledMF) {
+          CalledMF->setCrashOrder(MF.getCrashOrder());
+          runOnBlameMF(BM, *CalledMF, TaintDFG, true);
+          CalledMF->setCrashOrder(0);
+          continue;
+        } else
+          LLVM_DEBUG(llvm::dbgs()
+                         << "#### func not found: " << TargetName << "\n";);
       }
 
       if (MI.isBranch()) {
@@ -527,10 +530,6 @@ bool crash_blamer::TaintAnalysis::runOnBlameModule(const BlameModule &BM) {
   bool Result = false;
 
   TaintDataFlowGraph TaintDFG;
-
-  for (auto &BF : BM) {
-    llvm::dbgs() << "$$$ " << BF.Name << "  " << BF.MF->getCrashOrder() <<  "\n";
-  }
 
   // Run the analysis on each blame function.
   for (auto &BF : BM) {
