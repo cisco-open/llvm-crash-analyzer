@@ -66,7 +66,8 @@ public:
   TaintAnalysis();
 
   bool runOnBlameModule(const BlameModule &BM);
-  bool runOnBlameMF(const MachineFunction &MF, TaintDataFlowGraph &TaintDFG);
+  bool runOnBlameMF(const BlameModule &BM, const MachineFunction &MF,
+	TaintDataFlowGraph &TaintDFG, bool CalleeNotInBT);
 
   void resetTaintList(SmallVectorImpl<TaintInfo> &TL);
   void mergeTaintList(SmallVectorImpl<TaintInfo> &Dest_TL, SmallVectorImpl<TaintInfo> &Src_TL);
@@ -80,6 +81,7 @@ public:
   void printDestSrcInfo(DestSourcePair &DS);
   TaintInfo isTainted(TaintInfo &Op, SmallVectorImpl<TaintInfo> &TL);
   void calculateMemAddr(TaintInfo &Ti);
+  MachineFunction *getCalledMF(const BlameModule &BM, std::string Name);
 };
 
 } // end crash_blamer namespace
