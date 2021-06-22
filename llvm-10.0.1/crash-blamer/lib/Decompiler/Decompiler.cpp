@@ -210,6 +210,13 @@ MachineInstr *crash_blamer::Decompiler::addInstr(
 MachineFunction &crash_blamer::Decompiler::createMF(StringRef FunctionName) {
   // Create a dummy IR Function.
   auto &Context = Module->getContext();
+
+  // If we already created IR declaration for this, we don't need it anymore
+  // since we are creating the definition here.
+  auto *FDecl = Module->getFunction(FunctionName);
+  if (FDecl)
+    FDecl->removeFromParent();
+
   Function *F =
       Function::Create(FunctionType::get(Type::getVoidTy(Context), false),
                        Function::ExternalLinkage, FunctionName, *Module);
