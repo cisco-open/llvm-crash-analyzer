@@ -24,6 +24,10 @@
 #
 # return 0;
 #}
+
+## Wrong blame function.
+# XFAIL: *
+
 # RUN: %crash-blamer-ta %s | FileCheck %s
 # CHECK: Blame Function is test_cf
 

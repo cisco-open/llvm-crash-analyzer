@@ -13,9 +13,13 @@
 # fillbuffer(str, 16);
 # return 0;
 #}
+
+## Misisng of some instrs in getDestAndSrc().
+
+# XFAIL: *
 # RUN: %crash-blamer-ta %s | FileCheck %s
 # CHECK: Blame Function is main
-# XFAIL: *
+
 --- |
   ; ModuleID = 'bin/test2-1'
   source_filename = "bin/test2-1"

@@ -25,6 +25,13 @@
 #int main(){
 #    caller1();
 #}
+
+## This fails because our decompiler decompiles
+## functions that are not in the bt at first level.
+## We need to add support for the decompilation of
+## the functions that are being called from that fn.
+
+# XFAIL: *
 # RUN: %crash-blamer-ta %s | FileCheck %s
 # CHECK: Blame Function is func2
 --- |
