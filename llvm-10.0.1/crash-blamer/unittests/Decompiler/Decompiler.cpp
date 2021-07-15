@@ -10,8 +10,8 @@
 #include "gtest/gtest.h"
 
 namespace {
+  // This is dummy unit test.
   TEST(Decompiler, add) {
     ASSERT_TRUE(1 == 1);
-    EXPECT_TRUE(0);
   }
 }

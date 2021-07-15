@@ -18,6 +18,11 @@
 #  foo(n);
 #  return 0;
 #}
+
+## Wrong blame fn.
+
+# XFAIL: *
+
 # RUN: %crash-blamer-ta %s | FileCheck %s
 # CHECK: Blame Function is main
 

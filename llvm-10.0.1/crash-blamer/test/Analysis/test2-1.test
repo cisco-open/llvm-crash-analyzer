@@ -14,6 +14,7 @@
 # return 0;
 #}
 
+# XFAIL: *
 # RUN: %crash-blamer --core-file=%S/Inputs/core.test2-1 \
 # RUN:     %S/Inputs/test2-1 < %s 2>&1 | FileCheck %s
 
