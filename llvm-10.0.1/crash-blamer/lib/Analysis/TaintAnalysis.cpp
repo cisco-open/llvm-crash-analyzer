@@ -7,6 +7,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "Analysis/TaintAnalysis.h"
+#include "Analysis/ConcreteReverseExec.h"
 #include "Analysis/TaintDataFlowGraph.h"
 #include "Analysis/MachineLocTracking.h"
 
@@ -25,13 +26,13 @@ using TaintInfo = llvm::crash_blamer::TaintInfo;
 unsigned Node::NextID = 0;
 
 bool llvm::crash_blamer::operator==(const TaintInfo &T1, const TaintInfo &T2) {
+  const MachineFunction *MF = T1.Op->getParent()->getMF();
+  auto TRI = MF->getSubtarget().getRegisterInfo();
   if (!T1.IsTaintMemAddr() && !T2.IsTaintMemAddr()) {
     // Both operands needs to be reg operands
     if (!T1.Op->isReg() || !T2.Op->isReg())
       return false;
 
-    const MachineFunction *MF = T1.Op->getParent()->getMF();
-    auto TRI = MF->getSubtarget().getRegisterInfo();
     if (T1.Op->getReg() == T2.Op->getReg()) {
       // Check if both operands have an offset
       if (T1.Offset && T2.Offset) {
@@ -77,6 +78,13 @@ bool llvm::crash_blamer::operator==(const TaintInfo &T1, const TaintInfo &T2) {
   // TODO: Should we check the offset is 0 here?
   if (T1.Op->getReg() == T2.Op->getReg())
     return true;
+  // Check for register aliases.
+  for (MCRegAliasIterator RAI(T1.Op->getReg(), TRI, true); RAI.isValid();
+       ++RAI) {
+    if ((*RAI).id() == T2.Op->getReg()) {
+      return true;
+    }
+  }
 
   return false;
 }
@@ -122,8 +130,6 @@ void crash_blamer::TaintAnalysis::calculateMemAddr(TaintInfo &Ti) {
   const MachineFunction *MF = Ti.Op->getParent()->getMF();
   auto TRI = MF->getSubtarget().getRegisterInfo();
   std::string RegName = TRI->getRegAsmName(Ti.Op->getReg()).lower();
-  if (RegName != "rsp" && RegName != "rbp")
-    return;
 
   Ti.IsConcreteMemory = true;
   // Calculate real address by reading the context of regInfo MF attr
@@ -433,6 +439,10 @@ bool crash_blamer::TaintAnalysis::runOnBlameMF(const BlameModule &BM,
   MachineLocTracking MLocTracking;
   MLocTracking.run(const_cast<MachineFunction &>(MF));
 
+  // Init the concrete reverse execution.
+  ConcreteReverseExec ReverseExecutionRecord(&MF);
+  ReverseExecutionRecord.dump();
+
   // Per function : Map MBB with its Taint List
   DenseMap<const MachineBasicBlock *, SmallVector<TaintInfo, 8>> MBB_TL_Map;
   // Initialize all the MBB with emtpty taint list
@@ -527,6 +537,10 @@ bool crash_blamer::TaintAnalysis::runOnBlameMF(const BlameModule &BM,
 
       if (!CrashSequenceStarted)
         continue;
+
+      // Update the register values, so we have right regiter values state.
+      ReverseExecutionRecord.execute(MI);
+
       // Process call instruction that is not in backtrace
       // TODO: Currently we process *all* call instructions. Is this necessary ?
       if (MI.isCall()) {

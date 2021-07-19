@@ -1053,6 +1053,7 @@ public:
     return CrashOrder;
   }
 
+  // TODO: Optimize this.
   std::string getRegValueFromCrash(std::string Reg) const {
     for (auto &R : MFRegInfo) {
       if (R.Name == Reg)

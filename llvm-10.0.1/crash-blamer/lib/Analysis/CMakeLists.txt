@@ -6,6 +6,7 @@ set(LLVM_LINK_COMPONENTS
   )
 
 llvm_add_library(CrashBlamerTaintAnalysis
+  ConcreteReverseExec.cpp
   MachineLocTracking.cpp
   TaintAnalysis.cpp
   TaintDataFlowGraph.cpp
