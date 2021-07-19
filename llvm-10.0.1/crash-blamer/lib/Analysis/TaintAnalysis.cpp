@@ -25,45 +25,59 @@ using TaintInfo = llvm::crash_blamer::TaintInfo;
 unsigned Node::NextID = 0;
 
 bool llvm::crash_blamer::operator==(const TaintInfo &T1, const TaintInfo &T2) {
-  // Consider reg and offset only, since we disabled
-  // concrete mem addr calculation.
+  if (!T1.IsTaintMemAddr() && !T2.IsTaintMemAddr()) {
+    // Both operands needs to be reg operands
+    if (!T1.Op->isReg() || !T2.Op->isReg())
+      return false;
 
-  // Both operands needs to be reg operands
+    const MachineFunction *MF = T1.Op->getParent()->getMF();
+    auto TRI = MF->getSubtarget().getRegisterInfo();
+    if (T1.Op->getReg() == T2.Op->getReg()) {
+      // Check if both operands have an offset
+      if (T1.Offset && T2.Offset) {
+        std::string RegName = TRI->getRegAsmName(T1.Op->getReg()).lower();
+        // Compare offsets only if they point to a stack location
+        if (RegName == "rsp" || RegName == "rbp") {
+          return *T1.Offset == *T2.Offset;
+        }
+      } else
+        return true;
+    }
+
+    // Check for noreg case.
+    // Check offsets if both operands are noreg
+    if (!T1.Op->getReg() && !T2.Op->getReg()) {
+      if (T1.Offset && T2.Offset)
+        return *T1.Offset == *T2.Offset;
+    }
+
+    if (!T1.Op->getReg() || !T2.Op->getReg())
+      return false;
+
+    // Check if the registers are alias to each other
+    // eax and rax, for example
+    for (MCRegAliasIterator RAI(T1.Op->getReg(), TRI, true); RAI.isValid();
+         ++RAI) {
+      if ((*RAI).id() == T2.Op->getReg()) {
+        return true;
+      }
+    }
+  }
+
+  // For mem taint ops, compare the actuall addresses.
+  if (T1.IsTaintMemAddr() && T2.IsTaintMemAddr())
+    // Here we should be comparing addresses if both available only.
+    return T1.GetTaintMemAddr() == T2.GetTaintMemAddr();
+
   if (!T1.Op->isReg() || !T2.Op->isReg())
     return false;
 
-  const MachineFunction *MF = T1.Op->getParent()->getMF();
-  auto TRI = MF->getSubtarget().getRegisterInfo();
-  if (T1.Op->getReg() == T2.Op->getReg()) {
-    // Check if both operands have an offset
-    if (T1.Offset && T2.Offset) {
-      std::string RegName = TRI->getRegAsmName(T1.Op->getReg()).lower();
-      // Compare offsets only if they point to a stack location
-      if (RegName == "rsp" || RegName == "rbp") {
-        return *T1.Offset == *T2.Offset;
-      }
-    } else
-      return true;
-  }
+  // Here we check mem addr base and reg.
+  // e.g.: $rsp + 0 == $rsp
+  // TODO: Should we check the offset is 0 here?
+  if (T1.Op->getReg() == T2.Op->getReg())
+    return true;
 
-  // Check for noreg case.
-  // Check offsets if both operands are noreg
-  if (!T1.Op->getReg() && !T2.Op->getReg()) {
-    if (T1.Offset && T2.Offset)
-      return *T1.Offset == *T2.Offset;
-  }
-
-  if (!T1.Op->getReg() || !T2.Op->getReg())
-    return false;
-
-  // Check if the registers are alias to each other
-  // eax and rax, for example
-  for (MCRegAliasIterator RAI(T1.Op->getReg(), TRI, true); RAI.isValid();
-       ++RAI) {
-    if ((*RAI).id() == T2.Op->getReg()) {
-      return true;
-    }
-  }
   return false;
 }
 
@@ -99,9 +113,39 @@ bool llvm::crash_blamer::operator<(const TaintInfo &T1, const TaintInfo &T2) {
 crash_blamer::TaintAnalysis::TaintAnalysis() {}
 
 void crash_blamer::TaintAnalysis::calculateMemAddr(TaintInfo &Ti) {
-  // This is temporary disabled until Concrete Reverse Execution
-  // is completely implemented.
-  return;
+  if (!Ti.Op->isReg() || !Ti.Offset)
+    return;
+
+  // For registers other than RSP and RBP, without ConcreteRevExec,
+  // we cannot be sure if the reg value has changed from the point
+  // of the crash.
+  const MachineFunction *MF = Ti.Op->getParent()->getMF();
+  auto TRI = MF->getSubtarget().getRegisterInfo();
+  std::string RegName = TRI->getRegAsmName(Ti.Op->getReg()).lower();
+  if (RegName != "rsp" && RegName != "rbp")
+    return;
+
+  Ti.IsConcreteMemory = true;
+  // Calculate real address by reading the context of regInfo MF attr
+  // (read from corefile).
+  std::string RegValue = MF->getRegValueFromCrash(RegName);
+
+  // If the value is not available just taint the base-reg.
+  if(RegValue == "") {
+    Ti.IsConcreteMemory = false;
+    return;
+  }
+
+  // Convert the std::string hex number into uint64_t.
+  uint64_t RealAddr = 0;
+  std::stringstream SS;
+  SS << std::hex << RegValue;
+  SS >> RealAddr;
+
+  // Apply the offset.
+  RealAddr += *Ti.Offset;
+
+  Ti.ConcreteMemoryAddress = RealAddr;
 }
 
 void crash_blamer::TaintAnalysis::mergeTaintList(
@@ -168,12 +212,12 @@ void crash_blamer::TaintAnalysis::printTaintList(
       dbgs() << "\n-----Taint List Begin------\n"; for (auto itr = TL.begin();
                                                         itr != TL.end();
                                                         ++itr) {
-        if (!itr->IsTaintMemAddr()) {
-          itr->Op->dump();
-          if (itr->Offset)
-            dbgs() << "offset: " << *(itr->Offset) << '\n';
-        } else
-          dbgs() << "mem addr: " << itr->GetTaintMemAddr() << "\n";
+        itr->Op->dump();
+        if (itr->Offset)
+          dbgs() << "offset: " << *(itr->Offset);
+        if (itr->IsTaintMemAddr())
+          dbgs() << "(mem addr: " << itr->GetTaintMemAddr() << ")";
+        dbgs() << '\n';
       } dbgs() << "\n------Taint List End----\n";);
 }
 
@@ -214,14 +258,20 @@ void crash_blamer::TaintAnalysis::startTaint(DestSourcePair &DS,
 
   SrcTi.Op = DS.Source;
   SrcTi.Offset = DS.SrcOffset;
+  if (SrcTi.Offset)
+    calculateMemAddr(SrcTi);
 
   SrcScaleReg.Op = DS.SrcScaledIndex;
 
   DestTi.Op = DS.Destination;
   DestTi.Offset = DS.DestOffset;
+  if (DestTi.Offset)
+    calculateMemAddr(DestTi);
 
   Src2Ti.Op = DS.Source2;
   Src2Ti.Offset = DS.Src2Offset;
+  if (Src2Ti.Offset)
+    calculateMemAddr(Src2Ti);
 
   // This condition is true only for frame #0 in back trace
   if (TaintList.empty()) {
@@ -286,12 +336,17 @@ bool llvm::crash_blamer::TaintAnalysis::propagateTaint(
   TaintInfo SrcTi, Src2Ti, DestTi;
   SrcTi.Op = DS.Source;
   SrcTi.Offset = DS.SrcOffset;
+  if (SrcTi.Offset)
+    calculateMemAddr(SrcTi);
 
   Src2Ti.Op = DS.Source2;
   Src2Ti.Offset = DS.Src2Offset;
+  // FIXME: Here to calculateMemAddr????
 
   DestTi.Op = DS.Destination;
   DestTi.Offset = DS.DestOffset;
+  if (DestTi.Offset)
+    calculateMemAddr(DestTi);
 
   if (!DestTi.Op)
     return true;
