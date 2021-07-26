@@ -9,6 +9,8 @@
 #include "Analysis/ConcreteReverseExec.h"
 
 #include <set>
+#include <sstream>
+#include <iomanip>
 
 #define DEBUG_TYPE "conrecete-rev-exec"
 
@@ -24,14 +26,50 @@ void ConcreteReverseExec::dump() {
                               << "<not available>\n";
              });
 }
+
 // TODO: Optimize this.
 void ConcreteReverseExec::updateCurrRegVal(std::string Reg, std::string Val) {
   for (auto &R : currentRegisterValues) {
     if (R.Name == Reg) {
-      R.Value = Val;
+      if (R.Value.size() == Val.size())
+        R.Value = Val;
+      else if (R.Value.size() > Val.size()){
+        // drop 0x part.
+        Val.erase(Val.begin());
+        Val.erase(Val.begin());
+        unsigned diff = R.Value.size() - Val.size();
+        R.Value.replace(diff, Val.size(), Val);
+      } else {
+        // Val.size > R.Value.size
+        // get the last N chars only:
+        //  eax = 0x00000009
+        //  ax = 0x0009
+        Val.erase(Val.begin());
+        Val.erase(Val.begin());
+        unsigned diff = Val.size() - R.Value.size() + 2;
+        R.Value = "0x" + Val.substr(diff);
+      }
       return;
     }
   }
+}
+std::string
+ConcreteReverseExec::getCurretValueInReg(const std::string &Reg) {
+  for (auto &R : currentRegisterValues) {
+    if (R.Name == Reg)
+      return R.Value;
+  }
+  return std::string("");
+}
+
+template< typename T >
+std::string intToHex(T num, unsigned regValSize)
+{
+  std::stringstream stream;
+  stream << "0x"
+         << std::setfill ('0') << std::setw(regValSize)
+         << std::hex << num;
+  return stream.str();
 }
 
 void ConcreteReverseExec::execute(const MachineInstr &MI) {
@@ -50,6 +88,7 @@ void ConcreteReverseExec::execute(const MachineInstr &MI) {
     Register Reg = MO.getReg();
     RegisterWorkList.insert(Reg);
     std::string RegName = TRI->getRegAsmName(Reg).lower();
+
     if (RegisterWorkList.count(Reg) == 1 && MI.modifiesRegister(Reg, TRI)) {
       // If this is the first reg def going backward, remember it.
       if (!RegistersDefs.count(Reg)) {
@@ -64,6 +103,46 @@ void ConcreteReverseExec::execute(const MachineInstr &MI) {
       // TODO: Handle all posible opcodes here.
       // For all unsupported MIs, we just invalidates the value in reg
       // by setting it to "".
+
+      // If the value of the register isn't available, we have nothing to
+      // update.
+      auto regVal = getCurretValueInReg(RegName);
+      if (regVal == "")
+        continue;
+
+      // Skip push/pop intructions here.
+      if (TII->isPushPop(MI))
+        continue;
+
+      uint64_t Val = 0;
+      std::stringstream SS;
+      SS << std::hex << regVal;
+      SS >> Val;
+
+      // In c_test_cases/test3.c there is a case
+      //  $eax = ADD32ri8 $eax(tied-def 0), 1
+      // so handle it.
+      if (auto RegImm = TII->isAddImmediate(MI, Reg)) {
+        // We do the oposite operation, since we are
+        // intereting the instruction going backward.
+        Val -= RegImm->Imm;
+        // We should update all reg aliases as well.
+        // TODO: Improve this.
+        auto regAliasesInfo = getRegAliasesInfo();
+        auto regInfoId = regAliasesInfo.getID(RegName);
+        if (!regInfoId)
+          updateCurrRegVal(RegName, "");
+        auto regTripple = regAliasesInfo.getRegMap(*regInfoId);
+        //regVal.size() - 2 for 0x chars.
+        std::string newValue = intToHex(Val, regVal.size() - 2);
+        // update reg aliases as well.
+        // e.g. if $eax is modified, update both $rax and $ax as well.
+        updateCurrRegVal(std::get<0>(regTripple), newValue);
+        updateCurrRegVal(std::get<1>(regTripple), newValue);
+        updateCurrRegVal(std::get<2>(regTripple), newValue);
+        dump();
+        continue;
+      }
 
       // The MI is not supported, so consider it as not available.
       updateCurrRegVal(RegName, "");
