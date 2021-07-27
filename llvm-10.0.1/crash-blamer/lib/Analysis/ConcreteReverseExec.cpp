@@ -130,8 +130,10 @@ void ConcreteReverseExec::execute(const MachineInstr &MI) {
         // TODO: Improve this.
         auto regAliasesInfo = getRegAliasesInfo();
         auto regInfoId = regAliasesInfo.getID(RegName);
-        if (!regInfoId)
+        if (!regInfoId) {
           updateCurrRegVal(RegName, "");
+          continue;
+        }
         auto regTripple = regAliasesInfo.getRegMap(*regInfoId);
         //regVal.size() - 2 for 0x chars.
         std::string newValue = intToHex(Val, regVal.size() - 2);
