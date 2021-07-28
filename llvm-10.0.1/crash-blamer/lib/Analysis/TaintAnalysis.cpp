@@ -17,6 +17,12 @@
 
 #include <sstream>
 
+static cl::opt<std::string>
+DumpTaintGraphAsDOT("print-dfg-as-dot",
+                     cl::desc("Print Tainted graph for the GraphViz."),
+                     cl::value_desc("filename"),
+                     cl::init(""));
+
 using namespace llvm;
 
 #define DEBUG_TYPE "taint-analysis"
@@ -626,6 +632,13 @@ bool crash_blamer::TaintAnalysis::runOnBlameModule(const BlameModule &BM) {
 
       LLVM_DEBUG(dbgs() << "\nTaint Analysis done.\n");
       if (TaintList.empty()) {
+        if (DumpTaintGraphAsDOT != "") {
+          StringRef file_name = DumpTaintGraphAsDOT;
+          if (!file_name.endswith(".dot") && !file_name.endswith(".gv"))
+            errs() << "error: DOT file must be with '.dot' or '.gv' extension.\n";
+          else
+           TaintDFG.printAsDOT(file_name.str());
+        }
         TaintDFG.dump();
         if (!TaintDFG.getBlameNodesSize()) {
           llvm::outs() << "\nNo blame function found.\n";
@@ -638,6 +651,14 @@ bool crash_blamer::TaintAnalysis::runOnBlameModule(const BlameModule &BM) {
         return Result;
       }
     }
+  }
+
+  if (DumpTaintGraphAsDOT != "") {
+    StringRef file_name = DumpTaintGraphAsDOT;
+    if (!file_name.endswith(".dot") && !file_name.endswith(".gv"))
+      errs() << "error: DOT file must be with '.dot' or '.gv' extension.\n";
+    else
+      TaintDFG.printAsDOT(file_name.str());
   }
 
   TaintDFG.dump();

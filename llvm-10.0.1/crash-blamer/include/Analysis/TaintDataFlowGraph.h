@@ -17,6 +17,7 @@
 #include "llvm/CodeGen/MachineInstr.h"
 
 #include <memory>
+#include <string>
 
 using namespace llvm;
 using namespace crash_blamer;
@@ -114,6 +115,7 @@ class TaintDataFlowGraph {
   bool printBlameFunction();
 
   void dump();
+  void printAsDOT(std::string fileName);
 };
 
 #endif
