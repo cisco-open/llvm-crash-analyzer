@@ -3464,6 +3464,27 @@ X86InstrInfo::isCopyInstrImpl(const MachineInstr &MI) const {
   return None;
 }
 
+Optional<RegImmPair>
+X86InstrInfo::isAddImmediate(const MachineInstr &MI,
+                             Register Reg) const {
+  if (!MI.getOperand(0).isReg())
+    return None;
+
+  if (Reg != MI.getOperand(0).getReg())
+    return None;
+
+  int64_t Offset = 0;
+  switch (MI.getOpcode()) {
+    default:
+      return None;
+    case X86::ADD32ri8:
+      // $eax = ADD32ri8 $eax(tied-def 0), 1
+      Offset = MI.getOperand(2).getImm();
+      break;
+  }
+  return RegImmPair{MI.getOperand(1).getReg(), Offset};
+}
+
 static unsigned getLoadStoreRegOpcode(unsigned Reg,
                                       const TargetRegisterClass *RC,
                                       bool isStackAligned,

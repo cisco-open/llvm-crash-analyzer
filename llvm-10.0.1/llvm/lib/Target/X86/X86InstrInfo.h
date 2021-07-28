@@ -198,6 +198,9 @@ public:
   bool isXORSimplifiedSetToZero(const MachineInstr &MI) const override;
   bool isPushPop(const MachineInstr &MI) const override;
 
+  Optional<RegImmPair> isAddImmediate(const MachineInstr &MI,
+                                      Register Reg) const override;
+
   Optional<DestSourcePair> getDestAndSrc(const MachineInstr &MI) const override;
 
   unsigned isStoreToStackSlot(const MachineInstr &MI,
