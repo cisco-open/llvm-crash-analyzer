@@ -1,4 +1,4 @@
-//===- ConcreteReverseExec.h - Cncrete Reverse Execution ------------------===//
+//===- ConcreteReverseExec.h - Concrete Reverse Execution -----------------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -47,7 +47,7 @@ public:
   }
 };
 
-// Class that implements the Cncrete Reverse Execution.
+// Class that implements the Concrete Reverse Execution.
 class ConcreteReverseExec {
   // This represents current values in the registers.
   MachineFunction::RegisterCrashInfo currentRegisterValues;
