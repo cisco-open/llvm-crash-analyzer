@@ -84,6 +84,11 @@ bool llvm::crash_blamer::operator==(const TaintInfo &T1, const TaintInfo &T2) {
   // TODO: Should we check the offset is 0 here?
   if (T1.Op->getReg() == T2.Op->getReg())
     return true;
+
+  // $noreg case
+  if (!T1.Op->getReg() || !T2.Op->getReg())
+    return false;
+
   // Check for register aliases.
   for (MCRegAliasIterator RAI(T1.Op->getReg(), TRI, true); RAI.isValid();
        ++RAI) {
@@ -138,6 +143,13 @@ void crash_blamer::TaintAnalysis::calculateMemAddr(TaintInfo &Ti) {
   std::string RegName = TRI->getRegAsmName(Ti.Op->getReg()).lower();
 
   Ti.IsConcreteMemory = true;
+
+  // $noreg + offset means that the address is the offset itself.
+  if (Ti.Op->getReg() == 0) {
+    Ti.ConcreteMemoryAddress = *Ti.Offset;
+    return;
+  }
+
   // Calculate real address by reading the context of regInfo MF attr
   // (read from corefile).
   std::string RegValue = MF->getRegValueFromCrash(RegName);
@@ -380,7 +392,6 @@ bool llvm::crash_blamer::TaintAnalysis::propagateTaint(
   // DS.Source is 0 for immediate operands.
   // If two Source Ops are present, both should be immediate
   // For e.g., ADD r1, r1, 4 is not a terminating condition.
-  // Or if the instruction involves %rip, treat this as a constant.
   bool ConstantFound = false;
   if (DS.Source && DS.Source->isImm()) {
     if (!DS.Source2)
