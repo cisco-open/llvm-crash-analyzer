@@ -10,6 +10,8 @@
 
 #include "llvm/IR/DebugInfoMetadata.h"
 
+#include "llvm/Support/raw_ostream.h"
+
 #define DEBUG_TYPE "taint-dfg"
 
 void TaintDataFlowGraph::addNode(std::shared_ptr<Node> n) {
@@ -135,4 +137,97 @@ void TaintDataFlowGraph::dump() {
   }
 
   llvm::dbgs() << "\n";);
+}
+
+void TaintDataFlowGraph::printAsDOT(std::string fileName) {
+  std::error_code EC;
+  raw_fd_ostream MyDotFile{fileName, EC, sys::fs::OF_Text};
+
+  if (EC) {
+    llvm::errs() << "Could not open file: " << EC.message() << ", " << fileName
+                 << '\n';
+    return;
+  }
+
+  MyDotFile << "digraph TaintDataFlowGraph {\n";
+
+  for (auto &node : Nodes) {
+    if (!node) continue;
+    auto &NodeAdjs = adjacencies[node.get()];
+    if (!NodeAdjs.size()) continue;
+
+    for (auto &a : NodeAdjs) {
+      if (node->IsCrashNode) {
+        MyDotFile << " crashNode";
+      } else {
+        MyDotFile << " \"{";
+        if (node->MI) {
+          MyDotFile << node->MI->getParent()->getParent()->getCrashOrder()
+                    << "; ";
+          node->MI->print(MyDotFile, /*IsStandalone*/ true,
+                          /*SkipOpers*/ false, /*SkipDebugLoc*/ true,
+                          /*AddNewLine*/ false);
+        } else {
+          MyDotFile << "unknown MI";
+        }
+        MyDotFile << "; ";
+        MyDotFile << " ";
+        if (node->TaintOp.Op) {
+          if (node->IsContant) {
+            MyDotFile << "CONSTANT: ";
+            MyDotFile << *(node->TaintOp.Op);
+          } else if (node->TaintOp.IsConcreteMemory) {
+            MyDotFile << "MEM: ";
+            MyDotFile << node->TaintOp.GetTaintMemAddr();
+          } else {
+            MyDotFile << "REG: ";
+            MyDotFile << *(node->TaintOp.Op);
+          }
+        } else
+          MyDotFile << "unknown taint operand";
+        MyDotFile << "}\"";
+      }
+
+      auto &adjNode = a.first;
+      auto &edgeType = a.second;
+      MyDotFile << "  -> ";
+
+      if (adjNode->IsCrashNode) {
+        MyDotFile << " crashNode";
+      } else {
+        MyDotFile << " \"{";
+        if (adjNode->MI) {
+          MyDotFile << adjNode->MI->getParent()->getParent()->getCrashOrder()
+                    << "; ";
+          adjNode->MI->print(MyDotFile, /*IsStandalone*/ true,
+                             /*SkipOpers*/ false, /*SkipDebugLoc*/ true,
+                             /*AddNewLine*/ false);
+        } else {
+          MyDotFile << "unknown MI";
+        }
+        MyDotFile << "; ";
+        MyDotFile << " ";
+        if (adjNode->TaintOp.Op) {
+          if (adjNode->IsContant) {
+            MyDotFile << "CONSTANT: ";
+            MyDotFile << *(adjNode->TaintOp.Op);
+          } else if (adjNode->TaintOp.IsConcreteMemory) {
+            MyDotFile << "MEM: ";
+            MyDotFile << adjNode->TaintOp.GetTaintMemAddr();
+          } else {
+            MyDotFile << "REG: ";
+            MyDotFile << *(adjNode->TaintOp.Op);
+          }
+        } else
+          MyDotFile << "unknown taint operand";
+        MyDotFile << "}\"";
+      }
+
+      if (edgeType == EdgeType::Dereference) MyDotFile << " [color=\"red\"]";
+
+      MyDotFile << ";\n";
+    }
+  }
+
+  MyDotFile << "}\n";
 }

@@ -1,0 +1,15 @@
+digraph TaintDataFlowGraph {
+ crashNode  ->  "{1; $esi = crash-start MOVSX32rm8 $rax, 1, $noreg, 0, $noreg;  MEM: 2702159776422297}" [color="red"];
+ "{1; $esi = crash-start MOVSX32rm8 $rax, 1, $noreg, 0, $noreg;  MEM: 2702159776422297}"  ->  "{1; $rax = MOV64rm $rbp, 1, $noreg, -8, $noreg;  MEM: 140721174891144}";
+ "{1; $rax = MOV64rm $rbp, 1, $noreg, -8, $noreg;  MEM: 140721174891144}"  ->  "{1; MOV64mr $rbp, 1, $noreg, -8, $noreg, $rax;  REG: $rax}";
+ "{1; $rax = MOV64rm $rbp, 1, $noreg, -8, $noreg;  MEM: 140721174891144}"  ->  "{1; MOV64mr $rbp, 1, $noreg, -8, $noreg, $rax;  REG: $rax}";
+ "{1; $rax = MOV64rm $rbp, 1, $noreg, -8, $noreg;  MEM: 140721174891144}"  ->  "{1; MOV64mr $rbp, 1, $noreg, -8, $noreg, $rax;  REG: $rax}";
+ "{1; MOV64mr $rbp, 1, $noreg, -8, $noreg, $rax;  REG: $rax}"  ->  "{1; $rax = MOV64ri 2702159776422297;  CONSTANT: 2702159776422297}" [color="red"];
+ "{1; MOV64mr $rbp, 1, $noreg, -8, $noreg, $rax;  REG: $rax}"  ->  "{1; $eax = MOV32ri 16;  CONSTANT: 16}" [color="red"];
+ "{1; MOV64mr $rbp, 1, $noreg, -8, $noreg, $rax;  REG: $rax}"  ->  "{1; ADD64i32 3, implicit-def $rax, implicit-def $eflags, implicit $rax;  REG: implicit $rax}";
+ "{1; ADD64i32 3, implicit-def $rax, implicit-def $eflags, implicit $rax;  REG: implicit $rax}"  ->  "{1; $rax = MOV64rm $rbp, 1, $noreg, -8, $noreg;  MEM: 140721174891144}";
+ "{1; $rax = MOV64rm $rbp, 1, $noreg, -8, $noreg;  MEM: 140721174891144}"  ->  "{1; MOV64mr $rbp, 1, $noreg, -8, $noreg, $rdi;  REG: $rdi}";
+ "{1; MOV64mr $rbp, 1, $noreg, -8, $noreg, $rdi;  REG: $rdi}"  ->  "{2; $rdi = MOV64rm $rbp, 1, $noreg, -16, $noreg;  MEM: 140721174891168}";
+ "{2; $rdi = MOV64rm $rbp, 1, $noreg, -16, $noreg;  MEM: 140721174891168}"  ->  "{2; MOV64mr $rbp, 1, $noreg, -16, $noreg, $rax;  REG: $rax}";
+ "{2; MOV64mr $rbp, 1, $noreg, -16, $noreg, $rax;  REG: $rax}"  ->  "{2; $rax = MOV64rm $noreg, 1, $noreg, 4210736, $noreg;  MEM: 4210736}";
+}

@@ -1,0 +1,12 @@
+digraph TaintDataFlowGraph {
+ crashNode  ->  "{1; crash-start MOV32mi $rax, 1, $noreg, 0, $noreg, 3;  MEM: 0}" [color="red"];
+ "{1; crash-start MOV32mi $rax, 1, $noreg, 0, $noreg, 3;  MEM: 0}"  ->  "{1; $rax = MOV64rm $rbp, 1, $noreg, -8, $noreg;  MEM: 140726120246888}";
+ "{1; $rax = MOV64rm $rbp, 1, $noreg, -8, $noreg;  MEM: 140726120246888}"  ->  "{1; MOV64mr $rbp, 1, $noreg, -8, $noreg, $rdi;  REG: $rdi}";
+ "{1; MOV64mr $rbp, 1, $noreg, -8, $noreg, $rdi;  REG: $rdi}"  ->  "{2; $rdi = MOV64rm $rbp, 1, $noreg, -16, $noreg;  MEM: 140726120246912}";
+ "{2; $rdi = MOV64rm $rbp, 1, $noreg, -16, $noreg;  MEM: 140726120246912}"  ->  "{2; MOV64mr $rbp, 1, $noreg, -16, $noreg, $rax;  REG: $rax}";
+ "{2; MOV64mr $rbp, 1, $noreg, -16, $noreg, $rax;  REG: $rax}"  ->  "{2; $rax = MOV64rm $rax, 1, $noreg, 0, $noreg;  REG: $rax}";
+ "{2; $rax = MOV64rm $rax, 1, $noreg, 0, $noreg;  REG: $rax}"  ->  "{2; $rax = MOV64rm $rbp, 1, $noreg, -8, $noreg;  MEM: 140726120246920}";
+ "{2; $rax = MOV64rm $rbp, 1, $noreg, -8, $noreg;  MEM: 140726120246920}"  ->  "{2; MOV64mr $rbp, 1, $noreg, -8, $noreg, $rdi;  REG: $rdi}";
+ "{2; MOV64mr $rbp, 1, $noreg, -8, $noreg, $rdi;  REG: $rdi}"  ->  "{3; $rdi = LEA64r $rbp, 1, $noreg, -8, $noreg;  MEM: 140726120246952}";
+ "{3; $rdi = LEA64r $rbp, 1, $noreg, -8, $noreg;  MEM: 140726120246952}"  ->  "{3; MOV64mi32 $rbp, 1, $noreg, -8, $noreg, 0;  CONSTANT: 0}" [color="red"];
+}
