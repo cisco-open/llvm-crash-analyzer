@@ -580,7 +580,17 @@ llvm::Error crash_blamer::Decompiler::run(
   }
 
   // Create MFs for function out of backtrace.
-  for (auto NonBTFnAddr : FunctionsThatAreNotInBT) {
+  // NOTE: Always recalculate the size() for the FunctionsThatAreNotInBT
+  // since we might have nested calls that may be blame ones.
+
+  // This will be used for mapping already decompiled functions, so we do not
+  // do it twice.
+  SmallSet<long, 8> AlreadyDecompiledMFs;
+  for (size_t i = 0; i < FunctionsThatAreNotInBT.size(); i++) {
+    auto NonBTFnAddr = FunctionsThatAreNotInBT[i];
+    if (AlreadyDecompiledMFs.count(NonBTFnAddr))
+      continue;
+    AlreadyDecompiledMFs.insert(NonBTFnAddr);
     lldb::SBAddress addr(NonBTFnAddr, target);
     auto symCtx = target.ResolveSymbolContextForAddress(
                       addr, lldb::eSymbolContextEverything);
