@@ -111,7 +111,7 @@ void ConcreteReverseExec::execute(const MachineInstr &MI) {
         continue;
 
       // Skip push/pop intructions here.
-      if (TII->isPushPop(MI))
+      if (TII->isPush(MI) || TII->isPop(MI))
         continue;
 
       uint64_t Val = 0;

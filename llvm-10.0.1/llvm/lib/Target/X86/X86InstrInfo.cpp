@@ -453,7 +453,7 @@ bool X86InstrInfo::isXORSimplifiedSetToZero(const MachineInstr &MI) const {
   return false;
 }
 
-bool X86InstrInfo::isPushPop(const MachineInstr &MI) const {
+bool X86InstrInfo::isPush(const MachineInstr &MI) const {
   switch (MI.getOpcode()) {
   case X86::PUSH32i8:
   case X86::PUSH32r:
@@ -465,6 +465,14 @@ bool X86InstrInfo::isPushPop(const MachineInstr &MI) const {
   case X86::PUSH64rmm:
   case X86::PUSH64rmr:
   case X86::PUSH64i32:
+    return true;
+  default:
+    return false;
+  }
+}
+
+bool X86InstrInfo::isPop(const MachineInstr &MI) const {
+  switch (MI.getOpcode()) {
   case X86::POP32r:
   case X86::POP64r:
     return true;

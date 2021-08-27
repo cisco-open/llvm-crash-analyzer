@@ -67,7 +67,8 @@ public:
 
   bool runOnBlameModule(const BlameModule &BM);
   bool runOnBlameMF(const BlameModule &BM, const MachineFunction &MF,
-	TaintDataFlowGraph &TaintDFG, bool CalleeNotInBT);
+	TaintDataFlowGraph &TaintDFG, bool CalleeNotInBT,
+    SmallVector<TaintInfo, 8> *TL_Of_Caller = nullptr);
 
   void resetTaintList(SmallVectorImpl<TaintInfo> &TL);
   void mergeTaintList(SmallVectorImpl<TaintInfo> &Dest_TL, SmallVectorImpl<TaintInfo> &Src_TL);
