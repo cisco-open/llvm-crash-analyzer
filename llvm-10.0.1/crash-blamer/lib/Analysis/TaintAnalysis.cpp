@@ -450,7 +450,10 @@ bool llvm::crash_blamer::TaintAnalysis::propagateTaint(
 bool crash_blamer::TaintAnalysis::runOnBlameMF(const BlameModule &BM,
                                                const MachineFunction &MF,
                                                TaintDataFlowGraph &TaintDFG,
-                                               bool CalleeNotInBT) {
+                                               bool CalleeNotInBT,
+                                               SmallVector<TaintInfo, 8> *TL_Of_Caller) {
+  LLVM_DEBUG(llvm::dbgs() << "### MF: " << MF.getName() << "\n";);
+
   // As a first step, run the forward analysis by tracking values
   // in the machine locations.
   MachineLocTracking MLocTracking;
@@ -504,6 +507,15 @@ bool crash_blamer::TaintAnalysis::runOnBlameMF(const BlameModule &BM,
       auto &MI = *MIIt;
       if (MI.getFlag(MachineInstr::CrashStart)) {
         CrashSequenceStarted = true;
+        // If this was a call to a function that isn't in the bt,
+        // the analysis will start from the last intr (return), so
+        // we need just to consider the taint operands from the MBB
+        // where it got called.
+        if (CalleeNotInBT) {
+          mergeTaintList(TL_Mbb, *TL_Of_Caller);
+          continue;
+        }
+
         // For frames > 0, skip to the first instruction after the call
         // instruction, traversing backwards
         if (MF.getCrashOrder() > 1 || CalleeNotInBT) {
@@ -521,6 +533,7 @@ bool crash_blamer::TaintAnalysis::runOnBlameMF(const BlameModule &BM,
         auto &MI2 = *MIIt;
         // Process the call instruction that is not in the backtrace
         if (MI2.isCall()) {
+          mergeTaintList(TL_Mbb, TaintList);
           const MachineOperand &CalleeOp = MI2.getOperand(0);
           // TODO: handle indirect calls.
           if (!CalleeOp.isGlobal())
@@ -532,7 +545,7 @@ bool crash_blamer::TaintAnalysis::runOnBlameMF(const BlameModule &BM,
               LLVM_DEBUG(llvm::dbgs()
                              << "#### Processing callee " << TargetName << "\n";);
               CalledMF->setCrashOrder(MF.getCrashOrder());
-              runOnBlameMF(BM, *CalledMF, TaintDFG, true);
+              runOnBlameMF(BM, *CalledMF, TaintDFG, true, &TL_Mbb);
               CalledMF->setCrashOrder(0);
               continue;
             } else
@@ -565,11 +578,12 @@ bool crash_blamer::TaintAnalysis::runOnBlameMF(const BlameModule &BM,
         // TODO: handle indirect calls.
         if (!CalleeOp.isGlobal())
           continue;
+
         auto TargetName = CalleeOp.getGlobal()->getName();
         MachineFunction *CalledMF = getCalledMF(BM, TargetName);
         if (CalledMF) {
           CalledMF->setCrashOrder(MF.getCrashOrder());
-          runOnBlameMF(BM, *CalledMF, TaintDFG, true);
+          runOnBlameMF(BM, *CalledMF, TaintDFG, true, &TL_Mbb);
           CalledMF->setCrashOrder(0);
           continue;
         } else
@@ -577,17 +591,15 @@ bool crash_blamer::TaintAnalysis::runOnBlameMF(const BlameModule &BM,
                          << "#### func not found: " << TargetName << "\n";);
       }
 
-      if (MI.isBranch()) {
+      if (MI.isBranch())
         continue;
-      }
 
       // Print the instruction from crash-start point
       LLVM_DEBUG(MI.dump(););
 
       // We reached the end of the frame.
-      if (TII->isPushPop(MI)) {
+      if (TII->isPush(MI))
         break;
-      }
 
       auto DestSrc = TII->getDestAndSrc(MI);
       if (!DestSrc) {
@@ -638,7 +650,6 @@ bool crash_blamer::TaintAnalysis::runOnBlameModule(const BlameModule &BM) {
       return Result;
     }
 
-    LLVM_DEBUG(llvm::dbgs() << "### MF: " << BF.Name << " " << BF.MF->getCrashOrder() << " \n";);
     if (runOnBlameMF(BM, *(BF.MF), TaintDFG, false)) {
 
       LLVM_DEBUG(dbgs() << "\nTaint Analysis done.\n");

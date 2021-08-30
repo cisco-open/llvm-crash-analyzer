@@ -1029,7 +1029,11 @@ public:
   }
 
   /// Check if the instruction is push/pop.
-  virtual bool isPushPop(const MachineInstr &MI) const {
+  virtual bool isPush(const MachineInstr &MI) const {
+    return false;
+  }
+
+  virtual bool isPop(const MachineInstr &MI) const {
     return false;
   }
 

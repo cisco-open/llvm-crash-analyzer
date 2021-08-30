@@ -196,7 +196,8 @@ public:
 
   bool isNoopInstr(const MachineInstr &MI) const override;
   bool isXORSimplifiedSetToZero(const MachineInstr &MI) const override;
-  bool isPushPop(const MachineInstr &MI) const override;
+  bool isPush(const MachineInstr &MI) const override;
+  bool isPop(const MachineInstr &MI) const override;
 
   Optional<RegImmPair> isAddImmediate(const MachineInstr &MI,
                                       Register Reg) const override;
