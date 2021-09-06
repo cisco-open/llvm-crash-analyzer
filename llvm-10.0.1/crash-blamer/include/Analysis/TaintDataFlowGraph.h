@@ -13,6 +13,7 @@
 
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/CodeGen/MachineBasicBlock.h"
+#include "llvm/CodeGen/MachineDominators.h"
 #include "llvm/CodeGen/MachineFunction.h"
 #include "llvm/CodeGen/MachineInstr.h"
 
@@ -78,10 +79,24 @@ enum class EdgeType {
   Dereference /* represented with ***> */
 };
 
+// This class marks levels of program points for functions
+// from bt.
+// E.g.: mbb lvl 1, mi num 4 is one level.
+struct MFProgramPointInfo {
+  std::unordered_map<const MachineBasicBlock*, unsigned> mbbLevels;
+  // std::unordered_map<const MachineInstr*, unsigned> instrLevels;
+
+  std::map<const MachineBasicBlock*, bool> visitedMBBs;
+  void traverseForLevels(const MachineBasicBlock* MBB, unsigned level);
+  void dump();
+};
+
 using EdgeToNode = std::pair<Node *, EdgeType>;
 
 // Backward Data Flow Graph.
 class TaintDataFlowGraph {
+  llvm::DenseMap<const MachineFunction*, MFProgramPointInfo> levels;
+
   // All nodes.
   SmallVector<std::shared_ptr<Node>, 8> Nodes;
 
@@ -91,10 +106,45 @@ class TaintDataFlowGraph {
   // Used for graph algorithms.
   std::map<Node *, bool> visited;
 
-  // Used for finding blame node.
-  std::unordered_map<unsigned, llvm::SmallVector<Node *, 8>> blameNodes;
+  struct BlameLevel {
+    unsigned fnLevel;
+    unsigned bbLevel;
 
-  unsigned MaxLevel = 0;
+    BlameLevel(unsigned f, unsigned bbLevel_)
+      : fnLevel(f), bbLevel(bbLevel_) {}
+
+    bool operator==(const BlameLevel &l) const {
+      if (fnLevel != l.fnLevel)
+        return false;
+
+      if (bbLevel != l.bbLevel)
+        return false;
+
+      return true;
+    }
+    bool operator>(const BlameLevel &l) const {
+      if (fnLevel > l.fnLevel)
+        return true;
+      if (fnLevel < l.fnLevel)
+        return false;
+
+      return bbLevel < l.bbLevel;
+    }
+  };
+
+  BlameLevel MaxLevel{0, UINT32_MAX};
+
+  struct hash_fn {
+    std::size_t operator() (const BlameLevel &l) const {
+      std::size_t h1 = std::hash<unsigned>()(l.fnLevel);
+      std::size_t h2 = std::hash<unsigned>()(l.bbLevel);
+      return h1 ^ h2;
+    }
+  };
+
+  // Used for finding blame node.
+  std::unordered_map<BlameLevel,
+                     llvm::SmallVector<Node *, 8>, hash_fn> blameNodes;
 
  public:
   // Map operand to the latest taint node.
@@ -111,8 +161,10 @@ class TaintDataFlowGraph {
 
   Node *getCrashNode() { return Nodes[0].get(); }
 
-  void findBlameFunction(Node *v, unsigned level);
+  void findBlameFunction(Node *v);
   bool printBlameFunction();
+
+  void countLevels(const MachineFunction* MF);
 
   void dump();
   void printAsDOT(std::string fileName);

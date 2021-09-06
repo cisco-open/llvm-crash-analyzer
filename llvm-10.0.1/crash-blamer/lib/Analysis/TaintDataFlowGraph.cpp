@@ -34,10 +34,45 @@ void TaintDataFlowGraph::updateLastTaintedNode(TaintInfo Op,
   lastTaintedNode[Op] = N;
 }
 
-// Using DFS.
-void TaintDataFlowGraph::findBlameFunction(Node *v, unsigned level) {
-  visited[v] = true;
+void MFProgramPointInfo::traverseForLevels(
+    const MachineBasicBlock* MBB, unsigned level) {
+  visitedMBBs[MBB] = true;
+  mbbLevels[MBB] = level;
+
+  // FIXME: Can we have multiple MIs performing deref edge?
+  // if that is the case we need to consider MIs inside BB
+  // into levels.
+
+  if (MBB->succ_empty())
+    return;
+
   level++;
+  for (const MachineBasicBlock *Succ : MBB->successors()) {
+    if (!visitedMBBs[Succ])
+      traverseForLevels(Succ, level);
+  }
+}
+
+void MFProgramPointInfo::dump() {
+  LLVM_DEBUG(
+    llvm::dbgs() << "*** MFProgramPointInfo ***\n";
+    for (const auto &n : mbbLevels) {
+        llvm::dbgs() << "bb." << n.first->getNumber() << ": " << n.second << "\n";
+    });
+}
+
+void TaintDataFlowGraph::countLevels(const MachineFunction* MF) {
+  MFProgramPointInfo lvlInfo;
+
+  const MachineBasicBlock* EntryBB = &(*(MF->begin()));
+  lvlInfo.traverseForLevels(EntryBB, 0);
+
+  levels[MF] = lvlInfo;
+}
+
+// Using DFS.
+void TaintDataFlowGraph::findBlameFunction(Node *v) {
+  visited[v] = true;
 
   auto &NodeAdjs = adjacencies[v];
   if (!NodeAdjs.size()) return;
@@ -47,12 +82,22 @@ void TaintDataFlowGraph::findBlameFunction(Node *v, unsigned level) {
     if (!visited[adjNode]) {
       auto &edgeType = a.second;
       if (edgeType == EdgeType::Dereference) {
-        if (level > MaxLevel) {
-          MaxLevel = level;
+        // Check the level.
+        auto *MI = adjNode->MI;
+        auto MF = MI->getMF();
+        if (!levels.count(MF)) {
+          countLevels(MF);
+          LLVM_DEBUG(llvm::dbgs() << "Fn " << MF->getName() << "\n";);
+          levels[MF].dump();
+        }
+        unsigned bbLevel = levels[MF].mbbLevels[MI->getParent()];
+        BlameLevel currLvl{adjNode->frameNum, bbLevel};
+      if (currLvl > MaxLevel || currLvl == MaxLevel) {
+          MaxLevel = currLvl;
           blameNodes[MaxLevel].push_back(adjNode);
         }
       }
-      findBlameFunction(adjNode, level);
+      findBlameFunction(adjNode);
     }
  }
 }
@@ -63,6 +108,7 @@ bool TaintDataFlowGraph::printBlameFunction() {
     StringRef BlameFn = "";
     const MachineFunction *MF = nullptr;
     auto &BlameNodes = blameNodes[MaxLevel];
+
     for (auto &a : BlameNodes) {
       a->print();
       if (a->MI->getDebugLoc().get())
@@ -100,15 +146,16 @@ bool TaintDataFlowGraph::printBlameFunction() {
     }
   }
 
-  if (MF) {
-    llvm::outs() << "\nBlame Function is " << BlameFn << '\n';
-    if (MF->getFunction().getSubprogram())
-      llvm::outs() << "From File " <<
-        MF->getFunction().getSubprogram()->getFile()->getFilename() << "\n";
-    Res = true;
-  } else {
+  if (!MF) {
     llvm::outs() << "Failed to find Blame function\n";
+    return Res;
   }
+
+  llvm::outs() << "\nBlame Function is " << BlameFn << '\n';
+  if (MF->getFunction().getSubprogram())
+    llvm::outs() << "From File " <<
+      MF->getFunction().getSubprogram()->getFile()->getFilename() << "\n";
+  Res = true;
 
   return Res;
 }
