@@ -14,6 +14,11 @@
 
 #define DEBUG_TYPE "conrecete-rev-exec"
 
+static cl::opt<bool>
+DisableCRE("disable-cre",
+           cl::desc("Disable Concrete Reverse Execution."),
+           cl::init(false));
+
 void ConcreteReverseExec::dump() {
   LLVM_DEBUG(llvm::dbgs() << "\n****Concrete Register Values For Function: "
                           << mf->getName() << "\n";
@@ -73,6 +78,10 @@ std::string intToHex(T num, unsigned regValSize)
 }
 
 void ConcreteReverseExec::execute(const MachineInstr &MI) {
+  // If the option is enabled, we skip the CRE of the MIs.
+  if (DisableCRE)
+    return;
+
   // If this instruction modifies any of the registers,
   // update the register values for the function. First definition of the reg
   // is the one that is in the 'regInfo:' (going backward is the first, but it
