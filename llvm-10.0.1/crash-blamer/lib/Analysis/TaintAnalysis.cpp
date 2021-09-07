@@ -668,7 +668,7 @@ bool crash_blamer::TaintAnalysis::runOnBlameModule(const BlameModule &BM) {
         }
 
         auto crashNode = TaintDFG.getCrashNode();
-        TaintDFG.findBlameFunction(crashNode, 0);
+        TaintDFG.findBlameFunction(crashNode);
         Result = TaintDFG.printBlameFunction();
         return Result;
       }
@@ -690,7 +690,7 @@ bool crash_blamer::TaintAnalysis::runOnBlameModule(const BlameModule &BM) {
   }
 
   auto crashNode = TaintDFG.getCrashNode();
-  TaintDFG.findBlameFunction(crashNode, 0);
+  TaintDFG.findBlameFunction(crashNode);
   Result = TaintDFG.printBlameFunction();
 
   // Currently we report SUCCESS even if one Blame Function is found.
