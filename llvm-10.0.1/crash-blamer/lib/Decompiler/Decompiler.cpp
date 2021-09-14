@@ -58,6 +58,9 @@ static cl::opt<std::string> PrintDecMIR("print-decompiled-mir",
                                         cl::value_desc("filename"),
                                         cl::init(""));
 
+static cl::opt<bool> DecompileFnsOutOfbt("decompile-fns-out-of-bt", cl::Hidden,
+                                         cl::init(false));
+
 crash_blamer::Decompiler::Decompiler() {
   DisassemblerLLVMC::Initialize();
 }
@@ -238,6 +241,8 @@ bool crash_blamer::Decompiler::DecodeIntrsToMIR(
     lldb::addr_t CrashStartAddr,
     std::unordered_map<uint64_t, StringRef> &FuncStartSymbols,
     bool IsFnOutOfBt) {
+  llvm::outs() << "Decompiling " << OriginalFunction << "\n";
+
   MachineBasicBlock *MBB = FirstMBB;
   bool PrevBranch = true;
   crash_blamer::RegSet DefinedRegs;
@@ -586,76 +591,79 @@ llvm::Error crash_blamer::Decompiler::run(
   // This will be used for mapping already decompiled functions, so we do not
   // do it twice.
   SmallSet<long, 8> AlreadyDecompiledMFs;
-  for (size_t i = 0; i < FunctionsThatAreNotInBT.size(); i++) {
-    auto NonBTFnAddr = FunctionsThatAreNotInBT[i];
-    if (AlreadyDecompiledMFs.count(NonBTFnAddr))
-      continue;
-    AlreadyDecompiledMFs.insert(NonBTFnAddr);
-    lldb::SBAddress addr(NonBTFnAddr, target);
-    auto symCtx = target.ResolveSymbolContextForAddress(
-                      addr, lldb::eSymbolContextEverything);
-    if (!(symCtx.IsValid() && symCtx.GetSymbol().IsValid()))
-      continue;
-    lldb::SBInstructionList Instructions;
-    lldb::SBAddress FuncStart, FuncEnd;
-    auto Symbol = symCtx.GetSymbol();
-    Instructions = Symbol.GetInstructions(target);
-    FuncStart = Symbol.GetStartAddress();
-    FuncEnd = Symbol.GetEndAddress();
+  if (DecompileFnsOutOfbt) {
+    for (size_t i = 0; i < FunctionsThatAreNotInBT.size(); i++) {
+      //break;
+      auto NonBTFnAddr = FunctionsThatAreNotInBT[i];
+      if (AlreadyDecompiledMFs.count(NonBTFnAddr))
+        continue;
+      AlreadyDecompiledMFs.insert(NonBTFnAddr);
+      lldb::SBAddress addr(NonBTFnAddr, target);
+      auto symCtx = target.ResolveSymbolContextForAddress(
+                        addr, lldb::eSymbolContextEverything);
+      if (!(symCtx.IsValid() && symCtx.GetSymbol().IsValid()))
+        continue;
+      lldb::SBInstructionList Instructions;
+      lldb::SBAddress FuncStart, FuncEnd;
+      auto Symbol = symCtx.GetSymbol();
+      Instructions = Symbol.GetInstructions(target);
+      FuncStart = Symbol.GetStartAddress();
+      FuncEnd = Symbol.GetEndAddress();
 
-    bool HasDbgInfo = false;
-    auto Fn = FuncStart.GetFunction();
-    MachineFunction *MF = &createMF(symCtx.GetSymbol().GetDisplayName());
-    MachineBasicBlock *MBB = MF->CreateMachineBasicBlock();
-    MF->push_back(MBB);
+      bool HasDbgInfo = false;
+      auto Fn = FuncStart.GetFunction();
+      MachineFunction *MF = &createMF(symCtx.GetSymbol().GetDisplayName());
+      MachineBasicBlock *MBB = MF->CreateMachineBasicBlock();
+      MF->push_back(MBB);
 
-    DISubprogram *SP = nullptr;
+      DISubprogram *SP = nullptr;
 
-    // Handle debug info if this comes from another module.
-    if (Fn) {
-      HasDbgInfo = true;
-      DIFile *File = nullptr;
-      DICompileUnit *CU = nullptr;
-      std::string FileDirInfo, FileNameInfo, AbsFileName;
-      FileDirInfo = FuncStart.GetCompileUnit().GetFileSpec().GetDirectory();
-      FileNameInfo = FuncStart.GetCompileUnit().GetFileSpec().GetFilename();
-      AbsFileName =
-          (Twine(FileDirInfo) + Twine("/") + Twine(FileNameInfo)).str();
+      // Handle debug info if this comes from another module.
+      if (Fn) {
+        HasDbgInfo = true;
+        DIFile *File = nullptr;
+        DICompileUnit *CU = nullptr;
+        std::string FileDirInfo, FileNameInfo, AbsFileName;
+        FileDirInfo = FuncStart.GetCompileUnit().GetFileSpec().GetDirectory();
+        FileNameInfo = FuncStart.GetCompileUnit().GetFileSpec().GetFilename();
+        AbsFileName =
+            (Twine(FileDirInfo) + Twine("/") + Twine(FileNameInfo)).str();
 
-      if (!CUs.count(AbsFileName)) {
-        File = DIB.createFile(AbsFileName, "/");
-        CU = DIB.createCompileUnit(
-            dwarf::DW_LANG_C, File, "crash-blamer", /*isOptimized=*/true, "",
-            0, StringRef(), DICompileUnit::DebugEmissionKind::FullDebug, 0,
-            true, false, DICompileUnit::DebugNameTableKind::Default, false,
-            true);
-        CUs.insert({AbsFileName, std::make_pair(File, CU)});
-      } else {
-        File = CUs[AbsFileName].first;
-        CU = CUs[AbsFileName].second;
+        if (!CUs.count(AbsFileName)) {
+          File = DIB.createFile(AbsFileName, "/");
+          CU = DIB.createCompileUnit(
+              dwarf::DW_LANG_C, File, "crash-blamer", /*isOptimized=*/true, "",
+              0, StringRef(), DICompileUnit::DebugEmissionKind::FullDebug, 0,
+              true, false, DICompileUnit::DebugNameTableKind::Default, false,
+              true);
+          CUs.insert({AbsFileName, std::make_pair(File, CU)});
+        } else {
+          File = CUs[AbsFileName].first;
+          CU = CUs[AbsFileName].second;
+        }
+
+        auto &F = MF->getFunction();
+        auto SPType = DIB.createSubroutineType(DIB.getOrCreateTypeArray(None));
+        DISubprogram::DISPFlags SPFlags =
+            DISubprogram::SPFlagDefinition | DISubprogram::SPFlagOptimized;
+        auto sp = DIB.createFunction(CU, F.getName(), F.getName(), File, 1,
+                                     SPType, 1, DINode::FlagZero, SPFlags);
+        (const_cast<Function *>(&F))->setSubprogram(sp);
+        SP = sp;
+        DIB.finalizeSubprogram(SP);
+        if (!SPs.count(MF->getName()))
+          SPs.insert({MF->getName(), SP});
       }
 
-      auto &F = MF->getFunction();
-      auto SPType = DIB.createSubroutineType(DIB.getOrCreateTypeArray(None));
-      DISubprogram::DISPFlags SPFlags =
-          DISubprogram::SPFlagDefinition | DISubprogram::SPFlagOptimized;
-      auto sp = DIB.createFunction(CU, F.getName(), F.getName(), File, 1,
-                                   SPType, 1, DINode::FlagZero, SPFlags);
-      (const_cast<Function *>(&F))->setSubprogram(sp);
-      SP = sp;
-      DIB.finalizeSubprogram(SP);
-      if (!SPs.count(MF->getName()))
-        SPs.insert({MF->getName(), SP});
+      if (!DecodeIntrsToMIR(TheTriple, Instructions, FuncStart, FuncEnd, target, HasDbgInfo,
+                       MF, MBB, symCtx.GetSymbol().GetDisplayName(), SP,
+                       SPs, Ctx, 0, FuncStartSymbols, true /*IsFnOutOfBt*/))
+        return make_error<StringError>("unable to decompile an instruction",
+                                       inconvertibleErrorCode());
+      BlameTrace.push_back({symCtx.GetSymbol().GetDisplayName(), MF});
+      // Functions that are out of backtrace have 0 crash order.
+      MF->setCrashOrder(0);
     }
-
-    if (!DecodeIntrsToMIR(TheTriple, Instructions, FuncStart, FuncEnd, target, HasDbgInfo,
-                     MF, MBB, symCtx.GetSymbol().GetDisplayName(), SP,
-                     SPs, Ctx, 0, FuncStartSymbols, true /*IsFnOutOfBt*/))
-      return make_error<StringError>("unable to decompile an instruction",
-                                     inconvertibleErrorCode());
-    BlameTrace.push_back({symCtx.GetSymbol().GetDisplayName(), MF});
-    // Functions that are out of backtrace have 0 crash order.
-    MF->setCrashOrder(0);
   }
 
   // Run FixRegStateFlags pass for each basic block.

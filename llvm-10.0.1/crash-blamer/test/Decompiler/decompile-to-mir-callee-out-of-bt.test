@@ -19,7 +19,7 @@
 ##   caller1();
 ##}
 
-# RUN: %crash-blamer --print-decompiled-mir=%t.mir \
+# RUN: %crash-blamer --print-decompiled-mir=%t.mir --decompile-fns-out-of-bt \
 # RUN:     --core-file=%S/Inputs/core.callee-out-of-bt %S/Inputs/callee-out-of-bt
 # RUN: cat %t.mir | FileCheck %s
 
