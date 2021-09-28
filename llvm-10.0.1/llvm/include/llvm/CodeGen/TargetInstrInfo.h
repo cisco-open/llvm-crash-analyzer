@@ -320,6 +320,9 @@ public:
     return 0;
   }
 
+  virtual bool isLoad(const MachineInstr &MI) const { return false; }
+  virtual bool isStore(const MachineInstr &MI) const { return false; }
+
   /// If the specified machine instruction has a load from a stack slot,
   /// return true along with the FrameIndices of the loaded stack slot and the
   /// machine mem operands containing the reference.

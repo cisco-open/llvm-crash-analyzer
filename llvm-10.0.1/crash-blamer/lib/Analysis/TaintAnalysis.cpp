@@ -6,6 +6,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "Analysis/RegisterEquivalence.h"
 #include "Analysis/TaintAnalysis.h"
 #include "Analysis/ConcreteReverseExec.h"
 #include "Analysis/TaintDataFlowGraph.h"
@@ -459,6 +460,11 @@ bool crash_blamer::TaintAnalysis::runOnBlameMF(const BlameModule &BM,
   MachineLocTracking MLocTracking;
   MLocTracking.run(const_cast<MachineFunction &>(MF));
 
+  // Run the forward analysis to compute register equivalance.
+  RegisterEquivalence REAnalysis;
+  REAnalysis.init(const_cast<MachineFunction &>(MF));
+  REAnalysis.run(const_cast<MachineFunction &>(MF));
+
   // Init the concrete reverse execution.
   ConcreteReverseExec ReverseExecutionRecord(&MF);
   ReverseExecutionRecord.dump();
@@ -626,6 +632,8 @@ bool crash_blamer::TaintAnalysis::runOnBlameMF(const BlameModule &BM,
 bool crash_blamer::TaintAnalysis::runOnBlameModule(const BlameModule &BM) {
   bool AnalysisStarted = false;
   bool Result = false;
+
+  llvm::outs() << "\nAnalyzing...\n";
 
   TaintDataFlowGraph TaintDFG;
 
