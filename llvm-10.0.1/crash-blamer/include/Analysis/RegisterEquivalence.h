@@ -48,7 +48,7 @@ public:
   bool applyCall(MachineInstr &MI);
   bool applyRegDef(MachineInstr &MI);
 
-  // Return true if two regs are equalante at this program point.
+  // Return true if two regs are equivalent at this program point.
   bool isEquvalent(MachineInstr &MI,
                    unsigned Reg1, unsigned Reg2);
 
