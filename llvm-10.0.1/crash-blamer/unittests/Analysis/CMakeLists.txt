@@ -16,6 +16,7 @@ set(LLVM_LINK_COMPONENTS
 
 add_crash_balmer_unittest(CRASHBLAMERAnalysisTests
   ConcreteReverseExec.cpp
+  RegisterEquivalence.cpp
   DEPENDS
     intrinsics_gen
 )

@@ -481,6 +481,25 @@ bool X86InstrInfo::isPop(const MachineInstr &MI) const {
   }
 }
 
+bool X86InstrInfo::isLoad(const MachineInstr &MI) const {
+  switch (MI.getOpcode()) {
+  case X86::MOV32rm:
+  case X86::MOV64rm:
+    return true;
+  default:
+    return false;
+  }
+}
+
+bool X86InstrInfo::isStore(const MachineInstr &MI) const {
+  switch (MI.getOpcode()) {
+  case X86::MOV64mi32:
+    return true;
+  default:
+    return false;
+  }
+}
+
 Optional<DestSourcePair>
 X86InstrInfo::getDestAndSrc(const MachineInstr &MI) const {
   auto Res = isCopyInstr(MI);
