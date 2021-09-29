@@ -10,7 +10,6 @@
 #include "Analysis/TaintAnalysis.h"
 #include "Analysis/ConcreteReverseExec.h"
 #include "Analysis/TaintDataFlowGraph.h"
-#include "Analysis/MachineLocTracking.h"
 
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/PostOrderIterator.h"
@@ -454,11 +453,6 @@ bool crash_blamer::TaintAnalysis::runOnBlameMF(const BlameModule &BM,
                                                bool CalleeNotInBT,
                                                SmallVector<TaintInfo, 8> *TL_Of_Caller) {
   LLVM_DEBUG(llvm::dbgs() << "### MF: " << MF.getName() << "\n";);
-
-  // As a first step, run the forward analysis by tracking values
-  // in the machine locations.
-  MachineLocTracking MLocTracking;
-  MLocTracking.run(const_cast<MachineFunction &>(MF));
 
   // Run the forward analysis to compute register equivalance.
   RegisterEquivalence REAnalysis;
