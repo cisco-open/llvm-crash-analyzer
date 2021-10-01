@@ -68,6 +68,11 @@ void TaintDataFlowGraph::countLevels(const MachineFunction* MF) {
   lvlInfo.traverseForLevels(EntryBB, 0);
 
   levels[MF] = lvlInfo;
+
+  // Calculate dominators so we can report right blame line.
+  MachineDominatorTree *MDT =
+      new MachineDominatorTree(*(const_cast<MachineFunction*>(MF)));
+  dominators[MF] = MDT;
 }
 
 // Using DFS.
@@ -92,7 +97,23 @@ void TaintDataFlowGraph::findBlameFunction(Node *v) {
         }
         unsigned bbLevel = levels[MF].mbbLevels[MI->getParent()];
         BlameLevel currLvl{adjNode->frameNum, bbLevel};
-      if (currLvl > MaxLevel || currLvl == MaxLevel) {
+        if (currLvl > MaxLevel || currLvl == MaxLevel) {
+          if (currLvl == MaxLevel) {
+            // If two nodes comes from the same basic block
+            // we should consider dominating instruction as
+            // the one responsible for loading bad value.
+            auto *MDT = dominators[adjNode->MI->getMF()];
+            auto &BlameNodes = blameNodes[MaxLevel];
+            for (unsigned i = 0; i < BlameNodes.size(); i++) {
+              auto &a = BlameNodes[i];
+              if (a->MI->getParent() == adjNode->MI->getParent()) {
+                if (MDT->dominates(adjNode->MI, a->MI)) {
+                  BlameNodes.erase(BlameNodes.begin() + i);
+                  break;
+                }
+              }
+            }
+          }
           MaxLevel = currLvl;
           blameNodes[MaxLevel].push_back(adjNode);
         }
@@ -156,6 +177,11 @@ bool TaintDataFlowGraph::printBlameFunction() {
     llvm::outs() << "From File " <<
       MF->getFunction().getSubprogram()->getFile()->getFilename() << "\n";
   Res = true;
+
+  // Delete all the MDT info, since we don't need it anymore.
+  for (auto &mdt : dominators) {
+    delete mdt.second;
+  }
 
   return Res;
 }

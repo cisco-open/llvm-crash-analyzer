@@ -106,6 +106,9 @@ class TaintDataFlowGraph {
   // Used for graph algorithms.
   std::map<Node *, bool> visited;
 
+  DenseMap<const MachineFunction*,
+           MachineDominatorTree*> dominators;
+
   struct BlameLevel {
     unsigned fnLevel;
     unsigned bbLevel;
