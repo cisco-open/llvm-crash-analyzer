@@ -33,6 +33,10 @@ struct Node {
   bool IsCrashNode;
   bool IsContant;
 
+  // Call instruction that performed the call to function that is out
+  // of bt.
+  const MachineInstr* CallMI = nullptr;
+
   Node(unsigned f, const MachineInstr *I, TaintInfo T, bool b,
        bool isCnst = false)
       : frameNum(f), MI(I), TaintOp(T), ID(NextID++),
@@ -113,6 +117,7 @@ class TaintDataFlowGraph {
     unsigned fnLevel;
     unsigned bbLevel;
 
+    BlameLevel() = default;
     BlameLevel(unsigned f, unsigned bbLevel_)
       : fnLevel(f), bbLevel(bbLevel_) {}
 

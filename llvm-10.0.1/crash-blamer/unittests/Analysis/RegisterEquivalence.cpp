@@ -170,9 +170,12 @@ body:             |
   for (auto &MBB : *MF) {
     for (auto &MI : MBB) {
       if (TII->isLoad(MI)) {
+        REAnalysis.dumpRegTableAfterMI(&MI);
         unsigned Reg1 = MI.getOperand(0).getReg();
         unsigned Reg2 = MI.getOperand(1).getReg();
-        ASSERT_TRUE(REAnalysis.isEquvalent(MI, Reg1, Reg2));
+        int64_t Offset = MI.getOperand(4).getImm();
+        ASSERT_TRUE(REAnalysis.isEquvalent(MI,
+                                           {Reg1}, {Reg2, Offset}));
       }
     }
   }
