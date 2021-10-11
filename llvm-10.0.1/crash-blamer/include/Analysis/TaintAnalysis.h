@@ -29,6 +29,7 @@
 
 struct Node;
 class TaintDataFlowGraph;
+class RegisterEquivalence;
 
 namespace llvm {
 namespace crash_blamer {
@@ -68,19 +69,26 @@ public:
   bool runOnBlameModule(const BlameModule &BM);
   bool runOnBlameMF(const BlameModule &BM, const MachineFunction &MF,
 	TaintDataFlowGraph &TaintDFG, bool CalleeNotInBT,
-    SmallVector<TaintInfo, 8> *TL_Of_Caller = nullptr);
+    SmallVector<TaintInfo, 8> *TL_Of_Caller = nullptr,
+    const MachineInstr* CallMI = nullptr);
 
   void resetTaintList(SmallVectorImpl<TaintInfo> &TL);
   void mergeTaintList(SmallVectorImpl<TaintInfo> &Dest_TL, SmallVectorImpl<TaintInfo> &Src_TL);
   bool propagateTaint(DestSourcePair &DS, SmallVectorImpl<TaintInfo> &TL,
-                      const MachineInstr &MI, TaintDataFlowGraph &TaintDFG);
+                      const MachineInstr &MI, TaintDataFlowGraph &TaintDFG,
+                      RegisterEquivalence &REAnalysis,
+                      const MachineInstr* CallMI = nullptr);
   void startTaint(DestSourcePair &DS, SmallVectorImpl<TaintInfo> &TL,
-                  const MachineInstr &MI, TaintDataFlowGraph &TaintDFG);
+                  const MachineInstr &MI, TaintDataFlowGraph &TaintDFG,
+                  RegisterEquivalence &REAnalysis);
   void removeFromTaintList(TaintInfo &Op, SmallVectorImpl<TaintInfo> &TL);
-  void addToTaintList(TaintInfo &Ti, SmallVectorImpl<TaintInfo> &TL);
+  bool addToTaintList(TaintInfo &Ti, SmallVectorImpl<TaintInfo> &TL);
   void printTaintList(SmallVectorImpl<TaintInfo> &TL);
+  void printTaintList2(SmallVectorImpl<TaintInfo> &TL);
   void printDestSrcInfo(DestSourcePair &DS);
-  TaintInfo isTainted(TaintInfo &Op, SmallVectorImpl<TaintInfo> &TL);
+  TaintInfo isTainted(TaintInfo &Op, SmallVectorImpl<TaintInfo> &TL,
+                      RegisterEquivalence *REAnalysis = nullptr,
+                      const MachineInstr *MI = nullptr);
   void calculateMemAddr(TaintInfo &Ti);
   MachineFunction *getCalledMF(const BlameModule &BM, std::string Name);
 };

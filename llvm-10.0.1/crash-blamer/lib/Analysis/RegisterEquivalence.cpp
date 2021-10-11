@@ -27,7 +27,8 @@ void RegisterEquivalence::join(MachineBasicBlock &MBB,
   // This is entry BB.
   if (MBB.getNumber() == 0) {
     for (const MachineBasicBlock::RegisterMaskPair &LI : MBB.liveins()) {
-      LiveIns[LI.PhysReg].insert(LI.PhysReg);
+      RegisterOffsetPair reg{LI.PhysReg};
+      LiveIns[reg].insert(reg);
     }
     return;
   }
@@ -39,7 +40,7 @@ void RegisterEquivalence::join(MachineBasicBlock &MBB,
                             << PredBlock->getNumber() << ":\n");
     LLVM_DEBUG(dumpRegTable(LiveOuts[PredBlock->getNumber()]));
     for (auto &regs : LiveOuts[PredBlock->getNumber()]) {
-      unsigned reg = regs.first;
+      RegisterOffsetPair reg{regs.first.RegNum};
       std::set_union(LiveIns[reg].begin(), LiveIns[reg].end(),
                 LiveOuts[PredBlock->getNumber()][reg].begin(),
                 LiveOuts[PredBlock->getNumber()][reg].end(),
@@ -52,9 +53,15 @@ void RegisterEquivalence::dumpRegTableAfterMI(MachineInstr* MI) {
   llvm::dbgs() << "Reg Eq Table after: " << *MI;
   auto &Regs = RegInfo[MI];
   for (auto &e : Regs) {
-    llvm::dbgs() << printReg(e.first, TRI) << " : { ";
+    llvm::dbgs() << printReg(e.first.RegNum, TRI);
+    if (e.first.Offset)
+      llvm::dbgs() << "+(" << e.first.Offset << ")";
+    llvm::dbgs() << " : { ";
     for (auto &eq : e.second) {
-      llvm::dbgs() <<  printReg(eq, TRI) << " ";
+      llvm::dbgs() <<  printReg(eq.RegNum, TRI);
+      if (eq.Offset)
+        llvm::dbgs() << "+(" << eq.Offset << ")";
+      llvm::dbgs() << " ";
     }
     llvm::dbgs() << "}\n";
   }
@@ -64,9 +71,15 @@ void RegisterEquivalence::dumpRegTableAfterMI(MachineInstr* MI) {
 void RegisterEquivalence::dumpRegTable(RegisterEqSet &Regs) {
   llvm::dbgs() << "Reg Eq Table:\n";
   for (auto &e : Regs) {
-    llvm::dbgs() << printReg(e.first, TRI) << " : { ";
+    llvm::dbgs() << printReg(e.first.RegNum, TRI);
+    if (e.first.Offset)
+      llvm::dbgs() << "+(" << e.first.Offset << ")";
+    llvm::dbgs() << " : { ";
     for (auto &eq : e.second) {
-      llvm::dbgs() <<  printReg(eq, TRI) << " ";
+      llvm::dbgs() <<  printReg(eq.RegNum, TRI);
+      if (eq.Offset)
+        llvm::dbgs() << "+(" << eq.Offset << ")";
+      llvm::dbgs() << " ";
     }
     llvm::dbgs() << "}\n";
   }
@@ -74,7 +87,7 @@ void RegisterEquivalence::dumpRegTable(RegisterEqSet &Regs) {
 }
 
 void RegisterEquivalence::invalidateRegEq(
-  MachineInstr &MI, unsigned Reg) {
+  MachineInstr &MI, RegisterOffsetPair Reg) {
   // Remove this reg from all other eq sets.
   auto &Regs = RegInfo[&MI];
   for (auto &eqs : Regs) {
@@ -105,11 +118,14 @@ bool RegisterEquivalence::applyRegisterCopy(MachineInstr &MI) {
   if (SrcReg == DestReg)
     return false;
 
-  invalidateRegEq(MI, DestReg);
+  RegisterOffsetPair Src{SrcReg};
+  RegisterOffsetPair Dest{DestReg};
 
-  RegInfo[&MI][SrcReg].insert(DestReg);
-  RegInfo[&MI][DestReg].insert(SrcReg);
-  RegInfo[&MI][SrcReg].insert(SrcReg);
+  invalidateRegEq(MI, Dest);
+
+  RegInfo[&MI][Src].insert(Dest);
+  RegInfo[&MI][Dest].insert(Src);
+  RegInfo[&MI][Src].insert(Src);
 
   return true;
 }
@@ -123,18 +139,25 @@ bool RegisterEquivalence::applyLoad(MachineInstr &MI) {
     return false;
 
   auto SrcReg = srcDest->Source->getReg();
-  auto DstReg = srcDest->Destination->getReg();
+  auto DestReg = srcDest->Destination->getReg();
 
-  // TODO: Take the offset into account.
+  int64_t SrcOffset = 0;
 
-  //MI.dump();
+  // Take the offset into account.
+  if (srcDest->SrcOffset)
+    SrcOffset = *srcDest->SrcOffset;
+
+  RegisterOffsetPair Src{SrcReg, SrcOffset};
+  RegisterOffsetPair Dest{DestReg};
 
   // First invalidate dest reg, since it is being rewritten.
-  invalidateRegEq(MI, DstReg);
+  invalidateRegEq(MI, Dest);
 
-  RegInfo[&MI][SrcReg].insert(DstReg);
-  RegInfo[&MI][DstReg].insert(SrcReg);
-  RegInfo[&MI][SrcReg].insert(SrcReg);
+  RegInfo[&MI][Src].insert(Dest);
+  RegInfo[&MI][Dest].insert(Src);
+  RegInfo[&MI][Src].insert(Src);
+
+  //dumpRegTableAfterMI(&MI);
 
   return true;
 }
@@ -154,8 +177,10 @@ bool RegisterEquivalence::applyCall(MachineInstr &MI) {
 
 bool RegisterEquivalence::applyRegDef(MachineInstr &MI) {
   for (MachineOperand &MO : MI.operands()) {
-    if (MO.isReg() && MO.isDef())
-      invalidateRegEq(MI, MO.getReg());
+    if (MO.isReg() && MO.isDef()) {
+      RegisterOffsetPair reg{MO.getReg()};
+      invalidateRegEq(MI, reg);
+    }
   }
   return true;
 }
@@ -199,7 +224,7 @@ void RegisterEquivalence::registerEqDFAnalysis(MachineFunction &MF) {
 }
 
 bool RegisterEquivalence::isEquvalent(MachineInstr &MI,
-    unsigned Reg1, unsigned Reg2) {
+    RegisterOffsetPair Reg1, RegisterOffsetPair Reg2) {
   if (RegInfo[&MI][Reg1].find(Reg2) != RegInfo[&MI][Reg1].end())
     return true;
 

@@ -90,27 +90,77 @@ void TaintDataFlowGraph::findBlameFunction(Node *v) {
         // Check the level.
         auto *MI = adjNode->MI;
         auto MF = MI->getMF();
+
+        unsigned bbLevelOfCall = 0;
+
         if (!levels.count(MF)) {
           countLevels(MF);
           LLVM_DEBUG(llvm::dbgs() << "Fn " << MF->getName() << "\n";);
           levels[MF].dump();
         }
+
+        auto *CallMI = adjNode->CallMI;
+        const MachineFunction* CalledMF = nullptr;
+        if (CallMI) {
+          CalledMF = CallMI->getMF();
+          if (!levels.count(CalledMF)) {
+            countLevels(CalledMF);
+            LLVM_DEBUG(llvm::dbgs() << "(called) Fn "
+                                    << CalledMF->getName() << "\n";);
+            levels[CalledMF].dump();
+          }
+          bbLevelOfCall = levels[CalledMF].mbbLevels[CallMI->getParent()];
+        }
+
         unsigned bbLevel = levels[MF].mbbLevels[MI->getParent()];
+        if (bbLevelOfCall)
+          bbLevel = bbLevelOfCall;
+
         BlameLevel currLvl{adjNode->frameNum, bbLevel};
         if (currLvl > MaxLevel || currLvl == MaxLevel) {
           if (currLvl == MaxLevel) {
             // If two nodes comes from the same basic block
             // we should consider dominating instruction as
             // the one responsible for loading bad value.
+            // If the blame node was created in a function
+            // that is out of BT, consider Call as responsible
+            // for the critical loading.
             auto *MDT = dominators[adjNode->MI->getMF()];
             auto &BlameNodes = blameNodes[MaxLevel];
             for (unsigned i = 0; i < BlameNodes.size(); i++) {
               auto &a = BlameNodes[i];
-              if (a->MI->getParent() == adjNode->MI->getParent()) {
+              if (a->MI->getParent() == adjNode->MI->getParent() &&
+                  !a->CallMI && !adjNode->CallMI) {
                 if (MDT->dominates(adjNode->MI, a->MI)) {
                   BlameNodes.erase(BlameNodes.begin() + i);
                   break;
                 }
+              } else if (a->CallMI && !adjNode->CallMI) {
+                MDT = dominators[a->CallMI->getMF()];
+                if (a->CallMI->getParent() == adjNode->MI->getParent()) {
+                  if (MDT->dominates(adjNode->MI, a->CallMI)) {
+                    BlameNodes.erase(BlameNodes.begin() + i);
+                    break;
+                  }
+                }
+              } else if (!a->CallMI && adjNode->CallMI) {
+                MDT = dominators[adjNode->CallMI->getMF()];
+                if (a->MI->getParent() == adjNode->CallMI->getParent()) {
+                  if (MDT->dominates(adjNode->CallMI, a->MI)) {
+                    BlameNodes.erase(BlameNodes.begin() + i);
+                    break;
+                  }
+                }
+              } else {
+                // both nodes are from fn that is out of bt.
+                 if (a->CallMI && adjNode->CallMI &&
+                     a->CallMI->getParent() == adjNode->CallMI->getParent()) {
+                   MDT = dominators[adjNode->CallMI->getMF()];
+                   if (MDT->dominates(adjNode->CallMI, a->CallMI)) {
+                     BlameNodes.erase(BlameNodes.begin() + i);
+                     break;
+                   }
+                 }
               }
             }
           }
@@ -118,16 +168,14 @@ void TaintDataFlowGraph::findBlameFunction(Node *v) {
           blameNodes[MaxLevel].push_back(adjNode);
         }
       }
-      findBlameFunction(adjNode);
     }
- }
+    findBlameFunction(adjNode);
+  }
 }
 
 bool TaintDataFlowGraph::printBlameFunction() {
     bool Res = false;
     LLVM_DEBUG(llvm::dbgs() << "Blame Nodes:\n";
-    StringRef BlameFn = "";
-    const MachineFunction *MF = nullptr;
     auto &BlameNodes = blameNodes[MaxLevel];
 
     for (auto &a : BlameNodes) {
@@ -137,33 +185,22 @@ bool TaintDataFlowGraph::printBlameFunction() {
                      << "\n";
       else
         llvm::dbgs() << "\nNo blame line to report.\n";
-
-      if (BlameFn == "") {
-        BlameFn = a->MI->getMF()->getName();
-        MF = a->MI->getMF();
-      } else {
-        assert((BlameFn == a->MI->getMF()->getName()) &&
-               "All blame nodes should come from the same fn.");
-      }
-    }
-    if (MF) {
-      llvm::dbgs() << "\n****Blame function: " << BlameFn << '\n';
-      if (MF->getFunction().getSubprogram())
-        llvm::dbgs() << "****From file: " <<
-          MF->getFunction().getSubprogram()->getFile()->getFilename() << "\n";
     }
   );
 
   StringRef BlameFn = "";
   const MachineFunction *MF = nullptr;
   auto &BlameNodes = blameNodes[MaxLevel];
+  llvm::SmallVector<StringRef, 8> BlameFns;
+  llvm::SmallVector<MachineFunction*, 8> MFs;
   for (auto &a : BlameNodes) {
     if (BlameFn == "") {
       BlameFn = a->MI->getMF()->getName();
+      BlameFns.push_back(BlameFn);
       MF = a->MI->getMF();
     } else {
-      assert((BlameFn == a->MI->getMF()->getName()) &&
-             "All blame nodes should come from the same fn.");
+      // Function calls may cause multiple potential blame fns.
+      BlameFns.push_back(a->MI->getMF()->getName());
     }
   }
 
@@ -172,11 +209,22 @@ bool TaintDataFlowGraph::printBlameFunction() {
     return Res;
   }
 
-  llvm::outs() << "\nBlame Function is " << BlameFn << '\n';
-  if (MF->getFunction().getSubprogram())
-    llvm::outs() << "From File " <<
-      MF->getFunction().getSubprogram()->getFile()->getFilename() << "\n";
-  Res = true;
+  // FIXME: We might want to revert back assert for checking
+  // we found only one Blame Fn, but there could be situation
+  // where 2 functions are potential blames when analyzing
+  // calls to functions that are out of bt.
+
+  if (BlameFns.size() == 1) {
+    llvm::outs() << "\nBlame Function is " << BlameFn << '\n';
+    if (MF->getFunction().getSubprogram())
+      llvm::outs() << "From File " <<
+        MF->getFunction().getSubprogram()->getFile()->getFilename() << "\n";
+    Res = true;
+  } else {
+    for (auto &fn : BlameFns) {
+      llvm::outs() << "\nBlame Function is " << fn << '\n';
+    }
+  }
 
   // Delete all the MDT info, since we don't need it anymore.
   for (auto &mdt : dominators) {
