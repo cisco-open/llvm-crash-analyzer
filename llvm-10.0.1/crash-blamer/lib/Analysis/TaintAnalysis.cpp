@@ -234,6 +234,23 @@ void llvm::crash_blamer::TaintAnalysis::removeFromTaintList(
   llvm_unreachable("Operand not in Taint List");
 }
 
+// Return true if rax register, that stores the return value
+// of a function call is present in the taint list.
+bool
+crash_blamer::TaintAnalysis::isReturnTainted(SmallVectorImpl<TaintInfo> &TL) {
+  for (auto itr = TL.begin(); itr != TL.end(); ++itr) {
+    const MachineOperand* Op = itr->Op;
+    if (Op->isReg())
+      return false;
+    const MachineFunction *MF = Op->getParent()->getMF();
+    auto TRI = MF->getSubtarget().getRegisterInfo();
+    std::string RegName = TRI->getRegAsmName(Op->getReg()).lower();
+    if (RegName == "rax" || RegName == "eax" || RegName == "ax" || RegName == "al")
+      return true;
+  }
+  return false;
+}
+
 TaintInfo
 crash_blamer::TaintAnalysis::isTainted(TaintInfo &Op,
                                        SmallVectorImpl<TaintInfo> &TL,
@@ -602,6 +619,8 @@ bool crash_blamer::TaintAnalysis::runOnBlameMF(const BlameModule &BM,
         }
         auto &MI2 = *MIIt;
         // Process the call instruction that is not in the backtrace
+        // Analyze the call only if return value is tainted.
+	// TODO: Handling of function parameters that are tainted within the function.
         if (MI2.isCall()) {
           mergeTaintList(TL_Mbb, TaintList);
           const MachineOperand &CalleeOp = MI2.getOperand(0);
@@ -609,6 +628,10 @@ bool crash_blamer::TaintAnalysis::runOnBlameMF(const BlameModule &BM,
           if (!CalleeOp.isGlobal())
             continue;
           auto TargetName = CalleeOp.getGlobal()->getName();
+	  if (isReturnTainted(TL_Mbb))
+	   continue;
+	  else
+	   LLVM_DEBUG(llvm::dbgs() << "Not Analyzing function " << TargetName << "\n");
           if (CalleeOp.isGlobal()) {
             MachineFunction *CalledMF = getCalledMF(BM, TargetName);
             if (CalledMF) {
@@ -642,14 +665,21 @@ bool crash_blamer::TaintAnalysis::runOnBlameMF(const BlameModule &BM,
       ReverseExecutionRecord.execute(MI);
 
       // Process call instruction that is not in backtrace
-      // TODO: Currently we process *all* call instructions. Is this necessary ?
+      // Analyze the call only if return value is tainted.
+      // TBD: We ignore tainted parameters since we do not have a good
+      // way to identify machine operands that are function parameters.
       if (MI.isCall()) {
+      //  mergeTaintList(TL_Mbb, TaintList); Is this needed (as above) ?
         const MachineOperand &CalleeOp = MI.getOperand(0);
         // TODO: handle indirect calls.
         if (!CalleeOp.isGlobal())
           continue;
 
         auto TargetName = CalleeOp.getGlobal()->getName();
+	if (isReturnTainted(TL_Mbb))
+          continue;
+	else
+	   LLVM_DEBUG(llvm::dbgs() << "Not Analyzing function " << TargetName << "\n");
         MachineFunction *CalledMF = getCalledMF(BM, TargetName);
         if (CalledMF) {
           CalledMF->setCrashOrder(MF.getCrashOrder());
