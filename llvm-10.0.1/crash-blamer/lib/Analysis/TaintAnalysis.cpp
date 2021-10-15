@@ -240,7 +240,7 @@ bool
 crash_blamer::TaintAnalysis::isReturnTainted(SmallVectorImpl<TaintInfo> &TL) {
   for (auto itr = TL.begin(); itr != TL.end(); ++itr) {
     const MachineOperand* Op = itr->Op;
-    if (Op->isReg())
+    if (!Op->isReg())
       return false;
     const MachineFunction *MF = Op->getParent()->getMF();
     auto TRI = MF->getSubtarget().getRegisterInfo();
@@ -628,10 +628,10 @@ bool crash_blamer::TaintAnalysis::runOnBlameMF(const BlameModule &BM,
           if (!CalleeOp.isGlobal())
             continue;
           auto TargetName = CalleeOp.getGlobal()->getName();
-	  if (isReturnTainted(TL_Mbb))
-	   continue;
-	  else
+	  if (!isReturnTainted(TL_Mbb)) {
 	   LLVM_DEBUG(llvm::dbgs() << "Not Analyzing function " << TargetName << "\n");
+	   continue;
+	  }
           if (CalleeOp.isGlobal()) {
             MachineFunction *CalledMF = getCalledMF(BM, TargetName);
             if (CalledMF) {
@@ -676,10 +676,10 @@ bool crash_blamer::TaintAnalysis::runOnBlameMF(const BlameModule &BM,
           continue;
 
         auto TargetName = CalleeOp.getGlobal()->getName();
-	if (isReturnTainted(TL_Mbb))
+	if (!isReturnTainted(TL_Mbb)) {
+	  LLVM_DEBUG(llvm::dbgs() << "Not Analyzing function " << TargetName << "\n");
           continue;
-	else
-	   LLVM_DEBUG(llvm::dbgs() << "Not Analyzing function " << TargetName << "\n");
+	}
         MachineFunction *CalledMF = getCalledMF(BM, TargetName);
         if (CalledMF) {
           CalledMF->setCrashOrder(MF.getCrashOrder());
