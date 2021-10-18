@@ -247,6 +247,10 @@ crash_blamer::TaintAnalysis::isReturnTainted(SmallVectorImpl<TaintInfo> &TL) {
     std::string RegName = TRI->getRegAsmName(Op->getReg()).lower();
     if (RegName == "rax" || RegName == "eax" || RegName == "ax" || RegName == "al")
       return true;
+    // If a global variable is tainted
+    // If operand is noreg and non-zero offset
+    if (!Op->getReg() && itr->Offset)
+	return true;
   }
   return false;
 }
