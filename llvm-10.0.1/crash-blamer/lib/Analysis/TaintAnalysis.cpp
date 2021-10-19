@@ -236,8 +236,10 @@ void llvm::crash_blamer::TaintAnalysis::removeFromTaintList(
 
 // Return true if rax register, that stores the return value
 // of a function call is present in the taint list.
+// Also, if a global variable is tainted, we are interested
+// in analyzing the function.
 bool
-crash_blamer::TaintAnalysis::isReturnTainted(SmallVectorImpl<TaintInfo> &TL) {
+crash_blamer::TaintAnalysis::shouldAnalyzeCall(SmallVectorImpl<TaintInfo> &TL) {
   for (auto itr = TL.begin(); itr != TL.end(); ++itr) {
     const MachineOperand* Op = itr->Op;
     if (!Op->isReg())
@@ -247,10 +249,10 @@ crash_blamer::TaintAnalysis::isReturnTainted(SmallVectorImpl<TaintInfo> &TL) {
     std::string RegName = TRI->getRegAsmName(Op->getReg()).lower();
     if (RegName == "rax" || RegName == "eax" || RegName == "ax" || RegName == "al")
       return true;
-    // If a global variable is tainted
-    // If operand is noreg and non-zero offset
+    // If a global variable is tainted also return true.
+    // (If operand is noreg and non-zero offset).
     if (!Op->getReg() && itr->Offset)
-	return true;
+	  return true;
   }
   return false;
 }
@@ -624,7 +626,8 @@ bool crash_blamer::TaintAnalysis::runOnBlameMF(const BlameModule &BM,
         auto &MI2 = *MIIt;
         // Process the call instruction that is not in the backtrace
         // Analyze the call only if return value is tainted.
-	// TODO: Handling of function parameters that are tainted within the function.
+	    // TODO: Handling of function parameters that are tainted
+        // within the function.
         if (MI2.isCall()) {
           mergeTaintList(TL_Mbb, TaintList);
           const MachineOperand &CalleeOp = MI2.getOperand(0);
@@ -632,10 +635,11 @@ bool crash_blamer::TaintAnalysis::runOnBlameMF(const BlameModule &BM,
           if (!CalleeOp.isGlobal())
             continue;
           auto TargetName = CalleeOp.getGlobal()->getName();
-	  if (!isReturnTainted(TL_Mbb)) {
-	   LLVM_DEBUG(llvm::dbgs() << "Not Analyzing function " << TargetName << "\n");
-	   continue;
-	  }
+	      if (!shouldAnalyzeCall(TL_Mbb)) {
+	       LLVM_DEBUG(llvm::dbgs() << "Not Analyzing function "
+                                   << TargetName << "\n");
+	       continue;
+	      }
           if (CalleeOp.isGlobal()) {
             MachineFunction *CalledMF = getCalledMF(BM, TargetName);
             if (CalledMF) {
@@ -680,10 +684,11 @@ bool crash_blamer::TaintAnalysis::runOnBlameMF(const BlameModule &BM,
           continue;
 
         auto TargetName = CalleeOp.getGlobal()->getName();
-	if (!isReturnTainted(TL_Mbb)) {
-	  LLVM_DEBUG(llvm::dbgs() << "Not Analyzing function " << TargetName << "\n");
+	    if (!shouldAnalyzeCall(TL_Mbb)) {
+	      LLVM_DEBUG(llvm::dbgs() << "Not Analyzing function "
+                                  << TargetName << "\n");
           continue;
-	}
+	    }
         MachineFunction *CalledMF = getCalledMF(BM, TargetName);
         if (CalledMF) {
           CalledMF->setCrashOrder(MF.getCrashOrder());
