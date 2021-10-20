@@ -158,7 +158,7 @@ int main(int argc, char **argv) {
   }
   MMI->finalize();
 
-  crash_blamer::TaintAnalysis TA;
+  crash_blamer::TaintAnalysis TA(true);
   BlameModule BlameTrace;
   SmallVector<MachineFunction *, 8> BlameMFs;
 

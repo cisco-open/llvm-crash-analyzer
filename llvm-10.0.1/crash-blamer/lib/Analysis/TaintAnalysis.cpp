@@ -6,8 +6,9 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "Analysis/RegisterEquivalence.h"
 #include "Analysis/TaintAnalysis.h"
+#include "Analysis/RegisterEquivalence.h"
+#include "Decompiler/Decompiler.h"
 #include "Analysis/ConcreteReverseExec.h"
 #include "Analysis/TaintDataFlowGraph.h"
 
@@ -338,6 +339,18 @@ MachineFunction* crash_blamer::TaintAnalysis::getCalledMF(const BlameModule &BM,
   return nullptr;
 }
 
+bool crash_blamer::TaintAnalysis::getIsCrashBlamerTATool() const {
+  return isCrashBlamerTATool;
+}
+
+void
+crash_blamer::TaintAnalysis::setDecompiler(crash_blamer::Decompiler *D) {
+  Dec = D;
+}
+Decompiler *crash_blamer::TaintAnalysis::getDecompiler() const {
+  return Dec;
+}
+
 void crash_blamer::TaintAnalysis::startTaint(DestSourcePair &DS,
                                              SmallVectorImpl<TaintInfo> &TL,
                                              const MachineInstr &MI,
@@ -649,9 +662,25 @@ bool crash_blamer::TaintAnalysis::runOnBlameMF(const BlameModule &BM,
               runOnBlameMF(BM, *CalledMF, TaintDFG, true, &TL_Mbb, &MI2);
               CalledMF->setCrashOrder(0);
               continue;
-            } else
-              LLVM_DEBUG(llvm::dbgs()
+            } else {
+              if (!getIsCrashBlamerTATool()) {
+                MachineFunction *MFOnDemand = Dec->decompileOnDemand(TargetName);
+                if (!MFOnDemand) {
+                  LLVM_DEBUG(llvm::dbgs()
                              << "#### Callee not found: " << TargetName << "\n";);
+                  continue;
+                } else {
+                  MFOnDemand->setCrashOrder(MF.getCrashOrder());
+                  runOnBlameMF(BM, *MFOnDemand, TaintDFG, true, &TL_Mbb, &MI);
+                  MFOnDemand->setCrashOrder(0);
+                }
+              } else {
+                LLVM_DEBUG(
+                  llvm::dbgs()
+                      << "#### Callee not found: " << TargetName << "\n";);
+                continue;
+              }
+            }
           }
         }
         auto DestSrc = TII->getDestAndSrc(MI2);
@@ -695,9 +724,26 @@ bool crash_blamer::TaintAnalysis::runOnBlameMF(const BlameModule &BM,
           runOnBlameMF(BM, *CalledMF, TaintDFG, true, &TL_Mbb, &MI);
           CalledMF->setCrashOrder(0);
           continue;
-        } else
-          LLVM_DEBUG(llvm::dbgs()
-                         << "#### func not found: " << TargetName << "\n";);
+        } else {
+          if (!getIsCrashBlamerTATool()) {
+            MachineFunction *MFOnDemand = Dec->decompileOnDemand(TargetName);
+            if (!MFOnDemand) {
+              LLVM_DEBUG(llvm::dbgs()
+                         << "#### Callee not found: " << TargetName << "\n";);
+              continue;
+            } else {
+              // Handle it.
+              MFOnDemand->setCrashOrder(MF.getCrashOrder());
+              runOnBlameMF(BM, *MFOnDemand, TaintDFG, true, &TL_Mbb, &MI);
+              MFOnDemand->setCrashOrder(0);
+            }
+          } else {
+            LLVM_DEBUG(
+              llvm::dbgs()
+                  << "#### Callee not found: " << TargetName << "\n";);
+            continue;
+          }
+        }
       }
 
       if (MI.isBranch())

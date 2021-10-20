@@ -13,4 +13,5 @@ llvm_add_library(CrashBlamerDecompiler
   FixRegStateFlags.cpp
   LINK_LIBS
     lldbPluginDisassemblerLLVM
+    liblldb
   )

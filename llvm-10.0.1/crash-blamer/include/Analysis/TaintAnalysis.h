@@ -62,9 +62,14 @@ struct TaintInfo {
 class TaintAnalysis {
 private:
   SmallVector<TaintInfo, 8> TaintList;
+  Decompiler *Dec = nullptr;
+  // We use this flag to avoid decompilation on demand
+  // for calls in the case of crash-blamer-ta tool.
+  bool isCrashBlamerTATool = false;
 public:
 
   TaintAnalysis();
+  TaintAnalysis(bool b) : isCrashBlamerTATool(b) {}
 
   bool runOnBlameModule(const BlameModule &BM);
   bool runOnBlameMF(const BlameModule &BM, const MachineFunction &MF,
@@ -92,6 +97,9 @@ public:
                       const MachineInstr *MI = nullptr);
   void calculateMemAddr(TaintInfo &Ti);
   MachineFunction *getCalledMF(const BlameModule &BM, std::string Name);
+  bool getIsCrashBlamerTATool() const;
+  void setDecompiler(Decompiler *D);
+  Decompiler *getDecompiler() const;
 };
 
 } // end crash_blamer namespace

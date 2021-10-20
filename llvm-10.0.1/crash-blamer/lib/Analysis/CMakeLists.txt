@@ -12,4 +12,10 @@ llvm_add_library(CrashBlamerTaintAnalysis
   TaintDataFlowGraph.cpp
   DEPENDS
     intrinsics_gen
+    CrashBlamerDecompiler
+  )
+
+target_link_libraries (CrashBlamerTaintAnalysis
+  PRIVATE
+    CrashBlamerDecompiler
   )

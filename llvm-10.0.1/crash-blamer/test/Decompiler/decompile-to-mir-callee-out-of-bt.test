@@ -23,6 +23,11 @@
 # RUN:     --core-file=%S/Inputs/core.callee-out-of-bt %S/Inputs/callee-out-of-bt
 # RUN: cat %t.mir | FileCheck %s
 
+# RUN: rm -rf %t.mir
+# RUN: %crash-blamer --print-decompiled-mir=%t.mir  \
+# RUN:     --core-file=%S/Inputs/core.callee-out-of-bt %S/Inputs/callee-out-of-bt
+# cat %t.mir | FileCheck %s
+
 # CHECK: name: func1
 # CHECK: bb.0:
 # CHECK: PUSH64r $rbp, implicit-def $rsp, implicit $rsp, debug-location !DILocation(line: 3, scope: !{{.*}})

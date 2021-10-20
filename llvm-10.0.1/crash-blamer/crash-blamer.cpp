@@ -161,6 +161,8 @@ int main(int argc, char **argv) {
 
   // Run the analysis.
   crash_blamer::TaintAnalysis TA;
+  Dec->setTarget(&coreFile.getTarget());
+  TA.setDecompiler(Dec);
   TA.runOnBlameModule(BlameTrace);
 
   return exit_code;

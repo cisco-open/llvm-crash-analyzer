@@ -20,6 +20,8 @@
 #include "llvm/Support/Error.h"
 #include "llvm/Support/StringSaver.h"
 
+#include "lldb/API/SBSymbolContextList.h"
+
 #include <map>
 #include <vector>
 #include <unordered_map>
@@ -75,6 +77,21 @@ class Decompiler {
 
   SmallVector<long, 8> FunctionsThatAreNotInBT;
 
+  lldb::SBTarget *target = nullptr;
+
+  // Store debug info compile units for coresponding files.
+  std::unordered_map<std::string, std::pair<DIFile *, DICompileUnit *>> CUs;
+
+  // Store debug info for subprograms for coresponding functions.
+  std::unordered_map<std::string, DISubprogram *> SPs;
+
+  Triple mTriple;
+  static LLVMContext Ctx;
+  // Used to reconstruct the target from CALLs.
+  // FIXME: Use `image lookup --address` in order to find
+  // all the targets.
+  std::unordered_map<uint64_t, StringRef> FuncStartSymbols;
+
 public:
   /// Create a Decompiler or get an appropriate error.
   ///
@@ -118,6 +135,11 @@ public:
       bool IsFnOutOfBt = false);
 
   SmallVector<MachineFunction *, 8> &getBlameMFs() { return BlameMFs; }
+
+  void setTarget(lldb::SBTarget *t) { target = t; }
+  lldb::SBTarget *getTarget() { return target; }
+
+  MachineFunction* decompileOnDemand(StringRef TargetName);
 };
 
 } // end crash_blamer namespace

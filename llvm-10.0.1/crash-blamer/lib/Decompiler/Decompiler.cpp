@@ -61,6 +61,8 @@ static cl::opt<std::string> PrintDecMIR("print-decompiled-mir",
 static cl::opt<bool> DecompileFnsOutOfbt("decompile-fns-out-of-bt", cl::Hidden,
                                          cl::init(false));
 
+LLVMContext crash_blamer::Decompiler::Ctx;
+
 crash_blamer::Decompiler::Decompiler() {
   DisassemblerLLVMC::Initialize();
 }
@@ -380,10 +382,11 @@ llvm::Error crash_blamer::Decompiler::run(
     Triple TheTriple) {
   llvm::outs() << "Decompiling...\n";
 
-  static LLVMContext Ctx;
   LLVMTargetMachine &LLVMTM = static_cast<LLVMTargetMachine &>(*TM.get());
 
   Module = createModule(Ctx, TM->createDataLayout(), InputFile);
+
+  mTriple = TheTriple;
 
   MMI = new MachineModuleInfo(&LLVMTM);
   if (!MMI)
@@ -391,12 +394,6 @@ llvm::Error crash_blamer::Decompiler::run(
     return Error::success();
 
   MMI->initialize();
-
-  // Store debug info compile units for coresponding files.
-  std::unordered_map<std::string, std::pair<DIFile *, DICompileUnit *>> CUs;
-
-  // Store debug info for subprograms for coresponding functions.
-  std::unordered_map<std::string, DISubprogram *> SPs;
 
   // Map of the functions we are about to decompile.
   std::unordered_set<std::string> FunctionsToDecompile;
@@ -406,10 +403,6 @@ llvm::Error crash_blamer::Decompiler::run(
   // Create Debug Info.
   DIBuilder DIB(*Module);
 
-  // Used to reconstruct the target from CALLs.
-  // FIXME: Use `image lookup --address` in order to find
-  // all the targets.
-  std::unordered_map<uint64_t, StringRef> FuncStartSymbols;
   for (auto &frame : FrameInfo) {
     auto FuncAddr = frame.second.GetFunction().GetStartAddress().GetFileAddress();
     FuncStartSymbols[FuncAddr] = frame.first;
@@ -703,4 +696,91 @@ llvm::Error crash_blamer::Decompiler::run(
 
   llvm::outs() << "Decompiled.\n";
   return Error::success();
+}
+
+MachineFunction* crash_blamer::Decompiler::decompileOnDemand(StringRef TargetName) {
+  if (TargetName == "")
+    return nullptr;
+
+  if (!target)
+    return nullptr;
+
+  auto symCtxs = target->FindFunctions(TargetName.data());
+  if (symCtxs.GetSize() != 1) {
+    LLVM_DEBUG(
+      llvm::dbgs() << "Multiple symbols found for: " << TargetName << '\n');
+    return nullptr;
+  }
+
+  auto symCtx = symCtxs.GetContextAtIndex(0);
+  if (!(symCtx.IsValid() && symCtx.GetSymbol().IsValid())) {
+    LLVM_DEBUG(
+      llvm::dbgs() << "Symbols isn't valid: " << TargetName << '\n');
+    return nullptr;
+  }
+
+  lldb::SBInstructionList Instructions;
+  lldb::SBAddress FuncStart, FuncEnd;
+  auto Symbol = symCtx.GetSymbol();
+  Instructions = Symbol.GetInstructions(*target);
+  FuncStart = Symbol.GetStartAddress();
+  FuncEnd = Symbol.GetEndAddress();
+
+  bool HasDbgInfo = false;
+  auto Fn = FuncStart.GetFunction();
+  MachineFunction *MF = &createMF(symCtx.GetSymbol().GetDisplayName());
+  MachineBasicBlock *MBB = MF->CreateMachineBasicBlock();
+  MF->push_back(MBB);
+
+  DISubprogram *SP = nullptr;
+
+  // Create Debug Info.
+  DIBuilder DIB(*Module);
+
+  // Handle debug info if this comes from another module.
+  if (Fn) {
+    HasDbgInfo = true;
+    DIFile *File = nullptr;
+    DICompileUnit *CU = nullptr;
+    std::string FileDirInfo, FileNameInfo, AbsFileName;
+    FileDirInfo = FuncStart.GetCompileUnit().GetFileSpec().GetDirectory();
+    FileNameInfo = FuncStart.GetCompileUnit().GetFileSpec().GetFilename();
+    AbsFileName =
+        (Twine(FileDirInfo) + Twine("/") + Twine(FileNameInfo)).str();
+
+    if (!CUs.count(AbsFileName)) {
+      File = DIB.createFile(AbsFileName, "/");
+      CU = DIB.createCompileUnit(
+          dwarf::DW_LANG_C, File, "crash-blamer", /*isOptimized=*/true, "",
+          0, StringRef(), DICompileUnit::DebugEmissionKind::FullDebug, 0,
+          true, false, DICompileUnit::DebugNameTableKind::Default, false,
+          true);
+      CUs.insert({AbsFileName, std::make_pair(File, CU)});
+    } else {
+      File = CUs[AbsFileName].first;
+      CU = CUs[AbsFileName].second;
+    }
+
+    auto &F = MF->getFunction();
+    auto SPType = DIB.createSubroutineType(DIB.getOrCreateTypeArray(None));
+    DISubprogram::DISPFlags SPFlags =
+        DISubprogram::SPFlagDefinition | DISubprogram::SPFlagOptimized;
+    auto sp = DIB.createFunction(CU, F.getName(), F.getName(), File, 1,
+                                 SPType, 1, DINode::FlagZero, SPFlags);
+    (const_cast<Function *>(&F))->setSubprogram(sp);
+    SP = sp;
+    DIB.finalizeSubprogram(SP);
+    if (!SPs.count(MF->getName()))
+      SPs.insert({MF->getName(), SP});
+  }
+
+  if (!DecodeIntrsToMIR(mTriple, Instructions, FuncStart, FuncEnd, *target, HasDbgInfo,
+                   MF, MBB, symCtx.GetSymbol().GetDisplayName(), SP,
+                   SPs, Ctx, 0, FuncStartSymbols, true /*IsFnOutOfBt*/))
+    return nullptr;
+
+  // Functions that are out of backtrace have 0 crash order.
+  MF->setCrashOrder(0);
+
+  return MF;
 }
