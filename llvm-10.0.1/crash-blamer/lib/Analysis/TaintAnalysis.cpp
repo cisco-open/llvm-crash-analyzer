@@ -623,8 +623,11 @@ bool crash_blamer::TaintAnalysis::runOnBlameMF(const BlameModule &BM,
         }
 
         // For frames > 0, skip to the first instruction after the call
-        // instruction, traversing backwards
-        if (MF.getCrashOrder() > 1 || CalleeNotInBT) {
+        // instruction, traversing backwards.
+        // Sometimes analysis starts at some frame != 1, due to some inlined fns
+        // preceding that fn.
+        if ((MF.getCrashOrder() > 1 && MF.getCrashOrder() != analysisStartedAt)
+            || CalleeNotInBT) {
           if (!CalleeNotInBT) {
             // Skip processing crash instruction
             ++MIIt;
@@ -776,6 +779,23 @@ bool crash_blamer::TaintAnalysis::runOnBlameMF(const BlameModule &BM,
   return Result;
 }
 
+// Dummy MFs of our inlined frames have dummy NOOP instruction only.
+static bool isInline(MachineFunction* MF) {
+  if (MF->size() != 1)
+    return false;
+
+  auto &MBB = MF->front();
+  if (MBB.size() != 1)
+    return false;
+
+  auto TII = MF->getSubtarget().getInstrInfo();
+  auto &Inst = MBB.instr_front();
+  if (TII->isNoopInstr(Inst))
+    return true;
+
+  return false;
+}
+
 // TODO: Based on the reason of the crash (e.g. signal or error code) read from
 // the core file, perform different types of analysis. At the moment, we are
 // looking for an instruction that has coused a read from null address.
@@ -793,10 +813,18 @@ bool crash_blamer::TaintAnalysis::runOnBlameModule(const BlameModule &BM) {
     // e.g.: _start() and __libc_start_main().
     if (!AnalysisStarted && BF.Name.startswith("_")) {
       LLVM_DEBUG(llvm::dbgs() << "### Skip: " << BF.Name << "\n";);
+      ++analysisStartedAt;
       continue;
     }
-    if (!BF.MF->getCrashOrder()) {
+    if (!AnalysisStarted && !BF.MF->getCrashOrder()) {
       LLVM_DEBUG(llvm::dbgs() << "### Skip: " << BF.Name << "\n";);
+      ++analysisStartedAt;
+      continue;
+    }
+
+    if (!AnalysisStarted && isInline(BF.MF)) {
+      LLVM_DEBUG(llvm::dbgs() << "### Skip inline fn: " << BF.Name << "\n";);
+      ++analysisStartedAt;
       continue;
     }
 
@@ -809,7 +837,6 @@ bool crash_blamer::TaintAnalysis::runOnBlameModule(const BlameModule &BM) {
     }
 
     if (runOnBlameMF(BM, *(BF.MF), TaintDFG, false)) {
-
       LLVM_DEBUG(dbgs() << "\nTaint Analysis done.\n");
       if (TaintList.empty()) {
         if (DumpTaintGraphAsDOT != "") {

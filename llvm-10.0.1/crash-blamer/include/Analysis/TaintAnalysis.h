@@ -66,6 +66,9 @@ private:
   // We use this flag to avoid decompilation on demand
   // for calls in the case of crash-blamer-ta tool.
   bool isCrashBlamerTATool = false;
+
+  // Used to indicate that we faced a non inlined frame.
+  unsigned analysisStartedAt = 1;
 public:
 
   TaintAnalysis();
