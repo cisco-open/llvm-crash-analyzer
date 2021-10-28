@@ -156,6 +156,9 @@ void ConcreteReverseExec::execute(const MachineInstr &MI) {
       }
 
       // The MI is not supported, so consider it as not available.
+      LLVM_DEBUG(llvm::dbgs()
+                << "Concrete Rev Exec not supported for \n";
+		MI.dump(););
       updateCurrRegVal(RegName, "");
     }
   }
