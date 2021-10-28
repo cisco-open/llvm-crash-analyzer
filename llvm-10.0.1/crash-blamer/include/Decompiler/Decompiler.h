@@ -25,6 +25,7 @@
 #include <map>
 #include <vector>
 #include <unordered_map>
+#include <unordered_set>
 
 namespace llvm {
 
@@ -92,6 +93,10 @@ class Decompiler {
   // all the targets.
   std::unordered_map<uint64_t, StringRef> FuncStartSymbols;
 
+  // Used to detect inlined functions that we missed to decompile
+  // since they were not part of the backtrace.
+  std::unordered_set<std::string> AlreadyDecompiledFns;
+
 public:
   /// Create a Decompiler or get an appropriate error.
   ///
@@ -140,6 +145,8 @@ public:
   lldb::SBTarget *getTarget() { return target; }
 
   MachineFunction* decompileOnDemand(StringRef TargetName);
+  MachineFunction* decompileInlinedFnOutOfbt(StringRef TargetName,
+      DIFile *File);
 };
 
 } // end crash_blamer namespace

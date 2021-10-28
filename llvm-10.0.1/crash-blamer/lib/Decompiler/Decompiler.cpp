@@ -231,6 +231,7 @@ MachineFunction &crash_blamer::Decompiler::createMF(StringRef FunctionName) {
   // Making sure we can create a MachineFunction out of this Function even if it
   // contains no IR.
   F->setIsMaterializable(true);
+  AlreadyDecompiledFns.insert(FunctionName.str());
   return MMI->getOrCreateMachineFunction(*F);
 }
 
@@ -281,6 +282,8 @@ bool crash_blamer::Decompiler::DecodeIntrsToMIR(
     auto InstSP = instruction_list.GetInstructionAtIndex(k);
     uint64_t InstAddr = InstSP->GetAddress().GetFileAddress();
 
+    StringRef InlinedFnName = "";
+
     uint32_t line = 0;
     uint32_t column = 0;
     if (HaveDebugInfo) {
@@ -288,7 +291,12 @@ bool crash_blamer::Decompiler::DecodeIntrsToMIR(
       line = sbInst.GetAddress().GetLineEntry().GetLine();
       column = sbInst.GetAddress().GetLineEntry().GetColumn();
       if (sbInst.GetAddress().GetBlock().IsInlined()) {
-        OriginalFunction = sbInst.GetAddress().GetBlock().GetInlinedName();
+        InlinedFnName = sbInst.GetAddress().GetBlock().GetInlinedName();
+        if (!AlreadyDecompiledFns.count(InlinedFnName.str())) {
+          auto InlineFnOutOfBt =
+             decompileInlinedFnOutOfbt(InlinedFnName, DISP->getFile());
+          (void)InlineFnOutOfBt;
+        }
       }
     }
 
@@ -320,7 +328,11 @@ bool crash_blamer::Decompiler::DecodeIntrsToMIR(
 
       // This is used to prevent wrong DI SP attached to inlined
       // instructions.
-      if (SPs.count(OriginalFunction)) DISP = SPs[OriginalFunction];
+      if (InlinedFnName != "") {
+        if (SPs.count(InlinedFnName)) DISP = SPs[InlinedFnName];
+      } else {
+        if (SPs.count(OriginalFunction)) DISP = SPs[OriginalFunction];
+      }
 
       auto DILoc = DILocation::get(Ctx, line, column, DISP);
       DebugLoc Loc = DebugLoc(DILoc);
@@ -370,6 +382,7 @@ bool crash_blamer::Decompiler::DecodeIntrsToMIR(
       PrevBranch = true;
     } else
       PrevBranch = false;
+    InlinedFnName = "";
   }
 
   return true;
@@ -696,6 +709,46 @@ llvm::Error crash_blamer::Decompiler::run(
 
   llvm::outs() << "Decompiled.\n";
   return Error::success();
+}
+
+MachineFunction*
+crash_blamer::Decompiler::decompileInlinedFnOutOfbt(StringRef TargetName,
+    DIFile *File) {
+  if (!File)
+    return nullptr;
+  if (TargetName == "")
+    return nullptr;
+  if (!CUs.count(File->getFilename().str()))
+    return nullptr;
+
+  auto MF = &createMF(TargetName);
+  auto MBB = MF->CreateMachineBasicBlock();
+  MF->push_back(MBB);
+
+  DICompileUnit *CU = CUs[File->getFilename().str()].second;
+
+  // Create Debug Info.
+  DIBuilder DIB(*Module);
+  auto &F = MF->getFunction();
+  auto SPType = DIB.createSubroutineType(DIB.getOrCreateTypeArray(None));
+  DISubprogram::DISPFlags SPFlags =
+      DISubprogram::SPFlagDefinition | DISubprogram::SPFlagOptimized;
+  auto SP = DIB.createFunction(CU, F.getName(), F.getName(), File, 1,
+                               SPType, 1, DINode::FlagZero, SPFlags);
+  (const_cast<Function *>(&F))->setSubprogram(SP);
+  DIB.finalizeSubprogram(SP);
+  if (!SPs.count(TargetName))
+    SPs.insert({TargetName, SP});
+
+  auto TII = MF->getSubtarget().getInstrInfo();
+  MCInst NopInst;
+  TII->getNoop(NopInst);
+  const unsigned Opcode = NopInst.getOpcode();
+  const MCInstrDesc &MCID = MII->get(Opcode);
+  BuildMI(MBB, DebugLoc(), MCID);
+  MF->setCrashOrder(0);
+  AlreadyDecompiledFns.insert(TargetName.str());
+  return MF;
 }
 
 MachineFunction* crash_blamer::Decompiler::decompileOnDemand(StringRef TargetName) {

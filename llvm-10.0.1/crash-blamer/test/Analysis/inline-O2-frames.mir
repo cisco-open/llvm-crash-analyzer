@@ -17,13 +17,8 @@
 #    caller1();
 #     printf("%d", *global_a);
 #}
-# clang -g -O2 test.c
-
-# XFAIL: *
-
-## Curently, the main() is being reported, since we don't have func1 decompiled.
-## It is a function out of bt, but that got inlined, so there is no CALL to
-## decompile it "ON-DEMAND". This will be fixed.
+# $ clang -g -O2 test.c
+# $ $ crash-blamer --core-file=core.a.out.67959 a.out -print-decompiled-mir=test.mir
 
 # RUN: %crash-blamer-ta %s | FileCheck %s
 # CHECK: Blame Function is func1 
@@ -52,10 +47,12 @@
   }
   
   ; Materializable
-  define void @printf() {
+  define void @func1() !dbg !7 {
   entry:
     unreachable
   }
+  
+  declare void @printf()
   
   !llvm.dbg.cu = !{!0}
   
@@ -66,6 +63,7 @@
   !4 = !{}
   !5 = distinct !DISubprogram(name: "func2", linkageName: "func2", scope: null, file: !1, line: 1, type: !3, scopeLine: 1, spFlags: DISPFlagDefinition | DISPFlagOptimized, unit: !0, retainedNodes: !4)
   !6 = distinct !DISubprogram(name: "main", linkageName: "main", scope: null, file: !1, line: 1, type: !3, scopeLine: 1, spFlags: DISPFlagDefinition | DISPFlagOptimized, unit: !0, retainedNodes: !4)
+  !7 = distinct !DISubprogram(name: "func1", linkageName: "func1", scope: null, file: !1, line: 1, type: !3, scopeLine: 1, spFlags: DISPFlagDefinition | DISPFlagOptimized, retainedNodes: !4)
 
 ...
 ---
@@ -276,66 +274,14 @@ body:             |
     liveins: $rax, $rip
   
     PUSH64r $rax, implicit-def $rsp, implicit $rsp, debug-location !DILocation(line: 17, scope: !6)
-    crash-start MOV64mi32 $rip, 1, $noreg, 11932, $noreg, 268435455, debug-location !DILocation(line: 5, column: 13, scope: !6)
+    crash-start MOV64mi32 $rip, 1, $noreg, 11932, $noreg, 268435455, debug-location !DILocation(line: 5, column: 13, scope: !7)
     MOV32mi $noreg, 1, $noreg, 268435455, $noreg, 20, debug-location !DILocation(line: 8, column: 15, scope: !5)
-    $edi = MOV32ri 4202512, debug-location !DILocation(line: 19, column: 6, scope: !5)
-    $esi = MOV32ri 20, debug-location !DILocation(line: 19, column: 6, scope: !5)
-    $eax = XOR32rr undef $eax, undef $eax, implicit-def $eflags, debug-location !DILocation(line: 19, column: 6, scope: !5)
-    CALL64pcrel32 @printf, csr_64, implicit $rsp, implicit $ssp, implicit-def $eax, implicit-def $eax, debug-location !DILocation(line: 19, column: 6, scope: !5)
-    $eax = XOR32rr undef $eax, undef $eax, implicit-def $eflags, debug-location !DILocation(line: 20, column: 1, scope: !5)
-    $rcx = POP64r implicit-def $rsp, implicit $rsp, debug-location !DILocation(line: 20, column: 1, scope: !5)
-    RETQ debug-location !DILocation(line: 20, column: 1, scope: !5)
-
-...
----
-name:            printf
-alignment:       16
-exposesReturnsTwice: false
-legalized:       false
-regBankSelected: false
-selected:        false
-failedISel:      false
-tracksRegLiveness: true
-hasWinCFI:       false
-registers:       []
-liveins:         []
-frameInfo:
-  isFrameAddressTaken: false
-  isReturnAddressTaken: false
-  hasStackMap:     false
-  hasPatchPoint:   false
-  stackSize:       0
-  offsetAdjustment: 0
-  maxAlignment:    1
-  adjustsStack:    false
-  hasCalls:        false
-  stackProtector:  ''
-  maxCallFrameSize: 4294967295
-  cvBytesOfCalleeSavedRegisters: 0
-  hasOpaqueSPAdjustment: false
-  hasVAStart:      false
-  hasMustTailInVarArgFunc: false
-  localFrameSize:  0
-  savePoint:       ''
-  restorePoint:    ''
-fixedStack:      []
-stack:           []
-callSites:       []
-debugValueSubstitutions: []
-regInfo:         { GPRegs: [] }
-constants:       []
-machineFunctionInfo: {}
-crashOreder:     0
-body:             |
-  bb.0:
-    liveins: $rip
-  
-    JMP64m $rip, 1, $noreg, 12258, $noreg
-  
-  bb.1:
-    PUSH64i32 0, implicit-def $rsp, implicit $rsp
-    crash-start JMP_4 4198432
-  
-  bb.2:
+    $edi = MOV32ri 4202512, debug-location !DILocation(line: 19, column: 6, scope: !6)
+    $esi = MOV32ri 20, debug-location !DILocation(line: 19, column: 6, scope: !6)
+    $eax = XOR32rr undef $eax, undef $eax, implicit-def $eflags, debug-location !DILocation(line: 19, column: 6, scope: !6)
+    CALL64pcrel32 @printf, csr_64, implicit $rsp, implicit $ssp, implicit-def $eax, implicit-def $eax, debug-location !DILocation(line: 19, column: 6, scope: !6)
+    $eax = XOR32rr undef $eax, undef $eax, implicit-def $eflags, debug-location !DILocation(line: 20, column: 1, scope: !6)
+    $rcx = POP64r implicit-def $rsp, implicit $rsp, debug-location !DILocation(line: 20, column: 1, scope: !6)
+    RETQ debug-location !DILocation(line: 20, column: 1, scope: !6)
 
 ...

@@ -195,12 +195,23 @@ bool TaintDataFlowGraph::printBlameFunction() {
   llvm::SmallVector<MachineFunction*, 8> MFs;
   for (auto &a : BlameNodes) {
     if (BlameFn == "") {
-      BlameFn = a->MI->getMF()->getName();
+      // Use the fn name from Debug Location, if any, since the instruction
+      // may be inlined from another MF.
+      if (a->MI->getDebugLoc())
+        BlameFn =
+          a->MI->getDebugLoc()->getScope()->getSubprogram()->getName();
+      else
+        BlameFn = a->MI->getMF()->getName();
       BlameFns.push_back(BlameFn);
       MF = a->MI->getMF();
     } else {
-      // Function calls may cause multiple potential blame fns.
-      BlameFns.push_back(a->MI->getMF()->getName());
+      // Function calls (ot of bt) and inlined fns may cause multiple
+      // potential blame fns.
+      if (a->MI->getDebugLoc())
+        BlameFns.push_back(
+            a->MI->getDebugLoc()->getScope()->getSubprogram()->getName());
+      else
+        BlameFns.push_back(a->MI->getMF()->getName());
     }
   }
 
