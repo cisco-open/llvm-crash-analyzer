@@ -78,6 +78,8 @@ struct DestSourcePair {
   const MachineOperand *Source2 = nullptr;
   Optional<int64_t> Src2Offset;
 
+  // Value in immediate instructions
+  Optional<int64_t> ImmValue;
 
   // Used for scaled addressing mode.
   // e.g.:
@@ -124,6 +126,17 @@ struct DestSourcePair {
 	SrcScaledIndex(SrcScaledIndex),
 	SrcOffsetReg(SrcOffsetReg),
 	SizeFactor(Size) {}
+
+  DestSourcePair(const MachineOperand *Dest, const MachineOperand *Src,
+		 Optional<int64_t> DestOff, Optional<int64_t> SrcOff,
+	         Optional <int64_t> ImmVal,
+         	 MachineOperand *DestScaledIndex = nullptr, 
+		 MachineOperand *DstOffset = nullptr)
+      : Destination(Dest), Source (Src),
+	DestOffset(DestOff), SrcOffset(SrcOff),
+	ImmValue(ImmVal),
+	DestScaledIndex(DestScaledIndex),
+	DestOffsetReg(DstOffset) {}
 };
 
 /// Used to describe a register and immediate addition.

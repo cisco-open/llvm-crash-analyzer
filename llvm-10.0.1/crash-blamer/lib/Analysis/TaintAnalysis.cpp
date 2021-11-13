@@ -517,7 +517,29 @@ bool llvm::crash_blamer::TaintAnalysis::propagateTaint(
     // We have reached a terminating condition where
     // dest is tainted and src is a constant operand.
     removeFromTaintList(Taint, TL);
-    return false;
+
+    if (DS.ImmValue) {
+    // Start tracking the constant as it can be an address which can be
+    // written into later.
+    TaintInfo NewTaint;
+    static MachineOperand MO = MachineOperand::CreateReg(0U, false);
+    MO.setParent(const_cast<MachineInstr*>(&MI));
+    NewTaint.Op = &MO;
+    NewTaint.IsConcreteMemory = true;
+    NewTaint.Offset = *(DS.ImmValue);
+    // Assigning int64_t to uint64_t ?
+    NewTaint.ConcreteMemoryAddress = *(DS.ImmValue);
+    if (addToTaintList(NewTaint, TL)) {
+      Node *newNode = new Node(MF->getCrashOrder(), &MI, NewTaint, false);
+      std::shared_ptr<Node> newTaintNode(newNode);
+      auto &LastTaintedNodeForTheOp = TaintDFG.lastTaintedNode[Taint];
+      TaintDFG.addEdge(LastTaintedNodeForTheOp, newTaintNode, EdgeType::Assigment);
+      TaintDFG.updateLastTaintedNode(NewTaint, newTaintNode);
+      LLVM_DEBUG(dbgs() << "New constant node added \n");
+      printTaintList(TL);
+    }
+   }
+    return true;
   }
 
   if (addToTaintList(SrcTi, TL)) {
