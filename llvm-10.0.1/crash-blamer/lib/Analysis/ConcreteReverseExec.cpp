@@ -36,6 +36,46 @@ void ConcreteReverseExec::dump() {
 void ConcreteReverseExec::updateCurrRegVal(std::string Reg, std::string Val) {
   for (auto &R : currentRegisterValues) {
     if (R.Name == Reg) {
+      // Register value is unknown.
+      if (R.Value == "") {
+        if (RegAliases.getRegSize(Reg) == 64) {
+          const unsigned RegValInBits = (Val.size() - 2) / 2 * 8;
+          if (RegValInBits <= 64)
+            R.Value = Val;
+          else {
+            // drop 0x
+            Val.erase(Val.begin());
+            Val.erase(Val.begin());
+            // get last 8 bytes.
+            R.Value = "0x" + Val.substr(/*8 bytes*/Val.size() - 16);
+          }
+        } else if (RegAliases.getRegSize(Reg) == 32) {
+          const unsigned RegValInBits = (Val.size() - 2) / 2 * 8;
+          if (RegValInBits <= 32)
+            R.Value = Val;
+          else {
+            // drop 0x
+            Val.erase(Val.begin());
+            Val.erase(Val.begin());
+            // get last 4 bytes.
+            R.Value = "0x" + Val.substr(/*4 bytes*/Val.size() - 8);
+          }
+        } else if (RegAliases.getRegSize(Reg) == 16) {
+          const unsigned RegValInBits = (Val.size() - 2) / 2 * 8;
+          if (RegValInBits <= 16)
+            R.Value = Val;
+          else {
+            // drop 0x
+            Val.erase(Val.begin());
+            Val.erase(Val.begin());
+            // get last 2 bytes.
+            R.Value = "0x" + Val.substr(/*2 bytes*/Val.size() - 4);
+          }
+        }
+        return;
+      }
+
+      // There is already a value that needs to be updated.
       if (R.Value.size() == Val.size())
         R.Value = Val;
       else if (R.Value.size() > Val.size()){
@@ -104,6 +144,32 @@ void ConcreteReverseExec::execute(const MachineInstr &MI) {
         RegistersDefs.insert(Reg);
         LLVM_DEBUG(llvm::dbgs() << MI << " modifies(defines val from corefile) "
                                 << RegName << "\n";);
+        auto regVal = getCurretValueInReg(RegName);
+        if (regVal == "") {
+          uint64_t Val = 0;
+          if (MI.isMoveImmediate()) {
+            if (MI.getOperand(1).isImm()) {
+              Val = MI.getOperand(1).getImm();
+              std::stringstream SS;
+              SS << std::hex << regVal;
+              SS >> Val;
+              auto regAliasesInfo = getRegAliasesInfo();
+              auto regInfoId = regAliasesInfo.getID(RegName);
+              if (!regInfoId) {
+                updateCurrRegVal(RegName, "");
+                continue;
+              }
+              auto regTripple = regAliasesInfo.getRegMap(*regInfoId);
+              // regVal.size() - 2 for 0x chars.
+              std::string newValue = intToHex(Val, regVal.size() - 2);
+              // update reg aliases as well.
+              // e.g. if $eax is modified, update both $rax and $ax as well.
+              updateCurrRegVal(std::get<0>(regTripple), newValue);
+              updateCurrRegVal(std::get<1>(regTripple), newValue);
+              updateCurrRegVal(std::get<2>(regTripple), newValue);
+            }
+          }
+        }
         continue;
       }
       LLVM_DEBUG(llvm::dbgs() << MI << " modifies " << RegName << "\n";);
@@ -115,6 +181,7 @@ void ConcreteReverseExec::execute(const MachineInstr &MI) {
 
       // If the value of the register isn't available, we have nothing to
       // update.
+      // FIXME: Is this right?
       auto regVal = getCurretValueInReg(RegName);
       if (regVal == "")
         continue;
@@ -153,6 +220,31 @@ void ConcreteReverseExec::execute(const MachineInstr &MI) {
         updateCurrRegVal(std::get<2>(regTripple), newValue);
         dump();
         continue;
+      } else if (MI.isMoveImmediate()) {
+        if (!MI.getOperand(1).isImm()) {
+          updateCurrRegVal(RegName, "");
+          return;
+        }
+        Val = MI.getOperand(1).getImm();
+        std::stringstream SS;
+        SS << std::hex << regVal;
+        SS >> Val;
+        auto regAliasesInfo = getRegAliasesInfo();
+        auto regInfoId = regAliasesInfo.getID(RegName);
+        if (!regInfoId) {
+          updateCurrRegVal(RegName, "");
+          continue;
+        }
+        auto regTripple = regAliasesInfo.getRegMap(*regInfoId);
+        //regVal.size() - 2 for 0x chars.
+        std::string newValue = intToHex(Val, regVal.size() - 2);
+        // update reg aliases as well.
+        // e.g. if $eax is modified, update both $rax and $ax as well.
+        updateCurrRegVal(std::get<0>(regTripple), newValue);
+        updateCurrRegVal(std::get<1>(regTripple), newValue);
+        updateCurrRegVal(std::get<2>(regTripple), newValue);
+        dump();
+        return;
       }
 
       // The MI is not supported, so consider it as not available.

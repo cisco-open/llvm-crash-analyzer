@@ -702,7 +702,8 @@ bool crash_blamer::TaintAnalysis::runOnBlameMF(const BlameModule &BM,
         continue;
 
       // Update the register values, so we have right regiter values state.
-      ReverseExecutionRecord.execute(MI);
+      if (ReverseExecutionRecord.getIsCREEnabled())
+        ReverseExecutionRecord.execute(MI);
 
       // Process call instruction that is not in backtrace
       // Analyze the call only if return value is tainted.
