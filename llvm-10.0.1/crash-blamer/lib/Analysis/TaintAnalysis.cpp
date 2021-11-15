@@ -443,6 +443,10 @@ void crash_blamer::TaintAnalysis::startTaint(DestSourcePair &DS,
 
 // Return true if taint is propagated.
 // Return false if taint is terminated.
+// Currently we continue to propagate even after a constant value is written
+// into the tainted operand so that we can reach the farthest point
+// in the backward direction (which implies the first potential issue
+// in the forward direction).
 bool llvm::crash_blamer::TaintAnalysis::propagateTaint(
     DestSourcePair &DS, SmallVectorImpl<TaintInfo> &TL,
     const MachineInstr &MI, TaintDataFlowGraph &TaintDFG,

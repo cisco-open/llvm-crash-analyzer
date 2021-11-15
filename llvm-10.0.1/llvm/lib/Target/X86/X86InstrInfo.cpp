@@ -538,7 +538,7 @@ X86InstrInfo::getDestAndSrc(const MachineInstr &MI) const {
           const_cast<MachineOperand *>(&(MI.getOperand(1)));
       MachineOperand *DstOffset =
           const_cast<MachineOperand *>(&(MI.getOperand(2)));
-      // Is ImmVal needed for Scaled Index mode ?
+      // TODO: Is ImmVal needed for Scaled Index mode ?
       return DestSourcePair{Dst, Src, 0, None, nullptr, None, DstScaledIndex, DstOffset, 0};
     } case X86::MOV8rm:
       case X86::MOV32rm:
