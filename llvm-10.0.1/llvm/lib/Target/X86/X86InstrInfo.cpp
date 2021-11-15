@@ -517,16 +517,19 @@ X86InstrInfo::getDestAndSrc(const MachineInstr &MI) const {
   const TargetRegisterInfo *TRI = &getRegisterInfo();
   const MachineOperand *BaseOp;
   int64_t Offset;
+  Optional<int64_t> ImmVal; 
 
   // TODO: All the mem operands can be addressed in different modes.
   // Support all addressing modes.
   switch(MI.getOpcode()) {
+    case X86::MOV64mi32: 
+      ImmVal = MI.getOperand(3).getImm();
+      LLVM_FALLTHROUGH;
     case X86::MOV8mi:
     case X86::MOV16mi:
-    case X86::MOV32mi:
-    case X86::MOV64mi32: {
+    case X86::MOV32mi: {
       if (getMemOperandWithOffset(MI, BaseOp, Offset, TRI))
-        return DestSourcePair{*BaseOp, Offset, MI.getOperand(5)};
+        return DestSourcePair{BaseOp, &MI.getOperand(5), Offset, None, ImmVal};
 
       // This should be scaled indexing addressing mode.
       const MachineOperand *Src = &(MI.getOperand(5));
@@ -535,7 +538,7 @@ X86InstrInfo::getDestAndSrc(const MachineInstr &MI) const {
           const_cast<MachineOperand *>(&(MI.getOperand(1)));
       MachineOperand *DstOffset =
           const_cast<MachineOperand *>(&(MI.getOperand(2)));
-
+      // TODO: Is ImmVal needed for Scaled Index mode ?
       return DestSourcePair{Dst, Src, 0, None, nullptr, None, DstScaledIndex, DstOffset, 0};
     } case X86::MOV8rm:
       case X86::MOV32rm:
@@ -631,6 +634,8 @@ X86InstrInfo::getDestAndSrc(const MachineInstr &MI) const {
       case X86::MOV32ri:
       case X86::MOV64ri:
       case X86::MOV64ri32:
+	ImmVal = MI.getOperand(1).getImm();
+	LLVM_FALLTHROUGH;
       case X86::MOVZX32rr8:
       case X86::MOVZX32rr16:
       case X86::MOVSX64rr32:
@@ -645,7 +650,7 @@ X86InstrInfo::getDestAndSrc(const MachineInstr &MI) const {
       case X86::CVTSS2SDrr_Int: {
       const MachineOperand *Dest = &(MI.getOperand(0));
       const MachineOperand *Src = &(MI.getOperand(1));
-      return DestSourcePair{*Dest, *Src};
+      return DestSourcePair{Dest, Src, None, None, ImmVal};
     } case X86::UCOMISDrr: {
       const MachineOperand *Src = &(MI.getOperand(0));
       const MachineOperand *Source2 = &(MI.getOperand(1));

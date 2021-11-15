@@ -236,6 +236,8 @@ public:
   MachineInstr *getParent() { return ParentMI; }
   const MachineInstr *getParent() const { return ParentMI; }
 
+  void setParent(MachineInstr *MI) { ParentMI = MI; }
+
   /// clearParent - Reset the parent pointer.
   ///
   /// The MachineOperand copy constructor also copies ParentMI, expecting the
