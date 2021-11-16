@@ -1,0 +1,162 @@
+# int main() {
+#  int *ptr = 0;
+#  *ptr = 100;
+#  return 0;
+#}
+# clang -g -O0 test.c
+# Blame line should be 2 (by using --debug-only=taint-dfg). We consider
+# which instruciton dominanets in the same bb.
+
+# RUN: %llvm-crash-analyzer-ta %s | FileCheck %s
+# CHECK: Blame Function is main
+
+--- |
+  ; ModuleID = 'a.out'
+  source_filename = "a.out"
+  target datalayout = "e-m:e-p270:32:32-p271:32:32-p272:64:64-i64:64-f80:128-n8:16:32:64-S128"
+  
+  ; Materializable
+  define void @main() !dbg !2 {
+  entry:
+    unreachable
+  }
+  
+  !llvm.dbg.cu = !{!0}
+  
+  !0 = distinct !DICompileUnit(language: DW_LANG_C, file: !1, producer: "llvm-crash-analyzer", isOptimized: true, runtimeVersion: 0, emissionKind: FullDebug)
+  !1 = !DIFile(filename: "/nobackup/djtodoro/llvm_trunk/NEW/llvm-crash-analyzer/CISCO-git/test-dfg/simple/test.c", directory: "/")
+  !2 = distinct !DISubprogram(name: "main", linkageName: "main", scope: null, file: !1, line: 1, type: !3, scopeLine: 1, spFlags: DISPFlagDefinition | DISPFlagOptimized, unit: !0, retainedNodes: !4)
+  !3 = !DISubroutineType(types: !4)
+  !4 = !{}
+
+...
+---
+name:            main
+alignment:       16
+exposesReturnsTwice: false
+legalized:       false
+regBankSelected: false
+selected:        false
+failedISel:      false
+tracksRegLiveness: true
+hasWinCFI:       false
+registers:       []
+liveins:         []
+frameInfo:
+  isFrameAddressTaken: false
+  isReturnAddressTaken: false
+  hasStackMap:     false
+  hasPatchPoint:   false
+  stackSize:       0
+  offsetAdjustment: 0
+  maxAlignment:    1
+  adjustsStack:    false
+  hasCalls:        false
+  stackProtector:  ''
+  maxCallFrameSize: 4294967295
+  cvBytesOfCalleeSavedRegisters: 0
+  hasOpaqueSPAdjustment: false
+  hasVAStart:      false
+  hasMustTailInVarArgFunc: false
+  localFrameSize:  0
+  savePoint:       ''
+  restorePoint:    ''
+fixedStack:      []
+stack:           []
+callSites:       []
+debugValueSubstitutions: []
+regInfo:         { GPRegs: 
+    - { reg: rax, value: '0x0000000000000000' }
+    - { reg: rbx, value: '0x0000000000000000' }
+    - { reg: rcx, value: '0x0000000000000000' }
+    - { reg: rdx, value: '0x00007ffc49aa4b38' }
+    - { reg: rdi, value: '0x0000000000000001' }
+    - { reg: rsi, value: '0x00007ffc49aa4b28' }
+    - { reg: rbp, value: '0x00007ffc49aa4a40' }
+    - { reg: rsp, value: '0x00007ffc49aa4a40' }
+    - { reg: r8, value: '0x00007f7a2da2ee80' }
+    - { reg: r9, value: '0x0000000000000000' }
+    - { reg: r10, value: '0x00007ffc49aa4560' }
+    - { reg: r11, value: '0x00007f7a2d688460' }
+    - { reg: r12, value: '0x0000000000401050' }
+    - { reg: r13, value: '0x00007ffc49aa4b20' }
+    - { reg: r14, value: '0x0000000000000000' }
+    - { reg: r15, value: '0x0000000000000000' }
+    - { reg: rip, value: '0x0000000000401159' }
+    - { reg: rflags, value: '0x0000000000010246' }
+    - { reg: cs, value: '0x0000000000000033' }
+    - { reg: fs, value: '0x0000000000000000' }
+    - { reg: gs, value: '0x0000000000000000' }
+    - { reg: ss, value: '0x000000000000002b' }
+    - { reg: ds, value: '0x0000000000000000' }
+    - { reg: es, value: '0x0000000000000000' }
+    - { reg: eax, value: '0x00000000' }
+    - { reg: ebx, value: '0x00000000' }
+    - { reg: ecx, value: '0x00000000' }
+    - { reg: edx, value: '0x49aa4b38' }
+    - { reg: edi, value: '0x00000001' }
+    - { reg: esi, value: '0x49aa4b28' }
+    - { reg: ebp, value: '0x49aa4a40' }
+    - { reg: esp, value: '0x49aa4a40' }
+    - { reg: r8d, value: '0x2da2ee80' }
+    - { reg: r9d, value: '0x00000000' }
+    - { reg: r10d, value: '0x49aa4560' }
+    - { reg: r11d, value: '0x2d688460' }
+    - { reg: r12d, value: '0x00401050' }
+    - { reg: r13d, value: '0x49aa4b20' }
+    - { reg: r14d, value: '0x00000000' }
+    - { reg: r15d, value: '0x00000000' }
+    - { reg: ax, value: '0x0000' }
+    - { reg: bx, value: '0x0000' }
+    - { reg: cx, value: '0x0000' }
+    - { reg: dx, value: '0x4b38' }
+    - { reg: di, value: '0x0001' }
+    - { reg: si, value: '0x4b28' }
+    - { reg: bp, value: '0x4a40' }
+    - { reg: sp, value: '0x4a40' }
+    - { reg: r8w, value: '0xee80' }
+    - { reg: r9w, value: '0x0000' }
+    - { reg: r10w, value: '0x4560' }
+    - { reg: r11w, value: '0x8460' }
+    - { reg: r12w, value: '0x1050' }
+    - { reg: r13w, value: '0x4b20' }
+    - { reg: r14w, value: '0x0000' }
+    - { reg: r15w, value: '0x0000' }
+    - { reg: ah, value: '0x00' }
+    - { reg: bh, value: '0x00' }
+    - { reg: ch, value: '0x00' }
+    - { reg: dh, value: '0x4b' }
+    - { reg: al, value: '0x00' }
+    - { reg: bl, value: '0x00' }
+    - { reg: cl, value: '0x00' }
+    - { reg: dl, value: '0x38' }
+    - { reg: dil, value: '0x01' }
+    - { reg: sil, value: '0x28' }
+    - { reg: bpl, value: '0x40' }
+    - { reg: spl, value: '0x40' }
+    - { reg: r8l, value: '0x80' }
+    - { reg: r9l, value: '0x00' }
+    - { reg: r10l, value: '0x60' }
+    - { reg: r11l, value: '0x60' }
+    - { reg: r12l, value: '0x50' }
+    - { reg: r13l, value: '0x20' }
+    - { reg: r14l, value: '0x00' }
+    - { reg: r15l, value: '0x00' } }
+constants:       []
+machineFunctionInfo: {}
+crashOreder:     1
+body:             |
+  bb.0:
+    liveins: $rbp
+  
+    PUSH64r $rbp, implicit-def $rsp, implicit $rsp, debug-location !DILocation(line: 1, scope: !2)
+    $rbp = MOV64rr $rsp, debug-location !DILocation(line: 1, scope: !2)
+    $eax = XOR32rr undef $eax, undef $eax, implicit-def $eflags, debug-location !DILocation(line: 1, scope: !2)
+    MOV32mi $rbp, 1, $noreg, -4, $noreg, 0, debug-location !DILocation(line: 1, scope: !2)
+    MOV64mi32 $rbp, 1, $noreg, -16, $noreg, 0, debug-location !DILocation(line: 2, column: 8, scope: !2)
+    $rcx = MOV64rm $rbp, 1, $noreg, -16, $noreg, debug-location !DILocation(line: 3, column: 4, scope: !2)
+    crash-start MOV32mi $rcx, 1, $noreg, 0, $noreg, 100, debug-location !DILocation(line: 3, column: 8, scope: !2)
+    $rbp = POP64r implicit-def $rsp, implicit $rsp, debug-location !DILocation(line: 4, column: 3, scope: !2)
+    RETQ debug-location !DILocation(line: 4, column: 3, scope: !2)
+
+...

@@ -1,0 +1,46 @@
+## Test Machine Functions decompiled.
+
+## From test C reproducer; compiled with clang -g -O0:
+## int fn(int *ptr) {
+##   int x = 8;
+##   if (x < 9)
+##     ++x;
+##   else if (x > 11)
+##     --x;
+##   else {
+##     --x;
+##     ++x;
+##   }
+##
+##   x = *ptr + x;
+##
+##   return x;
+## }
+##
+## int main()
+## {
+##   int y = 0x4;
+##   int res = fn(y);
+##   return 0;
+## }
+
+# RUN: %llvm-crash-analyzer --print-decompiled-mir=%t.mir --core-file=%S/Inputs/core.multi-bb-out.123758 %S/Inputs/multi-bb-out
+# RUN: cat %t.mir | FileCheck %s
+
+# CHECK:  bb.0:
+# CHECK:  successors: %bb.1(0x40000000), %bb.2(0x40000000)
+# CHECK:  JCC_4 %bb.2, 13, implicit $eflags
+# CHECK:  bb.1:
+# CHECK:  successors: %bb.5(0x80000000)
+# CHECK:  JMP_4 %bb.5
+# CHECK:  bb.2:
+# CHECK:  successors: %bb.3(0x40000000), %bb.4(0x40000000)
+# CHECK:  JCC_4 %bb.4, 14, implicit $eflags
+# CHECK:  bb.3:
+# CHECK:  successors: %bb.4(0x80000000)
+# CHECK:  JMP_4 %bb.4
+# CHECK:  bb.4:
+# CHECK:  successors: %bb.5(0x80000000)
+# CHECK:  JMP_4 %bb.5
+# CHECK:  bb.5:
+# CHECK:  RETQ

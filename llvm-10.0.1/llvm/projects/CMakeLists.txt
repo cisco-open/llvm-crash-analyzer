@@ -48,4 +48,4 @@ if(LLVM_INCLUDE_TESTS)
   add_llvm_external_project(debuginfo-tests)
 endif()
 
-add_llvm_external_project(crash-blamer)
+add_llvm_external_project(llvm-crash-analyzer)

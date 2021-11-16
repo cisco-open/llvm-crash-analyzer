@@ -1,0 +1,11 @@
+## Test Machine Functions decompiled.
+# RUN: %llvm-crash-analyzer --print-decompiled-mir=%t.mir \
+# RUN:     --core-file=%S/Inputs/core-test-1 %S/Inputs/test-1
+# RUN: cat %t.mir | FileCheck %s
+
+# CHECK: name: main
+# CHECK: bb.0:
+# CHECK:  ENDBR64
+# CHECK:  MOV32mi $noreg, 1, $noreg, 0, $noreg, 0
+# CHECK:  TRAP
+

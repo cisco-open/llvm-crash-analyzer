@@ -1,0 +1,6 @@
+add_crash_balmer_unittest(CRASHANALYZERDecompilerTests
+  Decompiler.cpp
+)
+
+target_link_libraries(CRASHANALYZERDecompilerTests
+  PRIVATE CrashAnalyzerDecompiler)
