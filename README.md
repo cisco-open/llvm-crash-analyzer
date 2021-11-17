@@ -79,8 +79,8 @@ Steps:
         From File /nobackup/djtodoro/test.cpp
 3) to see some intermediate steps check options such as
    
-       i) export-to-mir
-       ii) show-disassemble
+       i) $ llvm-crash-analyzer --core-file=core.a.out.30988 a.out --print-decompiled-mir=test.mir
+       ii) The --show-disassemble option
        iii) visualize the taint DFG:
           $ llvm-crash-analyzer base-case --core-file=core.base-case.40698 --print-dfg-as-dot=base-case.dot
           $ dot -Tpng base-case.dot -o base-case.png
