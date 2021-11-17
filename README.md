@@ -81,7 +81,10 @@ Steps:
    
        i) export-to-mir
        ii) show-disassemble
-       iii) ...
+       iii) visualize the taint DFG:
+          $ llvm-crash-analyzer base-case --core-file=core.base-case.40698 --print-dfg-as-dot=base-case.dot
+          $ dot -Tpng base-case.dot -o base-case.png
+       iiii) ...
 
 ## Commiting to the repository
 In order to pass every commit through a code reioew process, it is suggested to create a git pull request for each commit. First create a local branch:
