@@ -18,6 +18,8 @@
 
 #include <sstream>
 
+static constexpr unsigned FrameLevelDepthToGo = 10;
+
 static cl::opt<std::string>
 DumpTaintGraphAsDOT("print-dfg-as-dot",
                      cl::desc("Print Tainted graph for the GraphViz."),
@@ -582,6 +584,7 @@ bool crash_analyzer::TaintAnalysis::runOnBlameMF(const BlameModule &BM,
                                                const MachineFunction &MF,
                                                TaintDataFlowGraph &TaintDFG,
                                                bool CalleeNotInBT,
+                                               unsigned levelOfCalledFn,
                                                SmallVector<TaintInfo, 8> *TL_Of_Caller,
                                                const MachineInstr* CallMI) {
   LLVM_DEBUG(llvm::dbgs() << "### MF: " << MF.getName() << "\n";);
@@ -670,7 +673,7 @@ bool crash_analyzer::TaintAnalysis::runOnBlameMF(const BlameModule &BM,
         // Analyze the call only if return value is tainted.
 	    // TODO: Handling of function parameters that are tainted
         // within the function.
-        if (MI2.isCall()) {
+        if (MI2.isCall() && levelOfCalledFn < FrameLevelDepthToGo) {
           mergeTaintList(TL_Mbb, TaintList);
           const MachineOperand &CalleeOp = MI2.getOperand(0);
           // TODO: handle indirect calls.
@@ -688,7 +691,8 @@ bool crash_analyzer::TaintAnalysis::runOnBlameMF(const BlameModule &BM,
               LLVM_DEBUG(llvm::dbgs()
                              << "#### Processing callee " << TargetName << "\n";);
               CalledMF->setCrashOrder(MF.getCrashOrder());
-              runOnBlameMF(BM, *CalledMF, TaintDFG, true, &TL_Mbb, &MI2);
+              runOnBlameMF(BM, *CalledMF, TaintDFG, true, ++levelOfCalledFn,
+                           &TL_Mbb, &MI2);
               CalledMF->setCrashOrder(0);
               continue;
             } else {
@@ -700,7 +704,8 @@ bool crash_analyzer::TaintAnalysis::runOnBlameMF(const BlameModule &BM,
                   continue;
                 } else {
                   MFOnDemand->setCrashOrder(MF.getCrashOrder());
-                  runOnBlameMF(BM, *MFOnDemand, TaintDFG, true, &TL_Mbb, &MI);
+                  runOnBlameMF(BM, *MFOnDemand, TaintDFG, true, ++levelOfCalledFn,
+                               &TL_Mbb, &MI);
                   MFOnDemand->setCrashOrder(0);
                 }
               } else {
@@ -735,7 +740,7 @@ bool crash_analyzer::TaintAnalysis::runOnBlameMF(const BlameModule &BM,
       // Analyze the call only if return value is tainted.
       // TBD: We ignore tainted parameters since we do not have a good
       // way to identify machine operands that are function parameters.
-      if (MI.isCall()) {
+      if (MI.isCall() && levelOfCalledFn < FrameLevelDepthToGo) {
       //  mergeTaintList(TL_Mbb, TaintList); Is this needed (as above) ?
         const MachineOperand &CalleeOp = MI.getOperand(0);
         // TODO: handle indirect calls.
@@ -751,7 +756,8 @@ bool crash_analyzer::TaintAnalysis::runOnBlameMF(const BlameModule &BM,
         MachineFunction *CalledMF = getCalledMF(BM, TargetName);
         if (CalledMF) {
           CalledMF->setCrashOrder(MF.getCrashOrder());
-          runOnBlameMF(BM, *CalledMF, TaintDFG, true, &TL_Mbb, &MI);
+          runOnBlameMF(BM, *CalledMF, TaintDFG, true, ++levelOfCalledFn,
+                       &TL_Mbb, &MI);
           CalledMF->setCrashOrder(0);
           continue;
         } else {
@@ -764,7 +770,8 @@ bool crash_analyzer::TaintAnalysis::runOnBlameMF(const BlameModule &BM,
             } else {
               // Handle it.
               MFOnDemand->setCrashOrder(MF.getCrashOrder());
-              runOnBlameMF(BM, *MFOnDemand, TaintDFG, true, &TL_Mbb, &MI);
+              runOnBlameMF(BM, *MFOnDemand, TaintDFG, true, ++levelOfCalledFn,
+                           &TL_Mbb, &MI);
               MFOnDemand->setCrashOrder(0);
             }
           } else {
@@ -863,7 +870,7 @@ bool crash_analyzer::TaintAnalysis::runOnBlameModule(const BlameModule &BM) {
       return Result;
     }
 
-    if (runOnBlameMF(BM, *(BF.MF), TaintDFG, false)) {
+    if (runOnBlameMF(BM, *(BF.MF), TaintDFG, false, 0)) {
       LLVM_DEBUG(dbgs() << "\nTaint Analysis done.\n");
       if (TaintList.empty()) {
         if (DumpTaintGraphAsDOT != "") {

@@ -95,7 +95,7 @@ class Decompiler {
 
   // Used to detect inlined functions that we missed to decompile
   // since they were not part of the backtrace.
-  std::unordered_set<std::string> AlreadyDecompiledFns;
+  std::unordered_map<std::string, MachineFunction*> AlreadyDecompiledFns;
 
 public:
   /// Create a Decompiler or get an appropriate error.

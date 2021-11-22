@@ -231,8 +231,9 @@ MachineFunction &crash_analyzer::Decompiler::createMF(StringRef FunctionName) {
   // Making sure we can create a MachineFunction out of this Function even if it
   // contains no IR.
   F->setIsMaterializable(true);
-  AlreadyDecompiledFns.insert(FunctionName.str());
-  return MMI->getOrCreateMachineFunction(*F);
+  MachineFunction *MF = &MMI->getOrCreateMachineFunction(*F);
+  AlreadyDecompiledFns.insert({FunctionName.str(), MF});
+  return *MF;
 }
 
 bool crash_analyzer::Decompiler::DecodeIntrsToMIR(
@@ -747,7 +748,7 @@ crash_analyzer::Decompiler::decompileInlinedFnOutOfbt(StringRef TargetName,
   const MCInstrDesc &MCID = MII->get(Opcode);
   BuildMI(MBB, DebugLoc(), MCID);
   MF->setCrashOrder(0);
-  AlreadyDecompiledFns.insert(TargetName.str());
+  AlreadyDecompiledFns.insert({TargetName.str(), MF});
   return MF;
 }
 
@@ -757,6 +758,9 @@ MachineFunction* crash_analyzer::Decompiler::decompileOnDemand(StringRef TargetN
 
   if (!target)
     return nullptr;
+
+  if (AlreadyDecompiledFns.count(TargetName))
+    return AlreadyDecompiledFns[TargetName];
 
   auto symCtxs = target->FindFunctions(TargetName.data());
   if (symCtxs.GetSize() != 1) {
