@@ -77,6 +77,7 @@ public:
   bool runOnBlameModule(const BlameModule &BM);
   bool runOnBlameMF(const BlameModule &BM, const MachineFunction &MF,
 	TaintDataFlowGraph &TaintDFG, bool CalleeNotInBT,
+    unsigned levelOfCalledFn,
     SmallVector<TaintInfo, 8> *TL_Of_Caller = nullptr,
     const MachineInstr* CallMI = nullptr);
 
