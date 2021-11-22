@@ -175,7 +175,7 @@ class TaintDataFlowGraph {
   void countLevels(const MachineFunction* MF);
 
   void dump();
-  void printAsDOT(std::string fileName);
+  void printAsDOT(std::string fileName, bool Verbose = false);
 };
 
 #endif

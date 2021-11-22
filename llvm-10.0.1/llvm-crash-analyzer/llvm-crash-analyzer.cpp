@@ -65,6 +65,13 @@ static opt<std::string> ModulesPath("modules-path", cl::init(""),
                                 cl::desc("<paths>"),
                                 cl::value_desc("modulespath"),
                                 cat(CrashAnalyzer));
+static opt<std::string> PrintTaintValueFlowAsDot(
+    "print-taint-value-flow-as-dot", cl::init(""),
+    cl::desc("Print Taint DF Graph as DOT. "
+             "Please use `$ dot <dot-file-name> -Tpng -o "
+              "<dot-file-name>.png` to see the graph in form of picture."),
+    cl::value_desc("<dot-file-name>"),
+    cat(CrashAnalyzer));
 } // namespace
 /// @}
 //===----------------------------------------------------------------------===//
@@ -160,7 +167,16 @@ int main(int argc, char **argv) {
   });
 
   // Run the analysis.
-  crash_analyzer::TaintAnalysis TA;
+  StringRef DotFileName = "";
+  if (PrintTaintValueFlowAsDot != "") {
+    DotFileName = PrintTaintValueFlowAsDot;
+    if (!DotFileName.endswith(".dot") && !DotFileName.endswith(".gv")) {
+      errs() << "DOT file must have `.dot` or `.gv` extension.\n";
+      return 0;
+    }
+  }
+
+  crash_analyzer::TaintAnalysis TA(DotFileName);
   Dec->setTarget(&coreFile.getTarget());
   TA.setDecompiler(Dec);
   TA.runOnBlameModule(BlameTrace);

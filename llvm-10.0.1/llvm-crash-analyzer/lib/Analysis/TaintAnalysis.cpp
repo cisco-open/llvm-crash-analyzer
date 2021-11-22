@@ -145,7 +145,8 @@ bool llvm::crash_analyzer::operator<(const TaintInfo &T1, const TaintInfo &T2) {
   return false;
 }
 
-crash_analyzer::TaintAnalysis::TaintAnalysis() {}
+crash_analyzer::TaintAnalysis::TaintAnalysis(StringRef DotFileName)
+    : DotFileName(DotFileName) {}
 
 void crash_analyzer::TaintAnalysis::calculateMemAddr(TaintInfo &Ti) {
   if (!Ti.Op->isReg() || !Ti.Offset)
@@ -881,6 +882,12 @@ bool crash_analyzer::TaintAnalysis::runOnBlameModule(const BlameModule &BM) {
            TaintDFG.printAsDOT(file_name.str());
         }
         TaintDFG.dump();
+
+        // Dump user friendly DFG.
+        if (DotFileName != "") {
+          TaintDFG.printAsDOT(DotFileName.str(), true /*Verbose*/);
+        }
+
         if (!TaintDFG.getBlameNodesSize()) {
           llvm::outs() << "\nNo blame function found.\n";
           return false;
@@ -903,6 +910,12 @@ bool crash_analyzer::TaintAnalysis::runOnBlameModule(const BlameModule &BM) {
   }
 
   TaintDFG.dump();
+
+  // Dump user friendly DFG.
+  if (DotFileName != "") {
+    TaintDFG.printAsDOT(DotFileName.str(), true /*Verbose*/);
+  }
+
   if (!TaintDFG.getBlameNodesSize()) {
     llvm::outs() << "\nNo blame function found.\n";
     return false;
