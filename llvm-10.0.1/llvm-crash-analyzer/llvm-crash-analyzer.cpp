@@ -72,6 +72,11 @@ static opt<std::string> PrintTaintValueFlowAsDot(
               "<dot-file-name>.png` to see the graph in form of picture."),
     cl::value_desc("<dot-file-name>"),
     cat(CrashAnalyzer));
+
+static opt<bool> PrintPotentialCrashCauseLocation(
+    "print-potential-crash-cause-loc", cl::init(false),
+    cl::desc("Print line:column that could be the cause of the crash."),
+    cat(CrashAnalyzer));
 } // namespace
 /// @}
 //===----------------------------------------------------------------------===//
@@ -176,7 +181,8 @@ int main(int argc, char **argv) {
     }
   }
 
-  crash_analyzer::TaintAnalysis TA(DotFileName);
+  crash_analyzer::TaintAnalysis TA(DotFileName,
+                                   PrintPotentialCrashCauseLocation);
   Dec->setTarget(&coreFile.getTarget());
   TA.setDecompiler(Dec);
   TA.runOnBlameModule(BlameTrace);

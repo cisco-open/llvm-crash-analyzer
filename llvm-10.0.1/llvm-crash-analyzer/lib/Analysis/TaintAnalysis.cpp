@@ -145,8 +145,10 @@ bool llvm::crash_analyzer::operator<(const TaintInfo &T1, const TaintInfo &T2) {
   return false;
 }
 
-crash_analyzer::TaintAnalysis::TaintAnalysis(StringRef DotFileName)
-    : DotFileName(DotFileName) {}
+crash_analyzer::TaintAnalysis::TaintAnalysis(StringRef DotFileName,
+    bool PrintPotentialCrashCauseLocation)
+    : DotFileName(DotFileName),
+      PrintPotentialCrashCauseLocation(PrintPotentialCrashCauseLocation) {}
 
 void crash_analyzer::TaintAnalysis::calculateMemAddr(TaintInfo &Ti) {
   if (!Ti.Op->isReg() || !Ti.Offset)
@@ -895,7 +897,7 @@ bool crash_analyzer::TaintAnalysis::runOnBlameModule(const BlameModule &BM) {
 
         auto crashNode = TaintDFG.getCrashNode();
         TaintDFG.findBlameFunction(crashNode);
-        Result = TaintDFG.printBlameFunction();
+        Result = TaintDFG.printBlameFunction(PrintPotentialCrashCauseLocation);
         return Result;
       }
     }
@@ -923,7 +925,7 @@ bool crash_analyzer::TaintAnalysis::runOnBlameModule(const BlameModule &BM) {
 
   auto crashNode = TaintDFG.getCrashNode();
   TaintDFG.findBlameFunction(crashNode);
-  Result = TaintDFG.printBlameFunction();
+  Result = TaintDFG.printBlameFunction(PrintPotentialCrashCauseLocation);
 
   // Currently we report SUCCESS even if one Blame Function is found.
   // Ideally SUCCESS is only when TaintList.empty() is true.

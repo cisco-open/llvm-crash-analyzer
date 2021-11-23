@@ -173,9 +173,10 @@ void TaintDataFlowGraph::findBlameFunction(Node *v) {
   }
 }
 
-bool TaintDataFlowGraph::printBlameFunction() {
-    bool Res = false;
-    LLVM_DEBUG(llvm::dbgs() << "Blame Nodes:\n";
+bool TaintDataFlowGraph::printBlameFunction(
+    bool PrintPotentialCrashCauseLocation) {
+  bool Res = false;
+  LLVM_DEBUG(llvm::dbgs() << "Blame Nodes:\n";
     auto &BlameNodes = blameNodes[MaxLevel];
 
     for (auto &a : BlameNodes) {
@@ -193,14 +194,22 @@ bool TaintDataFlowGraph::printBlameFunction() {
   auto &BlameNodes = blameNodes[MaxLevel];
   llvm::SmallVector<StringRef, 8> BlameFns;
   llvm::SmallVector<MachineFunction*, 8> MFs;
+
+  unsigned BlameLine = 0;
+  unsigned BlameColumn = 0;
+
   for (auto &a : BlameNodes) {
     if (BlameFn == "") {
       // Use the fn name from Debug Location, if any, since the instruction
       // may be inlined from another MF.
-      if (a->MI->getDebugLoc())
+      if (a->MI->getDebugLoc()) {
         BlameFn =
           a->MI->getDebugLoc()->getScope()->getSubprogram()->getName();
-      else
+        if (PrintPotentialCrashCauseLocation) {
+          BlameLine = a->MI->getDebugLoc().getLine();
+          BlameColumn = a->MI->getDebugLoc().getCol();
+        }
+      } else
         BlameFn = a->MI->getMF()->getName();
       BlameFns.push_back(BlameFn);
       MF = a->MI->getMF();
@@ -227,9 +236,14 @@ bool TaintDataFlowGraph::printBlameFunction() {
 
   if (BlameFns.size() == 1) {
     llvm::outs() << "\nBlame Function is " << BlameFn << '\n';
-    if (MF->getFunction().getSubprogram())
+    if (MF->getFunction().getSubprogram()) {
       llvm::outs() << "From File " <<
-        MF->getFunction().getSubprogram()->getFile()->getFilename() << "\n";
+        MF->getFunction().getSubprogram()->getFile()->getFilename();
+      if (PrintPotentialCrashCauseLocation) {
+        llvm::outs() << ":" << BlameLine << ":" << BlameColumn;
+      }
+      llvm::outs() << "\n";
+    }
     Res = true;
   } else {
     for (auto &fn : BlameFns) {
