@@ -81,7 +81,8 @@ Steps:
 
         $ llvm-crash-analyzer --core-file=core.base-case.40698 base-case --print-taint-value-flow-as-dot=test.dot
         $ dot -Tpng test.dot -o test.png
-        ![verbose](https://github3.cisco.com/storage/user/8442/files/de6e5280-4c41-11ec-9a56-cb620ca8a5ac)
+        The test.png:
+        https://github3.cisco.com/storage/user/8442/files/de6e5280-4c41-11ec-9a56-cb620ca8a5ac
 
 
 3) to see some intermediate steps check options such as
