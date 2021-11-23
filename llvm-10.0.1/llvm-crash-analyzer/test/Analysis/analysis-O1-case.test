@@ -29,4 +29,7 @@
 
 # RUN: %llvm-crash-analyzer --core-file=%S/Inputs/core.testO1 %S/Inputs/testO1 < %s 2>&1 | FileCheck %s
 
+# RUN: %llvm-crash-analyzer --core-file=%S/Inputs/core.testO1 %S/Inputs/testO1 < %s --print-potential-crash-cause-loc 2>&1 | FileCheck %s -check-prefix=BLAME-LINE
+
 # CHECK: Blame Function is f
+# BLAME-LINE: From File /nobackup/djtodoro/llvm_trunk/NEW/crash-blamer/CISCO-git/delete-me-tests/test.c:18:6

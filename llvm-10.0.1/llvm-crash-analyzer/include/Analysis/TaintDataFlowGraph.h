@@ -170,7 +170,7 @@ class TaintDataFlowGraph {
   Node *getCrashNode() { return Nodes[0].get(); }
 
   void findBlameFunction(Node *v);
-  bool printBlameFunction();
+  bool printBlameFunction(bool PrintPotentialCrashCauseLocation);
 
   void countLevels(const MachineFunction* MF);
 

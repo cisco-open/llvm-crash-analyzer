@@ -70,9 +70,10 @@ private:
 
   // Used to indicate that we faced a non inlined frame.
   unsigned analysisStartedAt = 1;
+  bool PrintPotentialCrashCauseLocation = false;
 public:
 
-  TaintAnalysis(StringRef DotFileName);
+  TaintAnalysis(StringRef DotFileName, bool PrintPotentialCrashCauseLocation);
   TaintAnalysis(bool b) : isCrashAnalyzerTATool(b) {}
 
   bool runOnBlameModule(const BlameModule &BM);
