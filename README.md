@@ -85,6 +85,27 @@ Steps:
         https://github3.cisco.com/storage/user/8442/files/de6e5280-4c41-11ec-9a56-cb620ca8a5ac
 
 
+2b) too see the potential location (line:column) of the cause for the crash
+
+        $ llvm-crash-analyzer --core-file=core.base-case.40698 base-case --print-potential-crash-cause-loc
+        Crash Analyzer -- crash analyzer utility
+        
+        Loading core-file core.base-case.40698
+        core-file processed.
+        
+        Decompiling...
+        Decompiling f
+        Decompiling g
+        Decompiling h
+        Decompiling main
+        Decompiled.
+
+        Analyzing...
+
+        Blame Function is f
+        From File /nobackup/djtodoro/llvm_trunk/NEW/crash-blamer/CISCO-git/llvm-crash-anal/c_test_cases/test0.c:18:8
+
+
 3) to see some intermediate steps check options such as
    
        i) $ llvm-crash-analyzer --core-file=core.a.out.30988 a.out --print-decompiled-mir=test.mir
