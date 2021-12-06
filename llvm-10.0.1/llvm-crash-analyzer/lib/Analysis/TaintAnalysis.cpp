@@ -818,6 +818,9 @@ bool crash_analyzer::TaintAnalysis::runOnBlameMF(const BlameModule &BM,
 
 // Dummy MFs of our inlined frames have dummy NOOP instruction only.
 static bool isInline(MachineFunction* MF) {
+  if (!MF)
+    return false;
+
   if (MF->size() != 1)
     return false;
 
@@ -853,10 +856,18 @@ bool crash_analyzer::TaintAnalysis::runOnBlameModule(const BlameModule &BM) {
       ++analysisStartedAt;
       continue;
     }
-    if (!AnalysisStarted && !BF.MF->getCrashOrder()) {
-      LLVM_DEBUG(llvm::dbgs() << "### Skip: " << BF.Name << "\n";);
-      ++analysisStartedAt;
-      continue;
+
+    if (!AnalysisStarted) {
+      if (!BF.MF) {
+        llvm::outs() << "Analysis stopped since a function on top "
+                     << "of the backtrace doesn't have symbols.\n";
+        return Result;
+      }
+      if (!BF.MF->getCrashOrder()) {
+        LLVM_DEBUG(llvm::dbgs() << "### Skip: " << BF.Name << "\n";);
+        ++analysisStartedAt;
+        continue;
+      }
     }
 
     if (!AnalysisStarted && isInline(BF.MF)) {
@@ -870,6 +881,32 @@ bool crash_analyzer::TaintAnalysis::runOnBlameModule(const BlameModule &BM) {
     // the analysis there, since it is a situation where a frame is missing.
     if (!BF.MF) {
       LLVM_DEBUG(llvm::dbgs() << "### Empty MF: " << BF.Name << "\n";);
+      auto FnName = BF.Name;
+      if (FnName == "")
+        FnName = "???";
+      WithColor::warning()
+        << "No symbols found for function " << FnName << " from backtrace"
+        << ", so analysis is stopped there.\n";
+      if (DumpTaintGraphAsDOT != "") {
+        StringRef file_name = DumpTaintGraphAsDOT;
+        if (!file_name.endswith(".dot") && !file_name.endswith(".gv"))
+          errs() << "error: DOT file must be with '.dot' or '.gv' extension.\n";
+        else
+          TaintDFG.printAsDOT(file_name.str());
+      }
+      TaintDFG.dump();
+      // Dump user friendly DFG.
+      if (DotFileName != "") {
+        TaintDFG.printAsDOT(DotFileName.str(), true /*Verbose*/);
+      }
+      if (!TaintDFG.getBlameNodesSize()) {
+        llvm::outs() << "\nNo blame function found.\n";
+        return false;
+      }
+      auto crashNode = TaintDFG.getCrashNode();
+      TaintDFG.findBlameFunction(crashNode);
+      Result =
+        TaintDFG.printBlameFunction(PrintPotentialCrashCauseLocation);
       return Result;
     }
 
