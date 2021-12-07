@@ -438,10 +438,11 @@ llvm::Error crash_analyzer::Decompiler::run(
           << "Please provide debugging info for the exe and all libraries.\n";
       auto Symbol = frame.second.GetSymbol();
       if (!Symbol) {
-        return make_error<StringError>(
-            "No symbols found for a function from backtrace. Please "
-            "provide symbols for the exe and all libraries.",
-            inconvertibleErrorCode());
+        WithColor::warning()
+            << "No symbols found for a function "
+            << "from backtrace. Please "
+            << "provide symbols for the exe and all libraries.\n";
+        continue;
       }
       Instructions = Symbol.GetInstructions(target);
       FuncStart = Symbol.GetStartAddress();
