@@ -74,7 +74,7 @@ bool llvm::crash_analyzer::operator==(const TaintInfo &T1, const TaintInfo &T2) 
     }
   }
 
-  // For mem taint ops, compare the actuall addresses.
+  // For mem taint ops, compare the actual addresses.
   if (T1.IsTaintMemAddr() && T2.IsTaintMemAddr())
     // Here we should be comparing addresses if both available only.
     return T1.GetTaintMemAddr() == T2.GetTaintMemAddr();
@@ -492,6 +492,20 @@ bool llvm::crash_analyzer::TaintAnalysis::propagateTaint(
   const auto &MF = MI.getParent()->getParent();
   auto TII = MF->getSubtarget().getInstrInfo();
 
+  bool BaseTaintFlag = false;
+  // Heuristic to allow taint propagation in certain cases
+  // eg., when base + offset is a field of a struct
+  // Check if base = base + offset condition
+  // If base Op is tainted, retain the base Op in the taint list
+  // Also add the base + offset to the taint list 
+  // FIXME : Adding base + offset is being conservative, doesn't
+  // seem necessary for the cases at hand
+  if (DestTi.Op->isReg() && SrcTi.Op->isReg()) {
+    if (DestTi.Op->getReg() == SrcTi.Op->getReg())
+      if (!DestTi.Offset && SrcTi.Offset)
+	BaseTaintFlag = true;
+  }
+
   // If Destination Op is tainted, do the following.
   // Add SrcOp to the taint-list.
   // Remove DestOp from the taint-list.
@@ -574,7 +588,8 @@ bool llvm::crash_analyzer::TaintAnalysis::propagateTaint(
       TaintDFG.addEdge(LastTaintedNodeForTheOp, newTaintNode);
     TaintDFG.updateLastTaintedNode(SrcTi, newTaintNode);
 
-    removeFromTaintList(Taint, TL);
+    if (!BaseTaintFlag)
+      removeFromTaintList(Taint, TL);
   }
 
   printTaintList(TL);
