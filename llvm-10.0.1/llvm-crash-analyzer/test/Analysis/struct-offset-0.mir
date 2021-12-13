@@ -25,6 +25,8 @@
 #}
 
 # RUN: %llvm-crash-analyzer-ta %s | FileCheck %s
+
+# XFAIL: *
 # CHECK: Blame Function is func1 
 
 --- |
