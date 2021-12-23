@@ -736,13 +736,14 @@ bool crash_analyzer::TaintAnalysis::runOnBlameMF(const BlameModule &BM,
           }
         }
         auto DestSrc = TII->getDestAndSrc(MI2);
+	LLVM_DEBUG(MI2.dump());
         if (!DestSrc) {
           LLVM_DEBUG(llvm::dbgs()
-                     << "Crash instruction doesn't have blame operands\n";
-	  MI2.dump(););
+                     << "Crash instruction doesn't have blame operands\n");
           mergeTaintList(TL_Mbb, TaintList);
           continue;
         }
+        printDestSrcInfo(*DestSrc);
         startTaint(*DestSrc, TL_Mbb, MI2, TaintDFG, REAnalysis);
         continue;
       }

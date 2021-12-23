@@ -32,7 +32,7 @@ Steps:
     $ mkdir build && cd build
     $ /auto/binos-tools/llvm40/tools/cmake/bin/cmake -G "Unix Makefiles" -DCMAKE_BUILD_TYPE=Release -DLLVM_ENABLE_ASSERTIONS=On -DLLVM_ENABLE_PROJECTS="clang;llvm-crash-analyzer;lldb;" -DLLVM_ENABLE_LIBCXX=ON ../llvm-crash-anal/llvm-10.0.1/llvm -DLLDB_TEST_COMPILER=/auto/binos-tools/llvm90/llvm-9.0-p0a/bin/clang 
 
-    $ make -j30 && make check-crash-blamer -j30
+    $ make -j30 && make check-llvm-crash-analyzer -j30
 
 ## Using the tool
 

@@ -1,0 +1,47 @@
+##include <stdio.h>
+##include <stdlib.h>
+#typedef struct _hd1 {
+#  struct _hd1 *next;
+#  int *val;
+#} node2; 
+#
+#typedef node2* node2_hd;
+#
+#typedef struct _hd {
+#  node2_hd val0;;
+#  int *val;
+#  int bar;
+#} node1;
+#
+#typedef node1* node1_hd;
+#
+#static inline node2_hd get_next_node2(node1_hd hd, node2_hd mhd) {
+#  if (mhd == NULL)
+#    return hd->val0; // crash here
+#  else
+#    return mhd->next;
+#}
+#
+#node1_hd blamefunc() {
+#  return 0x345673498; // Invalid address set here
+#}
+#
+#void level1(int* val) {
+#  node2_hd arg2 = NULL;
+#  node1_hd arg1 = blamefunc(); 
+#  while ((arg2 = get_next_node2(arg1, arg2)) != NULL) {
+#       arg2->val = val;
+#       printf("\n hello");
+#  }
+#}
+#
+#int main() {
+# int a = 10;
+# level1(&a); 
+# return 0;
+#}
+
+# RUN: %llvm-crash-analyzer --decompile-fns-out-of-bt --core-file=%S/Inputs/core.inline-O2 \
+# RUN:     %S/Inputs/inline-O2 < %s 2>&1 | FileCheck %s
+
+# CHECK: Blame Function is blamefunc 
