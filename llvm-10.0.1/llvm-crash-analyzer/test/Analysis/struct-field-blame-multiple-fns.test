@@ -1,0 +1,40 @@
+## This is reproducer (compiled with `clang -g -O0`):
+
+###include <stdio.h>
+##
+##// field of struct (pointer) has an incorrect value
+##typedef struct node {
+##char *x;
+##int *val;
+##} snode;
+##
+##void print_info (snode *nd) {
+##  printf("%c\n", *(nd->x));
+##  printf("%d\n", nd->val[0]); // place of crash in the crashing function
+##}
+##
+##void func3(snode *nd) {
+##  print_info(nd);
+##}
+##
+##void func2(snode *nd) {
+##  char ch = 'a';
+##  nd->x = &ch;
+##  func3(nd);
+##}
+##
+##static void func1() {
+##  snode nd;
+##  nd.val = NULL; // NULL value assigned; cause of crash
+##  func2(&nd);
+##}
+##
+##int main() {
+##func1();
+##return 0;
+##}
+
+# RUN: %llvm-crash-analyzer --print-potential-crash-cause-loc --core-file=%S/Inputs/core.struct-field-blame-multiple-fns %S/Inputs/struct-field-blame-multiple-fns.out < %s 2>&1 | FileCheck %s
+
+# CHECK: Blame Function is func1
+# CHECK: From File {{.*}}/test.c:26:10

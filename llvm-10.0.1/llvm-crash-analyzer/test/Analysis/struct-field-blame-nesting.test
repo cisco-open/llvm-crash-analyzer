@@ -1,0 +1,101 @@
+## This is reproducer (compiled with `clang -g -O0`):
+## #include <stdio.h>
+##
+## // field of struct (pointer) has an incorrect value
+## typedef struct node {
+##   char *x;
+##   int *val;
+## } snode;
+##
+##
+## typedef struct tree {
+##   snode *left;
+##   snode *right;
+## } stree;
+##
+## void print_info (stree *tr) {
+##   printf("%c\n", *(tr->left->x));
+##   printf("%d\n", tr->right->val[0]); // place of crash in the crashing function
+## }
+##
+## void func3(stree *tr) {
+##   print_info(tr);
+## }
+##
+## void func2(stree *tr) {
+##   char ch = 'a';
+##   tr->left->x = &ch;
+##   func3(tr);
+## }
+##
+## static void func1() {
+##   snode ln;
+##   snode rn;
+##   stree tr;
+##   tr.left = &ln;
+##   tr.right = &rn;
+##   tr.right->val = NULL; // NULL value assigned; cause of crash
+##   func2(&tr);
+## }
+##
+## int main() {
+## func1();
+## return 0;
+## }
+
+# RUN: %llvm-crash-analyzer --print-potential-crash-cause-loc --core-file=%S/Inputs/core.struct-field-blame-nesting %S/Inputs/struct-field-blame-nesting.out < %s 2>&1 | FileCheck %s
+
+# XFAIL: *
+
+## We have memory location clobbered here. Not sure how we will approach
+## with this problem.
+
+## (gdb) bt
+## #0  0x00000000004005e6 in print_info (tr=0x7fffb2209920) at test.c:17
+## #1  0x0000000000400625 in func3 (tr=0x7fffb2209920) at test.c:21
+## #2  0x0000000000400657 in func2 (tr=0x7fffb2209920) at test.c:27
+## #3  0x00000000004006ad in func1 () at test.c:37
+## #4  0x0000000000400674 in main () at test.c:41
+## (gdb) p &tr->right->val
+## $2 = (int **) 0x7fffb2209938
+## (gdb) disassemble
+## Dump of assembler code for function print_info:
+##    0x00000000004005b0 <+0>:     push   %rbp
+##    0x00000000004005b1 <+1>:     mov    %rsp,%rbp
+##    0x00000000004005b4 <+4>:     sub    $0x10,%rsp
+##    0x00000000004005b8 <+8>:     mov    %rdi,-0x8(%rbp)
+##    0x00000000004005bc <+12>:    mov    -0x8(%rbp),%rax
+##    0x00000000004005c0 <+16>:    mov    (%rax),%rax
+##    0x00000000004005c3 <+19>:    mov    (%rax),%rax
+##    0x00000000004005c6 <+22>:    movsbl (%rax),%esi
+##    0x00000000004005c9 <+25>:    movabs $0x400758,%rdi
+##    0x00000000004005d3 <+35>:    mov    $0x0,%al
+##    0x00000000004005d5 <+37>:    callq  0x4004b0 <printf@plt>
+##    0x00000000004005da <+42>:    mov    -0x8(%rbp),%rcx
+##    0x00000000004005de <+46>:    mov    0x8(%rcx),%rcx
+##    0x00000000004005e2 <+50>:    mov    0x8(%rcx),%rcx
+## => 0x00000000004005e6 <+54>:    mov    (%rcx),%esi
+##    0x00000000004005e8 <+56>:    movabs $0x40075c,%rdi
+##    0x00000000004005f2 <+66>:    mov    %eax,-0xc(%rbp)
+##    0x00000000004005f5 <+69>:    mov    $0x0,%al
+##    0x00000000004005f7 <+71>:    callq  0x4004b0 <printf@plt>
+##    0x00000000004005fc <+76>:    add    $0x10,%rsp
+##    0x0000000000400600 <+80>:    pop    %rbp
+##    0x0000000000400601 <+81>:    retq
+## (gdb) p/x ($rbp-0x8)
+## $3 = 0x7fffb22098c8
+## (gdb) p/x *((long*)0x7fffb22098c8)
+## $4 = 0x7fffb2209920
+
+## The longest the tool went is to find memory location of the struct base.
+## We need to find a way to taint address of the field.
+
+## (gdb) p tr
+## $11 = (stree *) 0x7fffb2209920
+## (gdb) p &tr->right->val
+## $10 = (int **) 0x7fffb2209938
+## (gdb) p/x 0x7fffb2209938-0x7fffb2209920
+## $12 = 0x18
+
+# CHECK: Blame Function is func1
+# CHECK: From File {{.*}}/test.c:36

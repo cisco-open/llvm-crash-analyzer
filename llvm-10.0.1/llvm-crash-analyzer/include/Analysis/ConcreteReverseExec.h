@@ -121,12 +121,14 @@ public:
 };
 
 // Class that implements the Concrete Reverse Execution.
+// TODO: Since we rely on corefile content during CRE and TA,
+// by updating register values, we need to remember changes
+// to memory as well, since there could be instructions
+// that may store.
 class ConcreteReverseExec {
   // This represents current values in the registers.
   MachineFunction::RegisterCrashInfo currentRegisterValues;
   const MachineFunction *mf;
-  // Going backward, remember if the register is defined already.
-  llvm::DenseSet<Register> RegistersDefs;
 
   RegisterMappings RegAliases;
 
@@ -145,6 +147,8 @@ class ConcreteReverseExec {
       CREEnabled = true;
   }
   void dump();
+  // FIXME: This is used for debugging purposes only -- DELETEME.
+  void dump2();
   void updateCurrRegVal(std::string Reg, std::string Val);
   std::string getCurretValueInReg(const std::string &Reg);
 

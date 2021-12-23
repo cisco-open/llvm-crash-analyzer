@@ -30,6 +30,7 @@
 struct Node;
 class TaintDataFlowGraph;
 class RegisterEquivalence;
+class ConcreteReverseExec;
 
 namespace llvm {
 namespace crash_analyzer {
@@ -71,6 +72,8 @@ private:
   // Used to indicate that we faced a non inlined frame.
   unsigned analysisStartedAt = 1;
   bool PrintPotentialCrashCauseLocation = false;
+  ConcreteReverseExec *CRE = nullptr;
+  RegisterEquivalence *REA = nullptr;
 public:
 
   TaintAnalysis(StringRef DotFileName, bool PrintPotentialCrashCauseLocation);
@@ -106,6 +109,10 @@ public:
   bool getIsCrashAnalyzerTATool() const;
   void setDecompiler(Decompiler *D);
   Decompiler *getDecompiler() const;
+  void setCRE(ConcreteReverseExec *cre);
+  ConcreteReverseExec *getCRE() const;
+  void setREAnalysis(RegisterEquivalence *rea);
+  RegisterEquivalence *getREAnalysis();
 };
 
 } // end crash_analyzer namespace

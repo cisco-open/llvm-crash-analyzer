@@ -264,6 +264,7 @@ body:             |
         // Test for $eax = ADD32ri8 $eax(tied-def 0), 1.
         if (TII->isAddImmediate(MI, *Reg)) {
           std::string RegName = TRI->getRegAsmName(*Reg).lower();
+          ReverseExecutionRecord.updateCurrRegVal(RegName, "0x00000009");
           auto regVal = ReverseExecutionRecord.getCurretValueInReg(RegName);
           ASSERT_TRUE(RegName == "eax");
           ASSERT_TRUE(regVal == "0x00000009");

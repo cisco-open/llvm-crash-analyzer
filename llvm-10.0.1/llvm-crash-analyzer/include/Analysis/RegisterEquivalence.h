@@ -25,6 +25,8 @@ struct RegisterOffsetPair {
   unsigned RegNum;
   int64_t Offset = 0;
 
+  bool IsDeref = false;
+
   bool operator==(const RegisterOffsetPair &p) const {
     return RegNum == p.RegNum && Offset == p.Offset;
   }
@@ -70,6 +72,9 @@ class RegisterEquivalence {
 public:
   void dumpRegTableAfterMI(MachineInstr* MI);
   void dumpRegTable(RegisterEqSet &Regs);
+
+  std::set<RegisterOffsetPair>
+    getEqRegsAfterMI(MachineInstr* MI, RegisterOffsetPair Reg);
 
   void invalidateRegEq(MachineInstr &MI,
                        RegisterOffsetPair Reg);

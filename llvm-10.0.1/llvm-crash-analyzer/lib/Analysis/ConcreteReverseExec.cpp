@@ -32,10 +32,28 @@ void ConcreteReverseExec::dump() {
              });
 }
 
+void ConcreteReverseExec::dump2() {
+  llvm::dbgs() << "\n****Concrete Register Values For Function: "
+                          << mf->getName() << "\n";
+  for (const auto &R
+       : currentRegisterValues) {
+    if (R.Value != "")
+      llvm::dbgs() << R.Name << ": " << R.Value << "\n";
+    else
+      llvm::dbgs() << R.Name << ": "
+                   << "<not available>\n";
+  }
+}
+
 // TODO: Optimize this.
 void ConcreteReverseExec::updateCurrRegVal(std::string Reg, std::string Val) {
   for (auto &R : currentRegisterValues) {
     if (R.Name == Reg) {
+      if (Val == "") {
+        R.Value = "";
+        return;
+      }
+
       // Register value is unknown.
       if (R.Value == "") {
         if (RegAliases.getRegSize(Reg) == 64) {
@@ -98,6 +116,7 @@ void ConcreteReverseExec::updateCurrRegVal(std::string Reg, std::string Val) {
     }
   }
 }
+
 std::string
 ConcreteReverseExec::getCurretValueInReg(const std::string &Reg) {
   for (auto &R : currentRegisterValues) {
@@ -139,39 +158,6 @@ void ConcreteReverseExec::execute(const MachineInstr &MI) {
     std::string RegName = TRI->getRegAsmName(Reg).lower();
 
     if (RegisterWorkList.count(Reg) == 1 && MI.modifiesRegister(Reg, TRI)) {
-      // If this is the first reg def going backward, remember it.
-      if (!RegistersDefs.count(Reg)) {
-        RegistersDefs.insert(Reg);
-        LLVM_DEBUG(llvm::dbgs() << MI << " modifies(defines val from corefile) "
-                                << RegName << "\n";);
-        auto regVal = getCurretValueInReg(RegName);
-        if (regVal == "") {
-          uint64_t Val = 0;
-          if (MI.isMoveImmediate()) {
-            if (MI.getOperand(1).isImm()) {
-              Val = MI.getOperand(1).getImm();
-              std::stringstream SS;
-              SS << std::hex << regVal;
-              SS >> Val;
-              auto regAliasesInfo = getRegAliasesInfo();
-              auto regInfoId = regAliasesInfo.getID(RegName);
-              if (!regInfoId) {
-                updateCurrRegVal(RegName, "");
-                continue;
-              }
-              auto regTripple = regAliasesInfo.getRegMap(*regInfoId);
-              // regVal.size() - 2 for 0x chars.
-              std::string newValue = intToHex(Val, regVal.size() - 2);
-              // update reg aliases as well.
-              // e.g. if $eax is modified, update both $rax and $ax as well.
-              updateCurrRegVal(std::get<0>(regTripple), newValue);
-              updateCurrRegVal(std::get<1>(regTripple), newValue);
-              updateCurrRegVal(std::get<2>(regTripple), newValue);
-            }
-          }
-        }
-        continue;
-      }
       LLVM_DEBUG(llvm::dbgs() << MI << " modifies " << RegName << "\n";);
       // Here we update the register values.
 
@@ -251,7 +237,13 @@ void ConcreteReverseExec::execute(const MachineInstr &MI) {
       LLVM_DEBUG(llvm::dbgs()
                 << "Concrete Rev Exec not supported for \n";
 		MI.dump(););
-      updateCurrRegVal(RegName, "");
+      auto regAliasesInfo = getRegAliasesInfo();
+      auto regInfoId = regAliasesInfo.getID(RegName);
+      auto regTripple = regAliasesInfo.getRegMap(*regInfoId);
+      updateCurrRegVal(std::get<0>(regTripple), "");
+      updateCurrRegVal(std::get<1>(regTripple), "");
+      updateCurrRegVal(std::get<2>(regTripple), "");
+      dump();
     }
   }
 }
