@@ -204,6 +204,7 @@ void ConcreteReverseExec::execute(const MachineInstr &MI) {
         updateCurrRegVal(std::get<0>(regTripple), newValue);
         updateCurrRegVal(std::get<1>(regTripple), newValue);
         updateCurrRegVal(std::get<2>(regTripple), newValue);
+        updateCurrRegVal(std::get<3>(regTripple), newValue);
         dump();
         continue;
       } else if (MI.isMoveImmediate()) {
@@ -229,6 +230,7 @@ void ConcreteReverseExec::execute(const MachineInstr &MI) {
         updateCurrRegVal(std::get<0>(regTripple), newValue);
         updateCurrRegVal(std::get<1>(regTripple), newValue);
         updateCurrRegVal(std::get<2>(regTripple), newValue);
+        updateCurrRegVal(std::get<3>(regTripple), newValue);
         dump();
         return;
       }
@@ -239,10 +241,16 @@ void ConcreteReverseExec::execute(const MachineInstr &MI) {
 		MI.dump(););
       auto regAliasesInfo = getRegAliasesInfo();
       auto regInfoId = regAliasesInfo.getID(RegName);
+      if (!regInfoId) {
+        updateCurrRegVal(RegName, "");
+        dump();
+        continue;
+      }
       auto regTripple = regAliasesInfo.getRegMap(*regInfoId);
       updateCurrRegVal(std::get<0>(regTripple), "");
       updateCurrRegVal(std::get<1>(regTripple), "");
       updateCurrRegVal(std::get<2>(regTripple), "");
+      updateCurrRegVal(std::get<3>(regTripple), "");
       dump();
     }
   }
