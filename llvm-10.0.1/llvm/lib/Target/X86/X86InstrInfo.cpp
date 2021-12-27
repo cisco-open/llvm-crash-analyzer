@@ -494,6 +494,7 @@ bool X86InstrInfo::isLoad(const MachineInstr &MI) const {
 bool X86InstrInfo::isStore(const MachineInstr &MI) const {
   switch (MI.getOpcode()) {
   case X86::MOV64mi32:
+  case X86::MOV64mr:
     return true;
   default:
     return false;

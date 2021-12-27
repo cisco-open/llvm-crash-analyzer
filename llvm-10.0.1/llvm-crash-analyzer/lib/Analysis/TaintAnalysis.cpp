@@ -171,10 +171,57 @@ void crash_analyzer::TaintAnalysis::calculateMemAddr(TaintInfo &Ti) {
 
   // Calculate real address by reading the context of regInfo MF attr
   // (read from corefile).
-  std::string RegValue = MF->getRegValueFromCrash(RegName);
+  //std::string RegValue = MF->getRegValueFromCrash(RegName);
 
+  auto *CurrentCRE = getCRE();
+  if (!CurrentCRE) {
+    Ti.IsConcreteMemory = false;
+    return;
+  }
+
+  std::string RegValue = CurrentCRE->getCurretValueInReg(RegName);
   // If the value is not available just taint the base-reg.
   if(RegValue == "") {
+    // Try to see if there is an equal register that could be used here.
+    auto MII = MachineBasicBlock::iterator(const_cast<MachineInstr*>(Ti.Op->getParent()));
+    if (MII != Ti.Op->getParent()->getParent()->begin()) {
+      if (!REA) {
+        Ti.IsConcreteMemory = false;
+        return;
+      }
+
+      // We try to see what was reg eq. status before the MI.
+      MII = std::prev(MII);
+      auto EqRegs =
+        REA->getEqRegsAfterMI(const_cast<MachineInstr*>(&*MII),
+                              (unsigned)Ti.Op->getReg());
+      if (EqRegs.size() == 0) {
+        Ti.IsConcreteMemory = false;
+        return;
+      }
+
+      for (auto &eqR : EqRegs) {
+        std::string rName = TRI->getRegAsmName(eqR.RegNum).lower();
+        std::string rValue = CurrentCRE->getCurretValueInReg(rName);
+        if (rValue == "")
+          continue;
+
+        lldb::SBError err;
+        uint64_t AddrValue = 0;
+        std::istringstream converter(rValue);
+        converter >> std::hex >> AddrValue;
+        AddrValue += eqR.Offset;
+        if (!Dec || !Dec->getTarget())
+          break;
+
+        uint64_t Val =
+          Dec->getTarget()->GetProcess().ReadUnsignedFromMemory(AddrValue, 8, err);
+        Val += *Ti.Offset;
+        Ti.ConcreteMemoryAddress = Val;
+        return;
+      }
+    }
+
     Ti.IsConcreteMemory = false;
     return;
   }
@@ -524,6 +571,9 @@ bool llvm::crash_analyzer::TaintAnalysis::propagateTaint(
     ConstantFound = true;
   }
 
+  // FIXME: Since now we have corefile content we can check if this constant
+  // is the same from the crash point, and by doing that we avoid FALSE
+  // positives -- CHECK THAT.
   if (ConstantFound) {
     Node *constantNode = new Node(MF->getCrashOrder(), &MI, SrcTi, false, true);
     // FIXME: Improve this code.
@@ -596,6 +646,20 @@ bool llvm::crash_analyzer::TaintAnalysis::propagateTaint(
   return true;
 }
 
+void crash_analyzer::TaintAnalysis::setCRE(ConcreteReverseExec *cre) {
+  CRE = cre;
+}
+ConcreteReverseExec *crash_analyzer::TaintAnalysis::getCRE() const {
+  return CRE;
+}
+
+void crash_analyzer::TaintAnalysis::setREAnalysis(RegisterEquivalence *rea) {
+  REA = rea;
+}
+RegisterEquivalence *crash_analyzer::TaintAnalysis::getREAnalysis() {
+  return REA;
+}
+
 // Return true if taint is terminated.
 // Return false otherwise.
 bool crash_analyzer::TaintAnalysis::runOnBlameMF(const BlameModule &BM,
@@ -611,9 +675,11 @@ bool crash_analyzer::TaintAnalysis::runOnBlameMF(const BlameModule &BM,
   RegisterEquivalence REAnalysis;
   REAnalysis.init(const_cast<MachineFunction &>(MF));
   REAnalysis.run(const_cast<MachineFunction &>(MF));
+  setREAnalysis(&REAnalysis);
 
   // Init the concrete reverse execution.
   ConcreteReverseExec ReverseExecutionRecord(&MF);
+  setCRE(&ReverseExecutionRecord);
   ReverseExecutionRecord.dump();
 
   // Per function : Map MBB with its Taint List
@@ -828,6 +894,9 @@ bool crash_analyzer::TaintAnalysis::runOnBlameMF(const BlameModule &BM,
     }
   }
   resetTaintList(*CurTL);
+  setREAnalysis(nullptr);
+  setCRE(nullptr);
+
   return Result;
 }
 

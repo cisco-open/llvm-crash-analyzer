@@ -53,11 +53,15 @@ void RegisterEquivalence::dumpRegTableAfterMI(MachineInstr* MI) {
   llvm::dbgs() << "Reg Eq Table after: " << *MI;
   auto &Regs = RegInfo[MI];
   for (auto &e : Regs) {
+    if (e.first.IsDeref)
+      llvm::dbgs() << "deref->";
     llvm::dbgs() << printReg(e.first.RegNum, TRI);
     if (e.first.Offset)
       llvm::dbgs() << "+(" << e.first.Offset << ")";
     llvm::dbgs() << " : { ";
     for (auto &eq : e.second) {
+      if (eq.IsDeref)
+        llvm::dbgs() << "deref->";
       llvm::dbgs() <<  printReg(eq.RegNum, TRI);
       if (eq.Offset)
         llvm::dbgs() << "+(" << eq.Offset << ")";
@@ -68,14 +72,32 @@ void RegisterEquivalence::dumpRegTableAfterMI(MachineInstr* MI) {
   llvm::dbgs() << '\n';
 }
 
+std::set<RegisterOffsetPair>
+RegisterEquivalence::getEqRegsAfterMI(MachineInstr* MI, RegisterOffsetPair Reg) {
+  if (RegInfo.size() == 0)
+    return {};
+
+  if (RegInfo.find(MI) == RegInfo.end())
+    return {};
+
+  auto &Regs = RegInfo[MI];
+  if (Regs.find(Reg) == Regs.end())
+    return {};
+  return Regs[Reg];
+}
+
 void RegisterEquivalence::dumpRegTable(RegisterEqSet &Regs) {
   llvm::dbgs() << "Reg Eq Table:\n";
   for (auto &e : Regs) {
+    if (e.first.IsDeref)
+      llvm::dbgs() << "deref->";
     llvm::dbgs() << printReg(e.first.RegNum, TRI);
     if (e.first.Offset)
       llvm::dbgs() << "+(" << e.first.Offset << ")";
     llvm::dbgs() << " : { ";
     for (auto &eq : e.second) {
+      if (eq.IsDeref)
+        llvm::dbgs() << "deref->";
       llvm::dbgs() <<  printReg(eq.RegNum, TRI);
       if (eq.Offset)
         llvm::dbgs() << "+(" << eq.Offset << ")";
@@ -148,6 +170,7 @@ bool RegisterEquivalence::applyLoad(MachineInstr &MI) {
     SrcOffset = *srcDest->SrcOffset;
 
   RegisterOffsetPair Src{SrcReg, SrcOffset};
+  Src.IsDeref = true;
   RegisterOffsetPair Dest{DestReg};
 
   // First invalidate dest reg, since it is being rewritten.
@@ -165,6 +188,36 @@ bool RegisterEquivalence::applyLoad(MachineInstr &MI) {
 bool RegisterEquivalence::applyStore(MachineInstr &MI) {
   if (!TII->isStore(MI))
     return false;
+
+  auto srcDest = TII->getDestAndSrc(MI);
+  if (!srcDest)
+    return false;
+
+  auto DestReg = srcDest->Destination->getReg();
+  int64_t DstOffset = 0;
+
+  // Take the offset into account.
+  if (srcDest->DestOffset)
+    DstOffset = *srcDest->DestOffset;
+
+  RegisterOffsetPair Dest{DestReg, DstOffset};
+  Dest.IsDeref = true;
+
+  // We are storing a constant.
+  if (!srcDest->Source->isReg()) {
+    invalidateRegEq(MI, Dest);
+    return false;
+  }
+
+  auto SrcReg = srcDest->Source->getReg();
+  RegisterOffsetPair Src{SrcReg};
+
+  // First invalidate dest reg, since it is being rewritten.
+  invalidateRegEq(MI, Dest);
+
+  RegInfo[&MI][Src].insert(Dest);
+  RegInfo[&MI][Dest].insert(Src);
+  RegInfo[&MI][Src].insert(Src);
 
   // TODO: Handle this.
   return false;
@@ -185,6 +238,12 @@ bool RegisterEquivalence::applyRegDef(MachineInstr &MI) {
   return true;
 }
 
+// FIXME: Provide info whether we need to deref something
+// at memory address or not.
+// E.g.: $rax {$rbp-8} Does it mean value at $rbp-8, or address
+// itself?
+// TODO: Introduce a special symbol to indicate deref.
+// e.g. $rax {[$rbp-8]} or $rax {*$rbp-8}
 void RegisterEquivalence::processMI(MachineInstr &MI) {
   if (applyRegisterCopy(MI))
     return;

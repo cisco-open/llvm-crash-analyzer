@@ -1,0 +1,27 @@
+## This is reproducer (compiled with `clang -g -O0`):
+## #include <stdio.h>
+##
+## typedef struct node {
+##   char *x;
+##   int *val;
+## } info;
+##
+## void print_info (info *node) {
+##   printf("\n %d", node->val[0]);
+## }
+##
+## static void func1() {
+##   info node;
+##   node.val = NULL;
+##   print_info(&node);
+## }
+##
+## int main() {
+##   func1();
+##   return 0;
+## }
+
+# RUN: %llvm-crash-analyzer --print-potential-crash-cause-loc --core-file=%S/Inputs/core.struct-field-blame %S/Inputs/struct-field-blame.out < %s 2>&1 | FileCheck %s
+
+# CHECK: Blame Function is func1
+# CHECK: From File {{.*}}/test.c:14:12
