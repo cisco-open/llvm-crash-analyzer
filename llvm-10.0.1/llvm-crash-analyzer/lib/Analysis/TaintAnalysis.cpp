@@ -362,6 +362,25 @@ void crash_analyzer::TaintAnalysis::printTaintList(
       } dbgs() << "\n------Taint List End----\n";);
 }
 
+void crash_analyzer::TaintAnalysis::printTaintList2(
+    SmallVectorImpl<TaintInfo> &TL) {
+  if (TL.empty()) {
+    dbgs() << "Taint List is empty";
+    return;
+  }
+
+  dbgs() << "\n-----Taint List Begin------\n"; for (auto itr = TL.begin();
+                                                    itr != TL.end();
+                                                    ++itr) {
+    itr->Op->dump();
+    if (itr->Offset)
+      dbgs() << "offset: " << *(itr->Offset);
+    if (itr->IsTaintMemAddr())
+      dbgs() << "(mem addr: " << itr->GetTaintMemAddr() << ")";
+    dbgs() << '\n';
+  } dbgs() << "\n------Taint List End----\n";
+}
+
 void crash_analyzer::TaintAnalysis::printDestSrcInfo(DestSourcePair &DestSrc) {
   LLVM_DEBUG(
       if (DestSrc.Destination) {
