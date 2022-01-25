@@ -224,7 +224,17 @@ bool RegisterEquivalence::applyStore(MachineInstr &MI) {
 }
 
 bool RegisterEquivalence::applyCall(MachineInstr &MI) {
-  // TODO: Implement this.
+  // TODO: Implement this by invalidating registers
+  // that will be clobbered by the call.
+  // From Retracer: Our static forward analysis is
+  // an intra-procedural analysis. We
+  // do not analyze callee functions in this analysis.
+  // Instead, given a call instruction, we invalidate
+  // value relations for volatile registers which
+  // can be modified by the callee based on the calling
+  // convention [44] as well as memory locations. We also update
+  // the stack pointer if the callee is responsible for
+  // cleaning up the stack under the function’s calling convention.
   return false;
 }
 
@@ -238,12 +248,6 @@ bool RegisterEquivalence::applyRegDef(MachineInstr &MI) {
   return true;
 }
 
-// FIXME: Provide info whether we need to deref something
-// at memory address or not.
-// E.g.: $rax {$rbp-8} Does it mean value at $rbp-8, or address
-// itself?
-// TODO: Introduce a special symbol to indicate deref.
-// e.g. $rax {[$rbp-8]} or $rax {*$rbp-8}
 void RegisterEquivalence::processMI(MachineInstr &MI) {
   if (applyRegisterCopy(MI))
     return;
