@@ -155,10 +155,10 @@ int main(int argc, char **argv) {
   for (StringRef Fn : functionsFromCoreFile)
     BlameTrace.push_back({Fn, nullptr});
 
-  std::string triple = coreFile.getTarget().GetTriple();
-  size_t found = triple.find("x86_64");
+  std::string target_arch = coreFile.getTarget().GetTriple();
+  size_t found = target_arch.find("x86_64");
   if (found == std::string::npos) {
-    llvm::errs() << "\n Crash Analyzer does NOT support target " << triple;
+    llvm::errs() << "\n Crash Analyzer does NOT support target " << target_arch;
     return 0;
   }
 
