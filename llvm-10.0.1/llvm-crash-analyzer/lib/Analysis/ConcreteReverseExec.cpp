@@ -207,7 +207,10 @@ void ConcreteReverseExec::execute(const MachineInstr &MI) {
         updateCurrRegVal(std::get<3>(regTripple), newValue);
         dump();
         continue;
-      } else if (MI.isMoveImmediate()) {
+      }
+       // FIXME: This isn't right, since current instruction shouldn't
+       // be using the new value.
+       /*else if (MI.isMoveImmediate()) {
         if (!MI.getOperand(1).isImm()) {
           updateCurrRegVal(RegName, "");
           return;
@@ -233,7 +236,7 @@ void ConcreteReverseExec::execute(const MachineInstr &MI) {
         updateCurrRegVal(std::get<3>(regTripple), newValue);
         dump();
         return;
-      }
+      }*/
 
       // The MI is not supported, so consider it as not available.
       LLVM_DEBUG(llvm::dbgs()
