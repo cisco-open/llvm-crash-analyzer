@@ -155,6 +155,13 @@ int main(int argc, char **argv) {
   for (StringRef Fn : functionsFromCoreFile)
     BlameTrace.push_back({Fn, nullptr});
 
+  std::string triple = coreFile.getTarget().GetTriple();
+  size_t found = triple.find("x86_64");
+  if (found == std::string::npos) {
+    llvm::errs() << "\n Crash Analyzer does NOT support target " << triple;
+    return 0;
+  }
+
   auto Err = Dec->run(InputFilename, functionsFromCoreFile, FrameToRegs,
                       BlameTrace, coreFile.getFrameInfo(),
                       coreFile.getTarget(), Triple);
