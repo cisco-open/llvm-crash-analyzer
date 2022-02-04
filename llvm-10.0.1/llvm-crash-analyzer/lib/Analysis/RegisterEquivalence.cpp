@@ -206,7 +206,7 @@ bool RegisterEquivalence::applyStore(MachineInstr &MI) {
   // We are storing a constant.
   if (!srcDest->Source->isReg()) {
     invalidateRegEq(MI, Dest);
-    return false;
+    return true;
   }
 
   auto SrcReg = srcDest->Source->getReg();
@@ -219,8 +219,7 @@ bool RegisterEquivalence::applyStore(MachineInstr &MI) {
   RegInfo[&MI][Dest].insert(Src);
   RegInfo[&MI][Src].insert(Src);
 
-  // TODO: Handle this.
-  return false;
+  return true;
 }
 
 bool RegisterEquivalence::applyCall(MachineInstr &MI) {

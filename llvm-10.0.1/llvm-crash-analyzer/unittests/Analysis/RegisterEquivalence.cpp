@@ -8,7 +8,6 @@
 
 #include "Analysis/RegisterEquivalence.h"
 
-#include "gtest/gtest.h"
 #include "llvm/CodeGen/MIRParser/MIRParser.h"
 #include "llvm/CodeGen/MachineBasicBlock.h"
 #include "llvm/CodeGen/MachineFunction.h"
@@ -28,6 +27,7 @@
 #include "llvm/Support/TargetSelect.h"
 #include "llvm/Target/TargetMachine.h"
 #include "llvm/Target/TargetOptions.h"
+#include "gtest/gtest.h"
 
 using namespace llvm;
 
@@ -59,14 +59,17 @@ std::unique_ptr<Module> parseMIR(LLVMContext &Context,
   SMDiagnostic Diagnostic;
   std::unique_ptr<MemoryBuffer> MBuffer = MemoryBuffer::getMemBuffer(MIRCode);
   MIR = createMIRParser(std::move(MBuffer), Context);
-  if (!MIR) return nullptr;
+  if (!MIR)
+    return nullptr;
 
   std::unique_ptr<Module> M = MIR->parseIRModule();
-  if (!M) return nullptr;
+  if (!M)
+    return nullptr;
 
   M->setDataLayout(TM.createDataLayout());
 
-  if (MIR->parseMachineFunctions(*M, MMI)) return nullptr;
+  if (MIR->parseMachineFunctions(*M, MMI))
+    return nullptr;
 
   return M;
 }
@@ -169,15 +172,39 @@ body:             |
 
   for (auto &MBB : *MF) {
     for (auto &MI : MBB) {
+      // Test load impact on RegisterEquivalence.
+      // Confirm that RegisterEquivalence is a symmetric relation.
       if (TII->isLoad(MI)) {
         REAnalysis.dumpRegTableAfterMI(&MI);
         unsigned Reg1 = MI.getOperand(0).getReg();
         unsigned Reg2 = MI.getOperand(1).getReg();
         int64_t Offset = MI.getOperand(4).getImm();
-        ASSERT_TRUE(REAnalysis.isEquvalent(MI,
-                                           {Reg1}, {Reg2, Offset}));
+        ASSERT_TRUE(REAnalysis.isEquvalent(MI, {Reg1}, {Reg2, Offset, true}));
+        ASSERT_TRUE(REAnalysis.isEquvalent(MI, {Reg2, Offset, true}, {Reg1}));
+      }
+      // Test store impact on RegisterEquivalence.
+      if (TII->isStore(MI)) {
+        REAnalysis.dumpRegTableAfterMI(&MI);
+        auto SrcOp = MI.getOperand(5);
+        // Store from Register to memory.
+        if (SrcOp.isReg()) {
+          unsigned BaseReg = MI.getOperand(0).getReg();
+          unsigned SrcReg = MI.getOperand(5).getReg();
+          int64_t Offset = MI.getOperand(3).getImm();
+          ASSERT_TRUE(
+              REAnalysis.isEquvalent(MI, {SrcReg}, {BaseReg, Offset, true}));
+          ASSERT_TRUE(
+              REAnalysis.isEquvalent(MI, {BaseReg, Offset, true}, {SrcReg}));
+        } else {
+          // Store constant in memory.
+          unsigned BaseReg = MI.getOperand(0).getReg();
+          ASSERT_TRUE(MI.getOperand(5).isImm());
+          int64_t Offset = MI.getOperand(3).getImm();
+          ASSERT_FALSE(REAnalysis.isEquvalent(MI, {BaseReg, Offset},
+                                              {BaseReg, Offset, true}));
+        }
       }
     }
   }
 }
-}  // namespace
+} // namespace
