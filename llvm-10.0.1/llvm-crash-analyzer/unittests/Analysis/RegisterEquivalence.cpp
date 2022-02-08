@@ -179,8 +179,8 @@ body:             |
         unsigned Reg1 = MI.getOperand(0).getReg();
         unsigned Reg2 = MI.getOperand(1).getReg();
         int64_t Offset = MI.getOperand(4).getImm();
-        ASSERT_TRUE(REAnalysis.isEquvalent(MI, {Reg1}, {Reg2, Offset, true}));
-        ASSERT_TRUE(REAnalysis.isEquvalent(MI, {Reg2, Offset, true}, {Reg1}));
+        ASSERT_TRUE(REAnalysis.isEquivalent(MI, {Reg1}, {Reg2, Offset, true}));
+        ASSERT_TRUE(REAnalysis.isEquivalent(MI, {Reg2, Offset, true}, {Reg1}));
       }
       // Test store impact on RegisterEquivalence.
       if (TII->isStore(MI)) {
@@ -192,16 +192,16 @@ body:             |
           unsigned SrcReg = MI.getOperand(5).getReg();
           int64_t Offset = MI.getOperand(3).getImm();
           ASSERT_TRUE(
-              REAnalysis.isEquvalent(MI, {SrcReg}, {BaseReg, Offset, true}));
+              REAnalysis.isEquivalent(MI, {SrcReg}, {BaseReg, Offset, true}));
           ASSERT_TRUE(
-              REAnalysis.isEquvalent(MI, {BaseReg, Offset, true}, {SrcReg}));
+              REAnalysis.isEquivalent(MI, {BaseReg, Offset, true}, {SrcReg}));
         } else {
           // Store constant in memory.
           unsigned BaseReg = MI.getOperand(0).getReg();
           ASSERT_TRUE(MI.getOperand(5).isImm());
           int64_t Offset = MI.getOperand(3).getImm();
-          ASSERT_FALSE(REAnalysis.isEquvalent(MI, {BaseReg, Offset},
-                                              {BaseReg, Offset, true}));
+          ASSERT_FALSE(REAnalysis.isEquivalent(MI, {BaseReg, Offset},
+                                               {BaseReg, Offset, true}));
         }
       }
     }

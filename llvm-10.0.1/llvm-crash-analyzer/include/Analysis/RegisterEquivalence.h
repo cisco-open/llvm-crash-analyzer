@@ -91,7 +91,7 @@ public:
   bool applyRegDef(MachineInstr &MI);
 
   // Return true if two regs are equivalent at this program point.
-  bool isEquvalent(MachineInstr &MI,
+  bool isEquivalent(MachineInstr &MI,
                    RegisterOffsetPair Reg1, RegisterOffsetPair Reg2);
 
   void join(MachineBasicBlock &MBB, RegisterEqSet &LiveIns);

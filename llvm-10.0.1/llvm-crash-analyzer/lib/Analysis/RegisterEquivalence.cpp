@@ -281,7 +281,7 @@ void RegisterEquivalence::registerEqDFAnalysis(MachineFunction &MF) {
   }
 }
 
-bool RegisterEquivalence::isEquvalent(MachineInstr &MI,
+bool RegisterEquivalence::isEquivalent(MachineInstr &MI,
     RegisterOffsetPair Reg1, RegisterOffsetPair Reg2) {
   if (RegInfo[&MI][Reg1].find(Reg2) != RegInfo[&MI][Reg1].end())
     return true;
