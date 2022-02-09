@@ -333,7 +333,7 @@ crash_analyzer::TaintAnalysis::isTainted(TaintInfo &Op,
          unsigned OffsetCurrOp = 0;
          if (itr->Offset)
            OffsetCurrOp = *itr->Offset;
-         if (REAnalysis->isEquvalent(
+         if (REAnalysis->isEquivalent(
            *const_cast<MachineInstr*>(&*std::prev(MI->getIterator())),
            {itr->Op->getReg(), OffsetCurrOp}, {Op.Op->getReg(), OffsetOp}))
            return *itr;

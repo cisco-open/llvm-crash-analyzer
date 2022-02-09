@@ -28,11 +28,13 @@ struct RegisterOffsetPair {
   bool IsDeref = false;
 
   bool operator==(const RegisterOffsetPair &p) const {
-    return RegNum == p.RegNum && Offset == p.Offset;
+    return RegNum == p.RegNum && Offset == p.Offset && IsDeref == p.IsDeref;
   }
 
   bool operator<(const RegisterOffsetPair &p) const {
     if (Offset == p.Offset) {
+      if (RegNum == p.RegNum)
+        return IsDeref < p.IsDeref;
       return RegNum < p.RegNum;
     }
     return Offset < p.Offset;
@@ -42,6 +44,8 @@ struct RegisterOffsetPair {
     : RegNum(reg), Offset(0) {}
   RegisterOffsetPair (unsigned reg, int64_t o)
     : RegNum(reg), Offset(o) {}
+  RegisterOffsetPair (unsigned reg, int64_t o, bool deref)
+    : RegNum(reg), Offset(o), IsDeref(deref) {}
 };
 
 // Class that implements the Register Equivalence Analysis.
@@ -87,7 +91,7 @@ public:
   bool applyRegDef(MachineInstr &MI);
 
   // Return true if two regs are equivalent at this program point.
-  bool isEquvalent(MachineInstr &MI,
+  bool isEquivalent(MachineInstr &MI,
                    RegisterOffsetPair Reg1, RegisterOffsetPair Reg2);
 
   void join(MachineBasicBlock &MBB, RegisterEqSet &LiveIns);
