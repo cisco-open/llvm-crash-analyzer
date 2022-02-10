@@ -169,18 +169,14 @@ void crash_analyzer::TaintAnalysis::calculateMemAddr(TaintInfo &Ti) {
     return;
   }
 
-  // Calculate real address by reading the context of regInfo MF attr
-  // (read from corefile).
-  //std::string RegValue = MF->getRegValueFromCrash(RegName);
-
   auto *CurrentCRE = getCRE();
   if (!CurrentCRE) {
     Ti.IsConcreteMemory = false;
     return;
   }
-
+  // Calculate real address by reading the context of regInfo MF attr
+  // (read from corefile).
   std::string RegValue = CurrentCRE->getCurretValueInReg(RegName);
-  // If the value is not available just taint the base-reg.
   if(RegValue == "") {
     // Try to see if there is an equal register that could be used here.
     auto MII = MachineBasicBlock::iterator(const_cast<MachineInstr*>(Ti.Op->getParent()));
@@ -214,6 +210,8 @@ void crash_analyzer::TaintAnalysis::calculateMemAddr(TaintInfo &Ti) {
         if (!Dec || !Dec->getTarget())
           break;
 
+        // FIXME: Since we now have deref-> should we check here if it is IsDeref
+        // and only in that case to be using that?
         uint64_t Val =
           Dec->getTarget()->GetProcess().ReadUnsignedFromMemory(AddrValue, 8, err);
         Val += *Ti.Offset;
@@ -360,6 +358,25 @@ void crash_analyzer::TaintAnalysis::printTaintList(
           dbgs() << "(mem addr: " << itr->GetTaintMemAddr() << ")";
         dbgs() << '\n';
       } dbgs() << "\n------Taint List End----\n";);
+}
+
+void crash_analyzer::TaintAnalysis::printTaintList2(
+    SmallVectorImpl<TaintInfo> &TL) {
+  if (TL.empty()) {
+    dbgs() << "Taint List is empty";
+    return;
+  }
+
+  dbgs() << "\n-----Taint List Begin------\n"; for (auto itr = TL.begin();
+                                                    itr != TL.end();
+                                                    ++itr) {
+    itr->Op->dump();
+    if (itr->Offset)
+      dbgs() << "offset: " << *(itr->Offset);
+    if (itr->IsTaintMemAddr())
+      dbgs() << "(mem addr: " << itr->GetTaintMemAddr() << ")";
+    dbgs() << '\n';
+  } dbgs() << "\n------Taint List End----\n";
 }
 
 void crash_analyzer::TaintAnalysis::printDestSrcInfo(DestSourcePair &DestSrc) {
@@ -755,6 +772,7 @@ bool crash_analyzer::TaintAnalysis::runOnBlameMF(const BlameModule &BM,
         auto &MI2 = *MIIt;
         // Process the call instruction that is not in the backtrace
         // Analyze the call only if return value is tainted.
+        // For now we are interested in depth of 10 functions (call->call->..).
 	    // TODO: Handling of function parameters that are tainted
         // within the function.
         if (MI2.isCall() && levelOfCalledFn < FrameLevelDepthToGo) {
@@ -947,11 +965,12 @@ bool crash_analyzer::TaintAnalysis::runOnBlameModule(const BlameModule &BM) {
                      << "of the backtrace doesn't have symbols.\n";
         return Result;
       }
-      if (!BF.MF->getCrashOrder()) {
-        LLVM_DEBUG(llvm::dbgs() << "### Skip: " << BF.Name << "\n";);
-        ++analysisStartedAt;
-        continue;
-      }
+    }
+
+    if (!BF.MF->getCrashOrder()) {
+      LLVM_DEBUG(llvm::dbgs() << "### Skip a call target: " << BF.Name
+                              << "\n";);
+      continue;
     }
 
     if (!AnalysisStarted && isInline(BF.MF)) {

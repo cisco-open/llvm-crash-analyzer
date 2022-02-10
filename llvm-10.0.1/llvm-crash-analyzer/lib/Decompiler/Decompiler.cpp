@@ -58,6 +58,9 @@ static cl::opt<std::string> PrintDecMIR("print-decompiled-mir",
                                         cl::value_desc("filename"),
                                         cl::init(""));
 
+// TODO: Remove this. This option isn't needed anymore, since we decompileOnDemand
+// during TA when needed to avoid poor performance in big projects when we have
+// big number of calls.
 static cl::opt<bool> DecompileFnsOutOfbt("decompile-fns-out-of-bt", cl::Hidden,
                                          cl::init(false));
 
@@ -598,6 +601,8 @@ llvm::Error crash_analyzer::Decompiler::run(
 
   // This will be used for mapping already decompiled functions, so we do not
   // do it twice.
+  // FIXME: This is now handled in the decompileOnDemand() which is being called
+  // during Taint Analysis.
   SmallSet<long, 8> AlreadyDecompiledMFs;
   if (DecompileFnsOutOfbt) {
     for (size_t i = 0; i < FunctionsThatAreNotInBT.size(); i++) {
@@ -753,6 +758,7 @@ crash_analyzer::Decompiler::decompileInlinedFnOutOfbt(StringRef TargetName,
   return MF;
 }
 
+// TODO: Remove duplicated code from this function.
 MachineFunction* crash_analyzer::Decompiler::decompileOnDemand(StringRef TargetName) {
   if (TargetName == "")
     return nullptr;
