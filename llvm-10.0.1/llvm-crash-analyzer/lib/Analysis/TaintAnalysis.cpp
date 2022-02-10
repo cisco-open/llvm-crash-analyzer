@@ -445,6 +445,8 @@ void crash_analyzer::TaintAnalysis::startTaint(DestSourcePair &DS,
     calculateMemAddr(Src2Ti);
 
   // This condition is true only for frame #0 in back trace
+  // Otherwise, it indicates that we did not find a taint
+  // operand to begin with.
   if (TaintList.empty()) {
     Node *cNode = new Node (0, nullptr, DestTi, true);
     std::shared_ptr<Node> crashNode (cNode);
@@ -824,6 +826,14 @@ bool crash_analyzer::TaintAnalysis::runOnBlameMF(const BlameModule &BM,
           LLVM_DEBUG(llvm::dbgs()
                      << "Crash instruction doesn't have blame operands\n";
 	  MI2.dump(););
+	  // If we found no taint operand to begin with in the first frame
+	  // then terminate the analysis.
+	  // The first frame could be frame #0 with CrashOrder = 1 (or)
+	  // found after several inlined frames in the beginning of the backtrace.
+          if ((MF.getCrashOrder() == 1) || (MF.getCrashOrder() == analysisStartedAt)) {
+	    llvm::errs() << "\nNo Taint operand to begin analysis.";
+	    return true;
+	  }
           mergeTaintList(TL_Mbb, TaintList);
           continue;
         }
