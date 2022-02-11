@@ -173,7 +173,12 @@ bool llvm::crash_analyzer::CoreFile::read(StringRef SolibSearchPath) {
       return false;
     }
 
-    LLVM_DEBUG(dbgs() << "#" << i << " " << Frame.GetFunctionName() << "\n");
+    LLVM_DEBUG(dbgs() << "#" << i << " " << Frame.GetPC() << " " << Frame.GetFunctionName();
+      if (Frame.IsInlined())
+        dbgs() <<"[inlined]" << "\n";
+      else
+        dbgs() << "\n";
+     );
     StringRef fnName = Frame.GetFunctionName();
 
     // Get registers state at the point of the crash.
