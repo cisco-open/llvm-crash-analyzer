@@ -83,6 +83,9 @@ public:
   void invalidateRegEq(MachineInstr &MI,
                        RegisterOffsetPair Reg);
 
+  void setRegEq(MachineInstr &MI, RegisterOffsetPair Src,
+                RegisterOffsetPair Dest);
+
   void processMI(MachineInstr &MI);
   bool applyRegisterCopy(MachineInstr &MI);
   bool applyLoad(MachineInstr &MI);
@@ -93,6 +96,11 @@ public:
   // Return true if two regs are equivalent at this program point.
   bool isEquivalent(MachineInstr &MI,
                    RegisterOffsetPair Reg1, RegisterOffsetPair Reg2);
+
+  // If Reg1 is equivalent to Reg2, verify that Reg1 is equivalent to
+  // all regs equivalent to Reg2.
+  bool verifyEquivalenceTransitivity(MachineInstr &MI, RegisterOffsetPair Reg1,
+                                     RegisterOffsetPair Reg2);
 
   void join(MachineBasicBlock &MBB, RegisterEqSet &LiveIns);
   void registerEqDFAnalysis(MachineFunction &MF);

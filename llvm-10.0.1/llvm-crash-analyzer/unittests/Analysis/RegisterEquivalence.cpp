@@ -140,12 +140,13 @@ machineFunctionInfo: {}
 crashOreder:     0
 body:             |
   bb.0:
-    liveins: $rbp, $rdi
+    liveins: $rbp, $rdi, $rsi
   
     PUSH64r $rbp, implicit-def $rsp, implicit $rsp, debug-location !DILocation(line: 3, scope: !5)
     $rbp = MOV64rr $rsp, debug-location !DILocation(line: 3, scope: !5)
     MOV64mr $rbp, 1, $noreg, -8, $noreg, $rdi, debug-location !DILocation(line: 3, scope: !5)
     $rax = MOV64rm $rbp, 1, $noreg, -8, $noreg, debug-location !DILocation(line: 4, column: 2, scope: !5)
+    MOV64mr $rsi, 1, $noreg, 16, $noreg, $rax, debug-location !DILocation(line: 4, scope: !5)
     MOV64mi32 $rax, 1, $noreg, 0, $noreg, 0, debug-location !DILocation(line: 4, column: 4, scope: !5)
     $rbp = POP64r implicit-def $rsp, implicit $rsp, debug-location !DILocation(line: 5, column: 1, scope: !5)
     crash-start RETQ debug-location !DILocation(line: 5, column: 1, scope: !5)
@@ -181,6 +182,11 @@ body:             |
         int64_t Offset = MI.getOperand(4).getImm();
         ASSERT_TRUE(REAnalysis.isEquivalent(MI, {Reg1}, {Reg2, Offset, true}));
         ASSERT_TRUE(REAnalysis.isEquivalent(MI, {Reg2, Offset, true}, {Reg1}));
+
+        ASSERT_TRUE(REAnalysis.verifyEquivalenceTransitivity(
+            MI, {Reg1}, {Reg2, Offset, true}));
+        ASSERT_TRUE(REAnalysis.verifyEquivalenceTransitivity(
+            MI, {Reg2, Offset, true}, {Reg1}));
       }
       // Test store impact on RegisterEquivalence.
       if (TII->isStore(MI)) {
@@ -195,6 +201,11 @@ body:             |
               REAnalysis.isEquivalent(MI, {SrcReg}, {BaseReg, Offset, true}));
           ASSERT_TRUE(
               REAnalysis.isEquivalent(MI, {BaseReg, Offset, true}, {SrcReg}));
+
+          ASSERT_TRUE(REAnalysis.verifyEquivalenceTransitivity(
+              MI, {BaseReg, Offset, true}, {SrcReg}));
+          ASSERT_TRUE(REAnalysis.verifyEquivalenceTransitivity(
+              MI, {SrcReg}, {BaseReg, Offset, true}));
         } else {
           // Store constant in memory.
           unsigned BaseReg = MI.getOperand(0).getReg();

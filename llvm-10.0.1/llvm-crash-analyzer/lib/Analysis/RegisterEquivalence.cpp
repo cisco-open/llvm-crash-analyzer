@@ -125,6 +125,24 @@ void RegisterEquivalence::invalidateRegEq(
   RegInfo[&MI][Reg].insert(Reg);
 }
 
+void RegisterEquivalence::setRegEq(MachineInstr &MI, RegisterOffsetPair Src,
+                                   RegisterOffsetPair Dest) {
+  if (RegInfo[&MI][Dest].find(Src) != RegInfo[&MI][Dest].end())
+    return;
+  // Set equivalence between Src and Dest.
+  RegInfo[&MI][Src].insert(Dest);
+  RegInfo[&MI][Dest].insert(Src);
+  // Set Src identity equivalence.
+  RegInfo[&MI][Src].insert(Src);
+
+  // Set transitive equivalence between Dest and locations equivalent to Src.
+  for (auto LL : RegInfo[&MI][Src]) {
+    if (LL == Dest || LL == Src)
+      continue;
+    setRegEq(MI, LL, Dest);
+  }
+}
+
 bool RegisterEquivalence::applyRegisterCopy(MachineInstr &MI) {
   auto DestSrc = TII->isCopyInstr(MI);
   if (!DestSrc)
@@ -145,10 +163,8 @@ bool RegisterEquivalence::applyRegisterCopy(MachineInstr &MI) {
 
   invalidateRegEq(MI, Dest);
 
-  RegInfo[&MI][Src].insert(Dest);
-  RegInfo[&MI][Dest].insert(Src);
-  RegInfo[&MI][Src].insert(Src);
-
+  // Set (transitive) equivalence.
+  setRegEq(MI, Src, Dest);
   return true;
 }
 
@@ -176,10 +192,8 @@ bool RegisterEquivalence::applyLoad(MachineInstr &MI) {
   // First invalidate dest reg, since it is being rewritten.
   invalidateRegEq(MI, Dest);
 
-  RegInfo[&MI][Src].insert(Dest);
-  RegInfo[&MI][Dest].insert(Src);
-  RegInfo[&MI][Src].insert(Src);
-
+  // Set (transitive) equivalence.
+  setRegEq(MI, Src, Dest);
   //dumpRegTableAfterMI(&MI);
 
   return true;
@@ -215,9 +229,8 @@ bool RegisterEquivalence::applyStore(MachineInstr &MI) {
   // First invalidate dest reg, since it is being rewritten.
   invalidateRegEq(MI, Dest);
 
-  RegInfo[&MI][Src].insert(Dest);
-  RegInfo[&MI][Dest].insert(Src);
-  RegInfo[&MI][Src].insert(Src);
+  // Set (transitive) equivalence.
+  setRegEq(MI, Src, Dest);
 
   return true;
 }
@@ -287,13 +300,25 @@ void RegisterEquivalence::registerEqDFAnalysis(MachineFunction &MF) {
 
 bool RegisterEquivalence::isEquivalent(MachineInstr &MI,
     RegisterOffsetPair Reg1, RegisterOffsetPair Reg2) {
-  if (RegInfo[&MI][Reg1].find(Reg2) != RegInfo[&MI][Reg1].end())
-    return true;
+  if (RegInfo[&MI][Reg1].find(Reg2) == RegInfo[&MI][Reg1].end())
+    return false;
+  assert(RegInfo[&MI][Reg2].find(Reg1) != RegInfo[&MI][Reg2].end() &&
+         "Register Equivalence is symmetric relation");
+  // Transitivity should be handled by setRegEq method.
+  return true;
+}
 
-  // TODO: Check if it is implicitly equalalent?
-  // reg0 : {reg1,...} -> reg1 : {reg2,...} ==> reg0 is eq to reg2.
+bool RegisterEquivalence::verifyEquivalenceTransitivity(
+    MachineInstr &MI, RegisterOffsetPair Reg1, RegisterOffsetPair Reg2) {
+  if (!isEquivalent(MI, Reg1, Reg2))
+    return false;
 
-  return false;
+  for (auto T : RegInfo[&MI][Reg2]) {
+    if (!isEquivalent(MI, Reg1, T))
+      return false;
+  }
+
+  return true;
 }
 
 bool RegisterEquivalence::run(MachineFunction &MF) {
