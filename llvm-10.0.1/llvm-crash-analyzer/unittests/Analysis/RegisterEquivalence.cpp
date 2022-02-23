@@ -147,6 +147,7 @@ body:             |
     MOV64mr $rbp, 1, $noreg, -8, $noreg, $rdi, debug-location !DILocation(line: 3, scope: !5)
     $rax = MOV64rm $rbp, 1, $noreg, -8, $noreg, debug-location !DILocation(line: 4, column: 2, scope: !5)
     MOV64mr $rsi, 1, $noreg, 16, $noreg, $rax, debug-location !DILocation(line: 4, scope: !5)
+    $rbp = XOR64rr undef $rbp, undef $rbp, implicit-def $eflags, debug-location !DILocation(line: 4, column: 2, scope: !5)
     MOV64mi32 $rax, 1, $noreg, 0, $noreg, 0, debug-location !DILocation(line: 4, column: 4, scope: !5)
     $rbp = POP64r implicit-def $rsp, implicit $rsp, debug-location !DILocation(line: 5, column: 1, scope: !5)
     crash-start RETQ debug-location !DILocation(line: 5, column: 1, scope: !5)
@@ -187,6 +188,7 @@ body:             |
             MI, {Reg1}, {Reg2, Offset, true}));
         ASSERT_TRUE(REAnalysis.verifyEquivalenceTransitivity(
             MI, {Reg2, Offset, true}, {Reg1}));
+        continue;
       }
       // Test store impact on RegisterEquivalence.
       if (TII->isStore(MI)) {
@@ -214,6 +216,21 @@ body:             |
           ASSERT_FALSE(REAnalysis.isEquivalent(MI, {BaseReg, Offset},
                                                {BaseReg, Offset, true}));
         }
+        continue;
+      }
+      if (TII->isXORSimplifiedSetToZero(MI)) {
+        REAnalysis.dumpRegTableAfterMI(&MI);
+        unsigned Reg1 = MI.getOperand(0).getReg();
+        // Verify that redefined Reg1 ($rbp) triggers invalidation of
+        // deref->(Reg1)+(Offset) (deref->($rbp)+(-8)).
+        auto Prev = std::next(MI.getReverseIterator());
+        std::set<RegisterOffsetPair> EqR =
+            REAnalysis.getEqRegsAfterMI(&*Prev, {Reg1, -8, true});
+        if (EqR.size()) {
+          ASSERT_TRUE(
+              REAnalysis.getEqRegsAfterMI(&MI, {Reg1, -8, true}).size() == 1);
+        }
+        continue;
       }
     }
   }
