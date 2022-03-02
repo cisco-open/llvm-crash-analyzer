@@ -985,7 +985,7 @@ bool crash_analyzer::TaintAnalysis::runOnBlameModule(const BlameModule &BM) {
       continue;
     }
 
-    if (!AnalysisStarted && isInline(BF.MF)) {
+    if (isInline(BF.MF)) {
       LLVM_DEBUG(llvm::dbgs() << "### Skip inline fn: " << BF.Name << "\n";);
       ++analysisStartedAt;
       continue;
