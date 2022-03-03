@@ -425,7 +425,10 @@ llvm::Error crash_analyzer::Decompiler::run(
     FuncStartSymbols[FuncAddr] = frame.first;
   }
 
-  for (auto &frame : FrameInfo) {
+  for (StringRef f : functionsFromCoreFile) {
+    auto frame = *FrameInfo.find(f);
+    if (frame == *FrameInfo.end())
+      continue;
     // Skip artificial frames.
     if (frame.second.IsArtificial())
       continue;
@@ -475,7 +478,7 @@ llvm::Error crash_analyzer::Decompiler::run(
     MachineBasicBlock *MBB = nullptr;
     DISubprogram *DISP = nullptr;
     std::string InstrAddr;
-    unsigned AddrValue = 0;
+    uint64_t AddrValue = 0;
 
     StringRef FunctionName = frame.first;
 
@@ -566,7 +569,7 @@ llvm::Error crash_analyzer::Decompiler::run(
     MF->addCrashRegInfo(regInfo);
 
     if (!DecodeIntrsToMIR(TheTriple, Instructions, FuncStart, FuncEnd, target, HaveDebugInfo,
-                     MF, MBB, frame.first, DISP, SPs, Ctx, frame.second.GetPC(),
+                     MF, MBB, frame.first, DISP, SPs, Ctx, AddrValue,
                      FuncStartSymbols))
       return make_error<StringError>("unable to decompile an instruction",
                                      inconvertibleErrorCode());
