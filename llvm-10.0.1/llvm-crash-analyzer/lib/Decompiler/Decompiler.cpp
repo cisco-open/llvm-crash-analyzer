@@ -75,10 +75,10 @@ crash_analyzer::Decompiler::~Decompiler() { DisassemblerLLVMC::Terminate(); }
 llvm::Expected<std::unique_ptr<crash_analyzer::Decompiler>>
 crash_analyzer::Decompiler::create(Triple TheTriple) {
   std::unique_ptr<crash_analyzer::Decompiler> Dec(new crash_analyzer::Decompiler());
-  llvm::Error error = Dec->init(TheTriple);
-  if (error)
+  llvm::Error Err = Dec->init(TheTriple);
+  if (Err)
     return Expected<std::unique_ptr<crash_analyzer::Decompiler>>(
-        std::move(error));
+        std::move(Err));
   return Expected<std::unique_ptr<crash_analyzer::Decompiler>>(std::move(Dec));
 }
 
@@ -122,7 +122,7 @@ MachineInstr *crash_analyzer::Decompiler::addInstr(
     MachineFunction *MF, MachineBasicBlock *MBB, MCInst &Inst, DebugLoc *Loc,
     bool IsCrashStart, crash_analyzer::RegSet &DefinedRegs,
     std::unordered_map<uint64_t, StringRef> &FuncStartSymbols,
-    lldb::SBTarget &target) {
+    lldb::SBTarget &Target) {
   const unsigned Opcode = Inst.getOpcode();
   const MCInstrDesc &MCID = MII->get(Opcode);
   MachineInstrBuilder Builder =
@@ -166,11 +166,11 @@ MachineInstr *crash_analyzer::Decompiler::addInstr(
         if (!FuncStartSymbols.count(ConstExpr->getValue())) {
           // Remember this target to process it later.
           FunctionsThatAreNotInBT.push_back(ConstExpr->getValue());
-           lldb::SBAddress addr(ConstExpr->getValue(), target);
-          auto symCtx = target.ResolveSymbolContextForAddress(
+           lldb::SBAddress addr(ConstExpr->getValue(), Target);
+          auto SymCtx = Target.ResolveSymbolContextForAddress(
                            addr, lldb::eSymbolContextEverything);
-          if (symCtx.IsValid() && symCtx.GetSymbol().IsValid())
-            TargetFnName = symCtx.GetSymbol().GetDisplayName();
+          if (SymCtx.IsValid() && SymCtx.GetSymbol().IsValid())
+            TargetFnName = SymCtx.GetSymbol().GetDisplayName();
           else {
             Builder.addImm(ConstExpr->getValue());
             continue;
@@ -243,7 +243,7 @@ MachineFunction &crash_analyzer::Decompiler::createMF(StringRef FunctionName) {
 bool crash_analyzer::Decompiler::DecodeIntrsToMIR(
     Triple TheTriple, lldb::SBInstructionList &Instructions,
     lldb::SBAddress &FuncStart, lldb::SBAddress &FuncEnd,
-    lldb::SBTarget &target, bool HaveDebugInfo, MachineFunction *MF,
+    lldb::SBTarget &Target, bool HaveDebugInfo, MachineFunction *MF,
     MachineBasicBlock *FirstMBB, StringRef OriginalFunction, DISubprogram *DISP,
     std::unordered_map<std::string, DISubprogram *> &SPs, LLVMContext &Ctx,
     lldb::addr_t CrashStartAddr,
@@ -255,48 +255,48 @@ bool crash_analyzer::Decompiler::DecodeIntrsToMIR(
   bool PrevBranch = true;
   crash_analyzer::RegSet DefinedRegs;
 
-  lldb_private::ArchSpec arch(TheTriple.normalize());
+  lldb_private::ArchSpec Arch(TheTriple.normalize());
   lldb::DisassemblerSP Disassembler_sp =
-      lldb_private::Disassembler::FindPlugin(arch, nullptr, nullptr);
+      lldb_private::Disassembler::FindPlugin(Arch, nullptr, nullptr);
 
   // Jumps to be updated with proper targets ( in form of bb).
   // This maps the target address with the jump.
   std::unordered_multimap<uint64_t, MachineInstr *> BranchesToUpdate;
 
-  std::pair<lldb::addr_t, lldb::addr_t> func_range{FuncStart.GetFileAddress(),
+  std::pair<lldb::addr_t, lldb::addr_t> FuncRange{FuncStart.GetFileAddress(),
                                                    FuncEnd.GetFileAddress()};
-  lldb::addr_t FuncLoadAddr = FuncStart.GetLoadAddress(target);
+  lldb::addr_t FuncLoadAddr = FuncStart.GetLoadAddress(Target);
 
-  lldb::DataBufferSP buffer_sp(
-      new lldb_private::DataBufferHeap(func_range.second, 0));
-  lldb::SBError error;
-  target.ReadMemory(FuncStart, buffer_sp->GetBytes(), buffer_sp->GetByteSize(),
-                    error);
+  lldb::DataBufferSP BufferSp(
+      new lldb_private::DataBufferHeap(FuncRange.second, 0));
+  lldb::SBError Err;
+  Target.ReadMemory(FuncStart, BufferSp->GetBytes(), BufferSp->GetByteSize(),
+                    Err);
 
-  lldb_private::DataExtractor Extractor(buffer_sp, target.GetByteOrder(),
-                                        target.GetAddressByteSize());
+  lldb_private::DataExtractor Extractor(BufferSp, Target.GetByteOrder(),
+                                        Target.GetAddressByteSize());
   Disassembler_sp->DecodeInstructions(FuncLoadAddr, Extractor, 0,
                                       Instructions.GetSize(), false, false);
 
-  lldb_private::InstructionList &instruction_list =
+  lldb_private::InstructionList &InstructionList =
       Disassembler_sp->GetInstructionList();
-  size_t numInstr = instruction_list.GetSize();
+  size_t numInstr = InstructionList.GetSize();
   for (size_t k = 0; k < numInstr; ++k) {
     // This is used for tracking inlined functions.
     // The instrs from such fn will be stored in a .text of another fn.
-    auto InstSP = instruction_list.GetInstructionAtIndex(k);
+    auto InstSP = InstructionList.GetInstructionAtIndex(k);
     uint64_t InstAddr = InstSP->GetAddress().GetFileAddress();
 
     StringRef InlinedFnName = "";
 
-    uint32_t line = 0;
-    uint32_t column = 0;
+    uint32_t Line = 0;
+    uint32_t Column = 0;
     if (HaveDebugInfo) {
-      auto sbInst = Instructions.GetInstructionAtIndex(k);
-      line = sbInst.GetAddress().GetLineEntry().GetLine();
-      column = sbInst.GetAddress().GetLineEntry().GetColumn();
-      if (sbInst.GetAddress().GetBlock().IsInlined()) {
-        InlinedFnName = sbInst.GetAddress().GetBlock().GetInlinedName();
+      auto SBInst = Instructions.GetInstructionAtIndex(k);
+      Line = SBInst.GetAddress().GetLineEntry().GetLine();
+      Column = SBInst.GetAddress().GetLineEntry().GetColumn();
+      if (SBInst.GetAddress().GetBlock().IsInlined()) {
+        InlinedFnName = SBInst.GetAddress().GetBlock().GetInlinedName();
         if (!AlreadyDecompiledFns.count(InlinedFnName.str())) {
           auto InlineFnOutOfBt =
              decompileInlinedFnOutOfbt(InlinedFnName, DISP->getFile());
@@ -339,16 +339,16 @@ bool crash_analyzer::Decompiler::DecodeIntrsToMIR(
         if (SPs.count(OriginalFunction)) DISP = SPs[OriginalFunction];
       }
 
-      auto DILoc = DILocation::get(Ctx, line, column, DISP);
+      auto DILoc = DILocation::get(Ctx, Line, Column, DISP);
       DebugLoc Loc = DebugLoc(DILoc);
       // For the functions out of backtrace we should analize whole
       // function, so crash-start flag should go at the end of the fn.
       if (IsFnOutOfBt && k == (numInstr - 1))
         MI = addInstr(MF, MBB, Inst, &Loc, true,
-                      DefinedRegs, FuncStartSymbols, target);
+                      DefinedRegs, FuncStartSymbols, Target);
       else
         MI = addInstr(MF, MBB, Inst, &Loc, CrashStartAddr == Addr.Address,
-                      DefinedRegs, FuncStartSymbols, target);
+                      DefinedRegs, FuncStartSymbols, Target);
 
       if (MI) {
         // There could be multiple branches targeting the same
@@ -394,9 +394,9 @@ bool crash_analyzer::Decompiler::DecodeIntrsToMIR(
 }
 
 llvm::Error crash_analyzer::Decompiler::run(
-    StringRef InputFile, SmallVectorImpl<StringRef> &functionsFromCoreFile,
+    StringRef InputFile, SmallVectorImpl<StringRef> &FunctionsFromCoreFile,
     FrameToRegsMap &FrameToRegs, SmallVectorImpl<BlameFunction> &BlameTrace,
-    std::map<llvm::StringRef, lldb::SBFrame> &FrameInfo, lldb::SBTarget &target,
+    std::map<llvm::StringRef, lldb::SBFrame> &FrameInfo, lldb::SBTarget &Target,
     Triple TheTriple) {
   llvm::outs() << "Decompiling...\n";
 
@@ -404,46 +404,46 @@ llvm::Error crash_analyzer::Decompiler::run(
 
   Module = createModule(Ctx, TM->createDataLayout(), InputFile);
 
-  mTriple = TheTriple;
+  DecTriple = TheTriple;
 
   MMI = new MachineModuleInfo(&LLVMTM);
   if (!MMI)
-    // FIXME: emit an error here.
-    return Error::success();
-
+    return make_error<StringError>("MachineModuleInfo construction failed",
+                                   inconvertibleErrorCode());
   MMI->initialize();
 
   // Map of the functions we are about to decompile.
   std::unordered_set<std::string> FunctionsToDecompile;
-  for (StringRef f : functionsFromCoreFile)
+  for (StringRef f : FunctionsFromCoreFile)
     FunctionsToDecompile.insert(f.str());
 
   // Create Debug Info.
   DIBuilder DIB(*Module);
 
-  for (auto &frame : FrameInfo) {
-    auto FuncAddr = frame.second.GetFunction().GetStartAddress().GetFileAddress();
-    FuncStartSymbols[FuncAddr] = frame.first;
+  for (auto &Frame : FrameInfo) {
+    auto FuncAddr = Frame.second.GetFunction().GetStartAddress().GetFileAddress();
+    FuncStartSymbols[FuncAddr] = Frame.first;
   }
 
-  for (StringRef f : functionsFromCoreFile) {
-    auto frame = *FrameInfo.find(f);
-    if (frame == *FrameInfo.end())
+  // BlameTrace has the same order of functions as FunctionsFromCoreFile.
+  for (auto &BF : BlameTrace) {
+    auto Frame = *FrameInfo.find(BF.Name);
+    if (Frame == *FrameInfo.end())
       continue;
     // Skip artificial frames.
-    if (frame.second.IsArtificial())
+    if (Frame.second.IsArtificial())
       continue;
 
     lldb::SBInstructionList Instructions;
     lldb::SBAddress FuncStart, FuncEnd;
     bool HaveDebugInfo = false;
 
-    auto Func = frame.second.GetFunction();
+    auto Func = Frame.second.GetFunction();
     if (!Func) {
       WithColor::warning()
           << "No debugging info found for a function from backtrace. "
           << "Please provide debugging info for the exe and all libraries.\n";
-      auto Symbol = frame.second.GetSymbol();
+      auto Symbol = Frame.second.GetSymbol();
       if (!Symbol) {
         WithColor::warning()
             << "No symbols found for a function "
@@ -451,27 +451,27 @@ llvm::Error crash_analyzer::Decompiler::run(
             << "provide symbols for the exe and all libraries.\n";
         continue;
       }
-      Instructions = Symbol.GetInstructions(target);
+      Instructions = Symbol.GetInstructions(Target);
       FuncStart = Symbol.GetStartAddress();
       FuncEnd = Symbol.GetEndAddress();
     } else {
       HaveDebugInfo = true;
-      Instructions = Func.GetInstructions(target);
+      Instructions = Func.GetInstructions(Target);
       FuncStart = Func.GetStartAddress();
       FuncEnd = Func.GetEndAddress();
     }
 
     std::string FileDirInfo, FileNameInfo, AbsFileName;
     if (HaveDebugInfo) {
-      FileDirInfo = frame.second.GetCompileUnit().GetFileSpec().GetDirectory();
-      FileNameInfo = frame.second.GetCompileUnit().GetFileSpec().GetFilename();
+      FileDirInfo = Frame.second.GetCompileUnit().GetFileSpec().GetDirectory();
+      FileNameInfo = Frame.second.GetCompileUnit().GetFileSpec().GetFilename();
       AbsFileName =
           (Twine(FileDirInfo) + Twine("/") + Twine(FileNameInfo)).str();
     }
 
     if (ShowDisassembly) {
       outs() << "\nDissasemble of the functions from backtrace:\n";
-      outs() << frame.second.Disassemble();
+      outs() << Frame.second.Disassemble();
     }
 
     // Create MFs.
@@ -481,7 +481,7 @@ llvm::Error crash_analyzer::Decompiler::run(
     std::string InstrAddr;
     uint64_t AddrValue = 0;
 
-    StringRef FunctionName = frame.first;
+    StringRef FunctionName = Frame.first;
 
     MF = &createMF(FunctionName);
     MBB = MF->CreateMachineBasicBlock();
@@ -490,35 +490,12 @@ llvm::Error crash_analyzer::Decompiler::run(
     DIFile *File = nullptr;
     DICompileUnit *CU = nullptr;
 
-    if (MF && HaveDebugInfo) {
-      if (!CUs.count(AbsFileName)) {
-        File = DIB.createFile(AbsFileName, "/");
-        CU = DIB.createCompileUnit(
-            dwarf::DW_LANG_C, File, "llvm-crash-analyzer", /*isOptimized=*/true, "",
-            0, StringRef(), DICompileUnit::DebugEmissionKind::FullDebug, 0,
-            true, false, DICompileUnit::DebugNameTableKind::Default, false,
-            true);
-        CUs.insert({AbsFileName, std::make_pair(File, CU)});
-      } else {
-        File = CUs[AbsFileName].first;
-        CU = CUs[AbsFileName].second;
-      }
-    }
+    if (MF && HaveDebugInfo)
+      handleCompileUnitDI(DIB, AbsFileName, &File, &CU);
 
     // Once we created the DI file, create DI subprogram.
-    if (HaveDebugInfo && !DISP && File && CU && MF) {
-      auto &F = MF->getFunction();
-      auto SPType = DIB.createSubroutineType(DIB.getOrCreateTypeArray(None));
-      DISubprogram::DISPFlags SPFlags =
-          DISubprogram::SPFlagDefinition | DISubprogram::SPFlagOptimized;
-      auto SP = DIB.createFunction(CU, F.getName(), F.getName(), File, 1,
-                                   SPType, 1, DINode::FlagZero, SPFlags);
-      (const_cast<Function *>(&F))->setSubprogram(SP);
-      DISP = SP;
-      DIB.finalizeSubprogram(SP);
-      if (!SPs.count(FunctionName))
-        SPs.insert({FunctionName, SP});
-    }
+    if (HaveDebugInfo && !DISP && File && CU && MF)
+      handleSubprogramDI(DIB, MF, CU, &DISP, File);
 
     // Here we stop decompiling inlined functions. This MF is dummy fn,
     // since the instructions of will be in the MF where it got inlined. We need
@@ -526,7 +503,7 @@ llvm::Error crash_analyzer::Decompiler::run(
     // TODO: We assume that inlined functions is in the same compilation unit as
     // the function where it got inlined, but there is Cross-CU inlining by using
     // LTO, but it will be handled as future work.
-    if (frame.second.IsInlined()) {
+    if (Frame.second.IsInlined()) {
       auto TII = MF->getSubtarget().getInstrInfo();
       MCInst NopInst;
       TII->getNoop(NopInst);
@@ -535,17 +512,9 @@ llvm::Error crash_analyzer::Decompiler::run(
       BuildMI(MBB, DebugLoc(), MCID);
 
       // Map the fn from backtrace to the MF.
-      // FIXME: Improve this by using a hash map.
-      int index = 0;
-      for (auto &f : BlameTrace) {
-        if (f.Name == FunctionName) {
-          // Crash order starts from 1.
-          MF->setCrashOrder(index + 1);
-          f.MF = MF;
-          break;
-        }
-        ++index;
-      }
+      // Crash order starts from 1.
+      MF->setCrashOrder(Frame.second.GetFrameID()+1);
+      BF.MF = MF;
 
       continue;
     }
@@ -555,9 +524,9 @@ llvm::Error crash_analyzer::Decompiler::run(
     auto CATI = getCATargetInfoInstance();
     // Get the value of $rip register, since it holds the address of current
     // instr being executed.
-    for (auto &reg : Regs->second) {
-      if (CATI->isPCRegister(reg.regName)) {
-        InstrAddr = reg.regValue;
+    for (auto &Reg : Regs->second) {
+      if (CATI->isPCRegister(Reg.regName)) {
+        InstrAddr = Reg.regValue;
         std::istringstream converter(InstrAddr);
         converter >> std::hex >> AddrValue;
         break;
@@ -565,13 +534,13 @@ llvm::Error crash_analyzer::Decompiler::run(
     }
 
     // Fill up the register-memory state into coresponding MF attributes.
-    MachineFunction::RegisterCrashInfo regInfo;
-    for (auto &reg : Regs->second)
-      regInfo.push_back({reg.regName, reg.regValue});
-    MF->addCrashRegInfo(regInfo);
+    MachineFunction::RegisterCrashInfo RegInfo;
+    for (auto &Reg : Regs->second)
+      RegInfo.push_back({Reg.regName, Reg.regValue});
+    MF->addCrashRegInfo(RegInfo);
 
-    if (!DecodeIntrsToMIR(TheTriple, Instructions, FuncStart, FuncEnd, target, HaveDebugInfo,
-                     MF, MBB, frame.first, DISP, SPs, Ctx, AddrValue,
+    if (!DecodeIntrsToMIR(TheTriple, Instructions, FuncStart, FuncEnd, Target, HaveDebugInfo,
+                     MF, MBB, Frame.first, DISP, SPs, Ctx, AddrValue,
                      FuncStartSymbols))
       return make_error<StringError>("unable to decompile an instruction",
                                      inconvertibleErrorCode());
@@ -582,17 +551,9 @@ llvm::Error crash_analyzer::Decompiler::run(
     });
 
     // Map the fn from backtrace to the MF.
-    // FIXME: Improve this by using a hash map.
-    int index = 0;
-    for (auto &f : BlameTrace) {
-      if (f.Name == FunctionName) {
-        // Crash order starts from 1.
-        MF->setCrashOrder(index + 1);
-        f.MF = MF;
-        break;
-      }
-      ++index;
-    }
+    // Crash order starts from 1.
+    MF->setCrashOrder(Frame.second.GetFrameID()+1);
+    BF.MF = MF;
 
     // Remove the function from working set.
     FunctionsToDecompile.erase(FunctionName);
@@ -616,69 +577,18 @@ llvm::Error crash_analyzer::Decompiler::run(
       if (AlreadyDecompiledMFs.count(NonBTFnAddr))
         continue;
       AlreadyDecompiledMFs.insert(NonBTFnAddr);
-      lldb::SBAddress addr(NonBTFnAddr, target);
-      auto symCtx = target.ResolveSymbolContextForAddress(
-                        addr, lldb::eSymbolContextEverything);
-      if (!(symCtx.IsValid() && symCtx.GetSymbol().IsValid()))
+      lldb::SBAddress Addr(NonBTFnAddr, Target);
+      auto SymCtx = Target.ResolveSymbolContextForAddress(
+                        Addr, lldb::eSymbolContextEverything);
+      if (!(SymCtx.IsValid() && SymCtx.GetSymbol().IsValid()))
         continue;
-      lldb::SBInstructionList Instructions;
-      lldb::SBAddress FuncStart, FuncEnd;
-      auto Symbol = symCtx.GetSymbol();
-      Instructions = Symbol.GetInstructions(target);
-      FuncStart = Symbol.GetStartAddress();
-      FuncEnd = Symbol.GetEndAddress();
 
-      bool HasDbgInfo = false;
-      auto Fn = FuncStart.GetFunction();
-      MachineFunction *MF = &createMF(symCtx.GetSymbol().GetDisplayName());
-      MachineBasicBlock *MBB = MF->CreateMachineBasicBlock();
-      MF->push_back(MBB);
-
-      DISubprogram *SP = nullptr;
-
-      // Handle debug info if this comes from another module.
-      if (Fn) {
-        HasDbgInfo = true;
-        DIFile *File = nullptr;
-        DICompileUnit *CU = nullptr;
-        std::string FileDirInfo, FileNameInfo, AbsFileName;
-        FileDirInfo = FuncStart.GetCompileUnit().GetFileSpec().GetDirectory();
-        FileNameInfo = FuncStart.GetCompileUnit().GetFileSpec().GetFilename();
-        AbsFileName =
-            (Twine(FileDirInfo) + Twine("/") + Twine(FileNameInfo)).str();
-
-        if (!CUs.count(AbsFileName)) {
-          File = DIB.createFile(AbsFileName, "/");
-          CU = DIB.createCompileUnit(
-              dwarf::DW_LANG_C, File, "llvm-crash-analyzer", /*isOptimized=*/true, "",
-              0, StringRef(), DICompileUnit::DebugEmissionKind::FullDebug, 0,
-              true, false, DICompileUnit::DebugNameTableKind::Default, false,
-              true);
-          CUs.insert({AbsFileName, std::make_pair(File, CU)});
-        } else {
-          File = CUs[AbsFileName].first;
-          CU = CUs[AbsFileName].second;
-        }
-
-        auto &F = MF->getFunction();
-        auto SPType = DIB.createSubroutineType(DIB.getOrCreateTypeArray(None));
-        DISubprogram::DISPFlags SPFlags =
-            DISubprogram::SPFlagDefinition | DISubprogram::SPFlagOptimized;
-        auto sp = DIB.createFunction(CU, F.getName(), F.getName(), File, 1,
-                                     SPType, 1, DINode::FlagZero, SPFlags);
-        (const_cast<Function *>(&F))->setSubprogram(sp);
-        SP = sp;
-        DIB.finalizeSubprogram(SP);
-        if (!SPs.count(MF->getName()))
-          SPs.insert({MF->getName(), SP});
-      }
-
-      if (!DecodeIntrsToMIR(TheTriple, Instructions, FuncStart, FuncEnd, target, HasDbgInfo,
-                       MF, MBB, symCtx.GetSymbol().GetDisplayName(), SP,
-                       SPs, Ctx, 0, FuncStartSymbols, true /*IsFnOutOfBt*/))
+      MachineFunction *MF = &createMF(SymCtx.GetSymbol().GetDisplayName());
+      if (!decompileInstrs(DecTriple, SymCtx, Target, MF))
         return make_error<StringError>("unable to decompile an instruction",
                                        inconvertibleErrorCode());
-      BlameTrace.push_back({symCtx.GetSymbol().GetDisplayName(), MF});
+
+      BlameTrace.push_back({SymCtx.GetSymbol().GetDisplayName(), MF});
       // Functions that are out of backtrace have 0 crash order.
       MF->setCrashOrder(0);
     }
@@ -686,18 +596,17 @@ llvm::Error crash_analyzer::Decompiler::run(
 
   // Run FixRegStateFlags pass for each basic block.
   FixRegStateFlags FRSF;
-  for (auto &f : BlameTrace) {
-    if (f.MF) FRSF.run(*(f.MF));
+  for (auto &BF : BlameTrace) {
+    if (BF.MF) FRSF.run(*(BF.MF));
   }
 
   MMI->finalize();
 
   if (PrintDecMIR != "") {
-    StringRef file_name = PrintDecMIR;
-    if (!file_name.endswith(".mir")) {
-      errs() << "MIR file must be with '.mir' extension.\n";
-      // TODO: return real error here.
-      return Error::success();
+    StringRef FileName = PrintDecMIR;
+    if (!FileName.endswith(".mir")) {
+      return make_error<StringError>("MIR file must be with '.mir' extension.",
+                                     inconvertibleErrorCode());
     }
 
     std::error_code EC;
@@ -708,8 +617,8 @@ llvm::Error crash_analyzer::Decompiler::run(
       return errorCodeToError(EC);
     }
     printMIR(OS_FILE, *Module.get());
-    for (auto &f : BlameTrace) {
-      if (f.MF) printMIR(OS_FILE, *f.MF);
+    for (auto &BF : BlameTrace) {
+      if (BF.MF) printMIR(OS_FILE, *BF.MF);
     }
   }
 
@@ -741,16 +650,8 @@ crash_analyzer::Decompiler::decompileInlinedFnOutOfbt(StringRef TargetName,
 
   // Create Debug Info.
   DIBuilder DIB(*Module);
-  auto &F = MF->getFunction();
-  auto SPType = DIB.createSubroutineType(DIB.getOrCreateTypeArray(None));
-  DISubprogram::DISPFlags SPFlags =
-      DISubprogram::SPFlagDefinition | DISubprogram::SPFlagOptimized;
-  auto SP = DIB.createFunction(CU, F.getName(), F.getName(), File, 1,
-                               SPType, 1, DINode::FlagZero, SPFlags);
-  (const_cast<Function *>(&F))->setSubprogram(SP);
-  DIB.finalizeSubprogram(SP);
-  if (!SPs.count(TargetName))
-    SPs.insert({TargetName, SP});
+  DISubprogram* SP = nullptr;
+  handleSubprogramDI(DIB, MF, CU, &SP, File);
 
   auto TII = MF->getSubtarget().getInstrInfo();
   MCInst NopInst;
@@ -763,89 +664,120 @@ crash_analyzer::Decompiler::decompileInlinedFnOutOfbt(StringRef TargetName,
   return MF;
 }
 
-// TODO: Remove duplicated code from this function.
-MachineFunction* crash_analyzer::Decompiler::decompileOnDemand(StringRef TargetName) {
-  if (TargetName == "")
-    return nullptr;
+void crash_analyzer::Decompiler::handleSubprogramDI(DIBuilder &DIB,
+                                                      MachineFunction *MF,
+                                                      DICompileUnit *CU,
+                                                      DISubprogram **SPAdr,
+                                                      DIFile *File) {
+  auto &F = MF->getFunction();
+  auto SPType = DIB.createSubroutineType(DIB.getOrCreateTypeArray(None));
+  DISubprogram::DISPFlags SPFlags =
+      DISubprogram::SPFlagDefinition | DISubprogram::SPFlagOptimized;
+  auto SP = DIB.createFunction(CU, F.getName(), F.getName(), File, 1, SPType, 1,
+                               DINode::FlagZero, SPFlags);
+  (const_cast<Function *>(&F))->setSubprogram(SP);
+  DIB.finalizeSubprogram(SP);
+  if (!SPs.count(MF->getName()))
+    SPs.insert({MF->getName(), SP});
+  *SPAdr = SP;
+}
 
-  if (!target)
-    return nullptr;
-
-  if (AlreadyDecompiledFns.count(TargetName))
-    return AlreadyDecompiledFns[TargetName];
-
-  auto symCtxs = target->FindFunctions(TargetName.data());
-  if (symCtxs.GetSize() != 1) {
-    LLVM_DEBUG(
-      llvm::dbgs() << "Multiple symbols found for: " << TargetName << '\n');
-    return nullptr;
+void crash_analyzer::Decompiler::handleCompileUnitDI(DIBuilder &DIB,
+                                                     std::string AbsFileName,
+                                                     DIFile **FileAdr,
+                                                     DICompileUnit **CUAdr) {
+  if (!CUs.count(AbsFileName)) {
+    *FileAdr = DIB.createFile(AbsFileName, "/");
+    *CUAdr = DIB.createCompileUnit(
+        dwarf::DW_LANG_C, *FileAdr, "llvm-crash-analyzer", /*isOptimized=*/true,
+        "", 0, StringRef(), DICompileUnit::DebugEmissionKind::FullDebug, 0,
+        true, false, DICompileUnit::DebugNameTableKind::Default, false, true);
+    CUs.insert({AbsFileName, std::make_pair(*FileAdr, *CUAdr)});
+  } else {
+    *FileAdr = CUs[AbsFileName].first;
+    *CUAdr = CUs[AbsFileName].second;
   }
+}
 
-  auto symCtx = symCtxs.GetContextAtIndex(0);
-  if (!(symCtx.IsValid() && symCtx.GetSymbol().IsValid())) {
-    LLVM_DEBUG(
-      llvm::dbgs() << "Symbols isn't valid: " << TargetName << '\n');
-    return nullptr;
-  }
+bool crash_analyzer::Decompiler::handleDebugInfo(lldb::SBAddress FuncStart,
+                                                 MachineFunction *MF,
+                                                 DISubprogram **SPAdr) {
+  // Create Debug Info.
+  DIBuilder DIB(*Module);
 
+  // Handle debug info if this comes from another module.
+  if (!FuncStart.GetFunction())
+    return false;
+
+  DIFile *File = nullptr;
+  DICompileUnit *CU = nullptr;
+  std::string FileDirInfo, FileNameInfo, AbsFileName;
+  FileDirInfo = FuncStart.GetCompileUnit().GetFileSpec().GetDirectory();
+  FileNameInfo = FuncStart.GetCompileUnit().GetFileSpec().GetFilename();
+  AbsFileName = (Twine(FileDirInfo) + Twine("/") + Twine(FileNameInfo)).str();
+
+  handleCompileUnitDI(DIB, AbsFileName, &File, &CU);
+
+  handleSubprogramDI(DIB, MF, CU, SPAdr, File);
+
+  return true;
+}
+
+bool crash_analyzer::Decompiler::decompileInstrs(Triple TheTriple,
+                                                 lldb::SBSymbolContext &SymCtx,
+                                                 lldb::SBTarget &Target,
+                                                 MachineFunction *MF) {
   lldb::SBInstructionList Instructions;
   lldb::SBAddress FuncStart, FuncEnd;
-  auto Symbol = symCtx.GetSymbol();
-  Instructions = Symbol.GetInstructions(*target);
+  auto Symbol = SymCtx.GetSymbol();
+  Instructions = Symbol.GetInstructions(Target);
   FuncStart = Symbol.GetStartAddress();
   FuncEnd = Symbol.GetEndAddress();
 
   bool HasDbgInfo = false;
   auto Fn = FuncStart.GetFunction();
-  MachineFunction *MF = &createMF(symCtx.GetSymbol().GetDisplayName());
   MachineBasicBlock *MBB = MF->CreateMachineBasicBlock();
   MF->push_back(MBB);
 
   DISubprogram *SP = nullptr;
 
-  // Create Debug Info.
-  DIBuilder DIB(*Module);
+  HasDbgInfo = handleDebugInfo(FuncStart, MF, &SP);
 
-  // Handle debug info if this comes from another module.
-  if (Fn) {
-    HasDbgInfo = true;
-    DIFile *File = nullptr;
-    DICompileUnit *CU = nullptr;
-    std::string FileDirInfo, FileNameInfo, AbsFileName;
-    FileDirInfo = FuncStart.GetCompileUnit().GetFileSpec().GetDirectory();
-    FileNameInfo = FuncStart.GetCompileUnit().GetFileSpec().GetFilename();
-    AbsFileName =
-        (Twine(FileDirInfo) + Twine("/") + Twine(FileNameInfo)).str();
+  if (!DecodeIntrsToMIR(TheTriple, Instructions, FuncStart, FuncEnd, Target,
+                        HasDbgInfo, MF, MBB,
+                        SymCtx.GetSymbol().GetDisplayName(), SP, SPs, Ctx, 0,
+                        FuncStartSymbols, true /*IsFnOutOfBt*/))
+    return false;
 
-    if (!CUs.count(AbsFileName)) {
-      File = DIB.createFile(AbsFileName, "/");
-      CU = DIB.createCompileUnit(
-          dwarf::DW_LANG_C, File, "llvm-crash-analyzer", /*isOptimized=*/true, "",
-          0, StringRef(), DICompileUnit::DebugEmissionKind::FullDebug, 0,
-          true, false, DICompileUnit::DebugNameTableKind::Default, false,
-          true);
-      CUs.insert({AbsFileName, std::make_pair(File, CU)});
-    } else {
-      File = CUs[AbsFileName].first;
-      CU = CUs[AbsFileName].second;
-    }
+  return true;
+}
 
-    auto &F = MF->getFunction();
-    auto SPType = DIB.createSubroutineType(DIB.getOrCreateTypeArray(None));
-    DISubprogram::DISPFlags SPFlags =
-        DISubprogram::SPFlagDefinition | DISubprogram::SPFlagOptimized;
-    auto sp = DIB.createFunction(CU, F.getName(), F.getName(), File, 1,
-                                 SPType, 1, DINode::FlagZero, SPFlags);
-    (const_cast<Function *>(&F))->setSubprogram(sp);
-    SP = sp;
-    DIB.finalizeSubprogram(SP);
-    if (!SPs.count(MF->getName()))
-      SPs.insert({MF->getName(), SP});
+MachineFunction* crash_analyzer::Decompiler::decompileOnDemand(StringRef TargetName) {
+  if (TargetName == "")
+    return nullptr;
+
+  if (!DecTarget)
+    return nullptr;
+
+  if (AlreadyDecompiledFns.count(TargetName))
+    return AlreadyDecompiledFns[TargetName];
+
+  auto SymCtxs = DecTarget->FindFunctions(TargetName.data());
+  if (SymCtxs.GetSize() != 1) {
+    LLVM_DEBUG(
+      llvm::dbgs() << "Multiple symbols found for: " << TargetName << '\n');
+    return nullptr;
   }
 
-  if (!DecodeIntrsToMIR(mTriple, Instructions, FuncStart, FuncEnd, *target, HasDbgInfo,
-                   MF, MBB, symCtx.GetSymbol().GetDisplayName(), SP,
-                   SPs, Ctx, 0, FuncStartSymbols, true /*IsFnOutOfBt*/))
+  auto SymCtx = SymCtxs.GetContextAtIndex(0);
+  if (!(SymCtx.IsValid() && SymCtx.GetSymbol().IsValid())) {
+    LLVM_DEBUG(
+      llvm::dbgs() << "Symbols isn't valid: " << TargetName << '\n');
+    return nullptr;
+  }
+
+  MachineFunction *MF = &createMF(SymCtx.GetSymbol().GetDisplayName());
+  if (!decompileInstrs(DecTriple, SymCtx, *DecTarget, MF))
     return nullptr;
 
   // Functions that are out of backtrace have 0 crash order.

@@ -15,6 +15,7 @@
 #include "llvm/ADT/SmallSet.h"
 #include "llvm/ADT/StringSet.h"
 #include "llvm/CodeGen/MachineFunction.h"
+#include "llvm/IR/DIBuilder.h"
 #include "llvm/MC/MCDisassembler/MCDisassembler.h"
 #include "llvm/Object/ObjectFile.h"
 #include "llvm/Support/Error.h"
@@ -78,7 +79,7 @@ class Decompiler {
 
   SmallVector<long, 8> FunctionsThatAreNotInBT;
 
-  lldb::SBTarget *target = nullptr;
+  lldb::SBTarget *DecTarget = nullptr;
 
   // Store debug info compile units for coresponding files.
   std::unordered_map<std::string, std::pair<DIFile *, DICompileUnit *>> CUs;
@@ -86,7 +87,7 @@ class Decompiler {
   // Store debug info for subprograms for coresponding functions.
   std::unordered_map<std::string, DISubprogram *> SPs;
 
-  Triple mTriple;
+  Triple DecTriple;
   static LLVMContext Ctx;
   // Used to reconstruct the target from CALLs.
   // FIXME: Use `image lookup --address` in order to find
@@ -112,7 +113,7 @@ public:
 
   /// This will perform disassemble and transformation to LLVM MIR part.
   llvm::Error run(StringRef InputFile,
-                  SmallVectorImpl<StringRef> &functionsFromCoreFile,
+                  SmallVectorImpl<StringRef> &FunctionsFromCoreFile,
                   FrameToRegsMap &FrameToRegs,
                   SmallVectorImpl<BlameFunction> &BlameTrace,
                   std::map<llvm::StringRef, lldb::SBFrame> &FrameInfo,
@@ -141,9 +142,21 @@ public:
 
   SmallVector<MachineFunction *, 8> &getBlameMFs() { return BlameMFs; }
 
-  void setTarget(lldb::SBTarget *t) { target = t; }
-  lldb::SBTarget *getTarget() { return target; }
+  void setTarget(lldb::SBTarget *T) { DecTarget = T; }
+  lldb::SBTarget *getTarget() { return DecTarget; }
 
+  void handleSubprogramDI(DIBuilder &DIB, MachineFunction *MF,
+                          DICompileUnit *CU, DISubprogram **SPAdr,
+                          DIFile *File);
+
+  void handleCompileUnitDI(DIBuilder &DIB, std::string AbsFileName,
+                           DIFile **FileAdr, DICompileUnit **CUAdr);
+
+  bool handleDebugInfo(lldb::SBAddress FuncStart, MachineFunction *MF,
+                       DISubprogram **SPAdr);
+
+  bool decompileInstrs(Triple TheTriple, lldb::SBSymbolContext &symCtx,
+                       lldb::SBTarget &target, MachineFunction *MF);
   MachineFunction* decompileOnDemand(StringRef TargetName);
   MachineFunction* decompileInlinedFnOutOfbt(StringRef TargetName,
       DIFile *File);
