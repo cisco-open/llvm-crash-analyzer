@@ -12,6 +12,7 @@
 
 #include "Decompiler/Decompiler.h"
 #include "Decompiler/FixRegStateFlags.h"
+#include "Target/CATargetInfo.h"
 
 #include "llvm/ADT/Triple.h"
 #include "llvm/CodeGen/MIRPrinter.h"
@@ -551,10 +552,11 @@ llvm::Error crash_analyzer::Decompiler::run(
 
     // Get the address of the latest instruction executed within a frame.
     auto Regs = FrameToRegs.find(FunctionName);
+    auto CATI = getCATargetInfoInstance();
     // Get the value of $rip register, since it holds the address of current
     // instr being executed.
     for (auto &reg : Regs->second) {
-      if (reg.regName == "rip") {
+      if (CATI->isPCRegister(reg.regName)) {
         InstrAddr = reg.regValue;
         std::istringstream converter(InstrAddr);
         converter >> std::hex >> AddrValue;

@@ -14,6 +14,7 @@
 
 #include "Analysis/TaintAnalysis.h"
 #include "Decompiler/Decompiler.h"
+#include "Target/CATargetInfo.h"
 
 #include "llvm/ADT/Triple.h"
 #include "llvm/CodeGen/MIRParser/MIRParser.h"
@@ -107,11 +108,29 @@ int main(int argc, char **argv) {
   std::unique_ptr<MIRParser> MIR;
   MachineModuleInfo *MMI;
 
-  // TODO: Read the Triple from the MIR file.
-  Triple TheTriple(Triple::normalize(sys::getDefaultTargetTriple()));
+  MIR = createMIRParserFromFile(InputFilename, Err, Context,
+                                setMIRFunctionAttributes);
+  if (!MIR) {
+    WithColor::error(errs()) << "unable to parse the mir input file\n";
+    exit(1);
+  }
+
+  M = MIR->parseIRModule();
+
+  // Read the Triple from the MIR file, if not available, use default triple.
+  Triple TheTriple(M->getTargetTriple());
+  if (TheTriple.getTriple().empty())
+    TheTriple.setTriple(sys::getDefaultTargetTriple());
 
   std::string ErrorStr;
   std::string TripleName;
+
+  if (!isCATargetSupported(TheTriple)) {
+    llvm::errs() << "\n Crash Analyzer TA does NOT support target " << TheTriple.getTriple();
+    exit(1);
+  }
+  CATargetInfo::initializeCATargetInfo(&TheTriple);
+
   // Get the target.
   const Target *TheTarget =
       TargetRegistry::lookupTarget(TripleName, TheTriple, ErrorStr);
@@ -121,7 +140,6 @@ int main(int argc, char **argv) {
   }
 
   TripleName = TheTriple.getTriple();
-
   std::unique_ptr<TargetMachine> TM;
   TM.reset(TheTarget->createTargetMachine(TripleName, "", "", TargetOptions(), None));
   if (!TM) {
@@ -129,14 +147,7 @@ int main(int argc, char **argv) {
     exit(1);
   }
 
-  MIR = createMIRParserFromFile(InputFilename, Err, Context,
-                                setMIRFunctionAttributes);
-  if (!MIR) {
-    WithColor::error(errs()) << "unable to parse the mir input file\n";
-    exit(1);
-  }
 
-  M = MIR->parseIRModule();
   M->setDataLayout(TM->createDataLayout());
 
   if (!M) {

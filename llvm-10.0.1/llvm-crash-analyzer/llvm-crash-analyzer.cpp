@@ -13,6 +13,7 @@
 #include "Decompiler/Decompiler.h"
 #include "CoreFile/CoreFile.h"
 #include "Analysis/TaintAnalysis.h"
+#include "Target/CATargetInfo.h"
 
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/StringSet.h"
@@ -140,7 +141,8 @@ int main(int argc, char **argv) {
   auto FrameToRegs = coreFile.getGRPsFromFrame();
 
   // Implement decompiler.
-  Triple Triple(Triple::normalize(sys::getDefaultTargetTriple()));
+  std::string TargetTripleString = coreFile.getTarget().GetTriple();
+  Triple Triple(Triple::normalize(TargetTripleString));
 
   auto Decompiler = crash_analyzer::Decompiler::create(Triple);
   if (!Decompiler)
@@ -155,12 +157,13 @@ int main(int argc, char **argv) {
   for (StringRef Fn : functionsFromCoreFile)
     BlameTrace.push_back({Fn, nullptr});
 
-  std::string target_arch = coreFile.getTarget().GetTriple();
-  size_t found = target_arch.find("x86_64");
-  if (found == std::string::npos) {
-    llvm::errs() << "\n Crash Analyzer does NOT support target " << target_arch;
+  // Only x86_64 supported.
+  if (!isCATargetSupported(Triple)) {
+    llvm::errs() << "\n Crash Analyzer does NOT support target "
+                 << TargetTripleString << "\n";
     return 0;
   }
+  CATargetInfo::initializeCATargetInfo(&Triple);
 
   auto Err = Dec->run(InputFilename, functionsFromCoreFile, FrameToRegs,
                       BlameTrace, coreFile.getFrameInfo(),

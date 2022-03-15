@@ -37,6 +37,7 @@ unsigned Node::NextID = 0;
 bool llvm::crash_analyzer::operator==(const TaintInfo &T1, const TaintInfo &T2) {
   const MachineFunction *MF = T1.Op->getParent()->getMF();
   auto TRI = MF->getSubtarget().getRegisterInfo();
+  auto CATI = getCATargetInfoInstance();
   if (!T1.IsTaintMemAddr() && !T2.IsTaintMemAddr()) {
     // Both operands needs to be reg operands
     if (!T1.Op->isReg() || !T2.Op->isReg())
@@ -47,7 +48,7 @@ bool llvm::crash_analyzer::operator==(const TaintInfo &T1, const TaintInfo &T2) 
       if (T1.Offset && T2.Offset) {
         std::string RegName = TRI->getRegAsmName(T1.Op->getReg()).lower();
         // Compare offsets only if they point to a stack location
-        if (RegName == "rsp" || RegName == "rbp") {
+        if (CATI->isSPRegister(RegName) || CATI->isBPRegister(RegName)) {
           return *T1.Offset == *T2.Offset;
         }
       } else
@@ -291,6 +292,7 @@ void llvm::crash_analyzer::TaintAnalysis::removeFromTaintList(
 // in analyzing the function.
 bool
 crash_analyzer::TaintAnalysis::shouldAnalyzeCall(SmallVectorImpl<TaintInfo> &TL) {
+  auto CATI = getCATargetInfoInstance();
   for (auto itr = TL.begin(); itr != TL.end(); ++itr) {
     const MachineOperand* Op = itr->Op;
     if (!Op->isReg())
@@ -298,7 +300,7 @@ crash_analyzer::TaintAnalysis::shouldAnalyzeCall(SmallVectorImpl<TaintInfo> &TL)
     const MachineFunction *MF = Op->getParent()->getMF();
     auto TRI = MF->getSubtarget().getRegisterInfo();
     std::string RegName = TRI->getRegAsmName(Op->getReg()).lower();
-    if (RegName == "rax" || RegName == "eax" || RegName == "ax" || RegName == "al")
+    if (CATI->isRetValRegister(RegName))
       return true;
     // If a global variable is tainted also return true.
     // (If operand is noreg and non-zero offset).

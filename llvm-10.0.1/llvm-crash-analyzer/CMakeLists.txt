@@ -33,4 +33,5 @@ target_link_libraries (llvm-crash-analyzer
     CrashAnalyzerDecompiler
     CrashAnalyzerCoreFile
     CrashAnalyzerTaintAnalysis
+    CrashAnalyzerTarget
   )

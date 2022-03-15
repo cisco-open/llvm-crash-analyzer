@@ -13,9 +13,11 @@ llvm_add_library(CrashAnalyzerTaintAnalysis
   DEPENDS
     intrinsics_gen
     CrashAnalyzerDecompiler
+    CrashAnalyzerTarget
   )
 
 target_link_libraries (CrashAnalyzerTaintAnalysis
   PRIVATE
     CrashAnalyzerDecompiler
+    CrashAnalyzerTarget
   )

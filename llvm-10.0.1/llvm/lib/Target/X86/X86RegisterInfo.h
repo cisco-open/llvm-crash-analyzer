@@ -104,8 +104,6 @@ public:
   const MCPhysReg *
   getCalleeSavedRegs(const MachineFunction* MF) const override;
 
-  bool isCallsRetValReg(unsigned Reg) const override;
-
   const MCPhysReg *
   getCalleeSavedRegsViaCopy(const MachineFunction *MF) const;
   const uint32_t *getCallPreservedMask(const MachineFunction &MF,

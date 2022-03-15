@@ -418,11 +418,6 @@ public:
   virtual const MCPhysReg*
   getCalleeSavedRegs(const MachineFunction *MF) const = 0;
 
-  /// E.g. X86 target holds it within $rax/$eax.
-  virtual bool isCallsRetValReg(unsigned Reg) const {
-    return false;
-  }
-
   /// Return a mask of call-preserved registers for the given calling convention
   /// on the current function. The mask should include all call-preserved
   /// aliases. This is used by the register allocator to determine which

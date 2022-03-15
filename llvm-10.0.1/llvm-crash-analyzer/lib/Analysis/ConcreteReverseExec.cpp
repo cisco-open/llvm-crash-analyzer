@@ -56,7 +56,7 @@ void ConcreteReverseExec::updateCurrRegVal(std::string Reg, std::string Val) {
 
       // Register value is unknown.
       if (R.Value == "") {
-        if (RegAliases.getRegSize(Reg) == 64) {
+        if (CATI->getRegSize(Reg) == 64) {
           const unsigned RegValInBits = (Val.size() - 2) / 2 * 8;
           if (RegValInBits <= 64)
             R.Value = Val;
@@ -67,7 +67,7 @@ void ConcreteReverseExec::updateCurrRegVal(std::string Reg, std::string Val) {
             // get last 8 bytes.
             R.Value = "0x" + Val.substr(/*8 bytes*/Val.size() - 16);
           }
-        } else if (RegAliases.getRegSize(Reg) == 32) {
+        } else if (CATI->getRegSize(Reg) == 32) {
           const unsigned RegValInBits = (Val.size() - 2) / 2 * 8;
           if (RegValInBits <= 32)
             R.Value = Val;
@@ -78,7 +78,7 @@ void ConcreteReverseExec::updateCurrRegVal(std::string Reg, std::string Val) {
             // get last 4 bytes.
             R.Value = "0x" + Val.substr(/*4 bytes*/Val.size() - 8);
           }
-        } else if (RegAliases.getRegSize(Reg) == 16) {
+        } else if (CATI->getRegSize(Reg) == 16) {
           const unsigned RegValInBits = (Val.size() - 2) / 2 * 8;
           if (RegValInBits <= 16)
             R.Value = Val;
@@ -190,21 +190,21 @@ void ConcreteReverseExec::execute(const MachineInstr &MI) {
         Val -= RegImm->Imm;
         // We should update all reg aliases as well.
         // TODO: Improve this.
-        auto regAliasesInfo = getRegAliasesInfo();
-        auto regInfoId = regAliasesInfo.getID(RegName);
+        auto CATI = getCATargetInfo();
+        auto regInfoId = CATI->getID(RegName);
         if (!regInfoId) {
           updateCurrRegVal(RegName, "");
           continue;
         }
-        auto regTripple = regAliasesInfo.getRegMap(*regInfoId);
+        auto RegsTuple = CATI->getRegMap(*regInfoId);
         //regVal.size() - 2 for 0x chars.
         std::string newValue = intToHex(Val, regVal.size() - 2);
         // update reg aliases as well.
         // e.g. if $eax is modified, update both $rax and $ax as well.
-        updateCurrRegVal(std::get<0>(regTripple), newValue);
-        updateCurrRegVal(std::get<1>(regTripple), newValue);
-        updateCurrRegVal(std::get<2>(regTripple), newValue);
-        updateCurrRegVal(std::get<3>(regTripple), newValue);
+        updateCurrRegVal(std::get<0>(RegsTuple), newValue);
+        updateCurrRegVal(std::get<1>(RegsTuple), newValue);
+        updateCurrRegVal(std::get<2>(RegsTuple), newValue);
+        updateCurrRegVal(std::get<3>(RegsTuple), newValue);
         dump();
         continue;
       }
@@ -225,15 +225,15 @@ void ConcreteReverseExec::execute(const MachineInstr &MI) {
           updateCurrRegVal(RegName, "");
           continue;
         }
-        auto regTripple = regAliasesInfo.getRegMap(*regInfoId);
+        auto RegsTuple = regAliasesInfo.getRegMap(*regInfoId);
         //regVal.size() - 2 for 0x chars.
         std::string newValue = intToHex(Val, regVal.size() - 2);
         // update reg aliases as well.
         // e.g. if $eax is modified, update both $rax and $ax as well.
-        updateCurrRegVal(std::get<0>(regTripple), newValue);
-        updateCurrRegVal(std::get<1>(regTripple), newValue);
-        updateCurrRegVal(std::get<2>(regTripple), newValue);
-        updateCurrRegVal(std::get<3>(regTripple), newValue);
+        updateCurrRegVal(std::get<0>(RegsTuple), newValue);
+        updateCurrRegVal(std::get<1>(RegsTuple), newValue);
+        updateCurrRegVal(std::get<2>(RegsTuple), newValue);
+        updateCurrRegVal(std::get<3>(RegsTuple), newValue);
         dump();
         return;
       }*/
@@ -242,18 +242,18 @@ void ConcreteReverseExec::execute(const MachineInstr &MI) {
       LLVM_DEBUG(llvm::dbgs()
                 << "Concrete Rev Exec not supported for \n";
 		MI.dump(););
-      auto regAliasesInfo = getRegAliasesInfo();
-      auto regInfoId = regAliasesInfo.getID(RegName);
+      auto CATI = getCATargetInfo();
+      auto regInfoId = CATI->getID(RegName);
       if (!regInfoId) {
         updateCurrRegVal(RegName, "");
         dump();
         continue;
       }
-      auto regTripple = regAliasesInfo.getRegMap(*regInfoId);
-      updateCurrRegVal(std::get<0>(regTripple), "");
-      updateCurrRegVal(std::get<1>(regTripple), "");
-      updateCurrRegVal(std::get<2>(regTripple), "");
-      updateCurrRegVal(std::get<3>(regTripple), "");
+      auto RegsTuple = CATI->getRegMap(*regInfoId);
+      updateCurrRegVal(std::get<0>(RegsTuple), "");
+      updateCurrRegVal(std::get<1>(RegsTuple), "");
+      updateCurrRegVal(std::get<2>(RegsTuple), "");
+      updateCurrRegVal(std::get<3>(RegsTuple), "");
       dump();
     }
   }

@@ -7,6 +7,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "Decompiler/FixRegStateFlags.h"
+#include "Target/CATargetInfo.h"
 
 #include "llvm/CodeGen/TargetInstrInfo.h"
 #include "llvm/CodeGen/TargetLowering.h"
@@ -20,6 +21,7 @@ bool crash_analyzer::FixRegStateFlags::run(MachineFunction &MF) {
   // TODO: Add frame-setup for the PUSH64r $rbp and
   // destroy-frame for the $rbp = POP64r.
   const auto &TRI = MF.getSubtarget().getRegisterInfo();
+  auto CATI = getCATargetInfoInstance();
 
   for (auto &MBB : MF) {
     // TODO: Revisit this logic. We keep tracking of
@@ -43,7 +45,8 @@ bool crash_analyzer::FixRegStateFlags::run(MachineFunction &MF) {
           // The call maight have defined the register impicitly, e.g. eax/rax
           // for the return value.
           // TODO: Add implicit defs for arguments after calls (e.g. $rdi).
-          if (Call && TRI->isCallsRetValReg(Reg)) {
+          std::string RegName = TRI->getRegAsmName(Reg).lower();
+          if (Call && CATI->isRetValRegister(RegName)) {
             MachineOperand MOReg =
                 MachineOperand::CreateReg(MO.getReg(), true, true);
             Call->addOperand(MOReg);
