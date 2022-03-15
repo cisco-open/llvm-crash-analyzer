@@ -161,6 +161,14 @@ bool RegisterEquivalence::applyRegisterCopy(MachineInstr &MI) {
   RegisterOffsetPair Src{SrcReg};
   RegisterOffsetPair Dest{DestReg};
 
+  // Erase entries for deref->(Dest)+(Offset) also since the
+  // Dest is redefined.
+  auto &Regs = RegInfo[&MI];
+  for (auto &eqs : Regs) {
+    if (eqs.first.RegNum == Dest.RegNum && eqs.first.IsDeref)
+      invalidateRegEq(MI, eqs.first);
+  }
+
   invalidateRegEq(MI, Dest);
 
   // Set (transitive) equivalence.
@@ -188,6 +196,14 @@ bool RegisterEquivalence::applyLoad(MachineInstr &MI) {
   RegisterOffsetPair Src{SrcReg, SrcOffset};
   Src.IsDeref = true;
   RegisterOffsetPair Dest{DestReg};
+
+  // Erase entries for deref->(Dest)+(Offset) also since the
+  // Dest is redefined.
+  auto &Regs = RegInfo[&MI];
+  for (auto &eqs : Regs) {
+    if (eqs.first.RegNum == Dest.RegNum && eqs.first.IsDeref)
+      invalidateRegEq(MI, eqs.first);
+  }
 
   // First invalidate dest reg, since it is being rewritten.
   invalidateRegEq(MI, Dest);
@@ -253,8 +269,17 @@ bool RegisterEquivalence::applyCall(MachineInstr &MI) {
 bool RegisterEquivalence::applyRegDef(MachineInstr &MI) {
   for (MachineOperand &MO : MI.operands()) {
     if (MO.isReg() && MO.isDef()) {
-      RegisterOffsetPair reg{MO.getReg()};
-      invalidateRegEq(MI, reg);
+      RegisterOffsetPair RegDef{MO.getReg()};
+
+      // Erase entries for deref->(RegDef)+(Offset) also since the
+      // RegDef is redefined.
+      auto &Regs = RegInfo[&MI];
+      for (auto &eqs : Regs) {
+        if (eqs.first.RegNum == RegDef.RegNum && eqs.first.IsDeref)
+          invalidateRegEq(MI, eqs.first);
+      }
+
+      invalidateRegEq(MI, RegDef);
     }
   }
   return true;
