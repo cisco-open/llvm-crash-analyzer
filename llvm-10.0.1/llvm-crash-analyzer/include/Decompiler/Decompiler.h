@@ -145,6 +145,8 @@ public:
   void setTarget(lldb::SBTarget *T) { DecTarget = T; }
   lldb::SBTarget *getTarget() { return DecTarget; }
 
+  class Module& getModule() { return *Module.get(); }
+
   void handleSubprogramDI(DIBuilder &DIB, MachineFunction *MF,
                           DICompileUnit *CU, DISubprogram **SPAdr,
                           DIFile *File);

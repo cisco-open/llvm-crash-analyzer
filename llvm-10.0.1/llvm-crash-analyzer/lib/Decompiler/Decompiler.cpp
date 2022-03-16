@@ -54,17 +54,6 @@ using namespace llvm;
 static cl::opt<bool> ShowDisassembly("show-disassemble", cl::Hidden,
                                      cl::init(false));
 
-static cl::opt<std::string> PrintDecMIR("print-decompiled-mir",
-                                        cl::desc("Print decompiled LLVM MIR."),
-                                        cl::value_desc("filename"),
-                                        cl::init(""));
-
-// TODO: Remove this. This option isn't needed anymore, since we decompileOnDemand
-// during TA when needed to avoid poor performance in big projects when we have
-// big number of calls.
-static cl::opt<bool> DecompileFnsOutOfbt("decompile-fns-out-of-bt", cl::Hidden,
-                                         cl::init(false));
-
 LLVMContext crash_analyzer::Decompiler::Ctx;
 
 crash_analyzer::Decompiler::Decompiler() {
@@ -561,38 +550,8 @@ llvm::Error crash_analyzer::Decompiler::run(
     if (FunctionsToDecompile.empty()) break;
   }
 
-  // Create MFs for function out of backtrace.
-  // NOTE: Always recalculate the size() for the FunctionsThatAreNotInBT
-  // since we might have nested calls that may be blame ones.
-
-  // This will be used for mapping already decompiled functions, so we do not
-  // do it twice.
-  // FIXME: This is now handled in the decompileOnDemand() which is being called
-  // during Taint Analysis.
-  SmallSet<long, 8> AlreadyDecompiledMFs;
-  if (DecompileFnsOutOfbt) {
-    for (size_t i = 0; i < FunctionsThatAreNotInBT.size(); i++) {
-      //break;
-      auto NonBTFnAddr = FunctionsThatAreNotInBT[i];
-      if (AlreadyDecompiledMFs.count(NonBTFnAddr))
-        continue;
-      AlreadyDecompiledMFs.insert(NonBTFnAddr);
-      lldb::SBAddress Addr(NonBTFnAddr, Target);
-      auto SymCtx = Target.ResolveSymbolContextForAddress(
-                        Addr, lldb::eSymbolContextEverything);
-      if (!(SymCtx.IsValid() && SymCtx.GetSymbol().IsValid()))
-        continue;
-
-      MachineFunction *MF = &createMF(SymCtx.GetSymbol().GetDisplayName());
-      if (!decompileInstrs(DecTriple, SymCtx, Target, MF))
-        return make_error<StringError>("unable to decompile an instruction",
-                                       inconvertibleErrorCode());
-
-      BlameTrace.push_back({SymCtx.GetSymbol().GetDisplayName(), MF});
-      // Functions that are out of backtrace have 0 crash order.
-      MF->setCrashOrder(0);
-    }
-  }
+  // Create MFs for function out of backtrace. This is now handled in the
+  // decompileOnDemand() which is being called during Taint Analysis.
 
   // Run FixRegStateFlags pass for each basic block.
   FixRegStateFlags FRSF;
@@ -601,26 +560,6 @@ llvm::Error crash_analyzer::Decompiler::run(
   }
 
   MMI->finalize();
-
-  if (PrintDecMIR != "") {
-    StringRef FileName = PrintDecMIR;
-    if (!FileName.endswith(".mir")) {
-      return make_error<StringError>("MIR file must be with '.mir' extension.",
-                                     inconvertibleErrorCode());
-    }
-
-    std::error_code EC;
-    raw_fd_ostream OS_FILE{PrintDecMIR, EC, sys::fs::OF_Text};
-    if (EC) {
-      errs() << "Could not open file: " << EC.message() << ", " << PrintDecMIR
-             << '\n';
-      return errorCodeToError(EC);
-    }
-    printMIR(OS_FILE, *Module.get());
-    for (auto &BF : BlameTrace) {
-      if (BF.MF) printMIR(OS_FILE, *BF.MF);
-    }
-  }
 
   // Rememer the MFs for analysis.
   for (auto &F : *(Module.get())) {

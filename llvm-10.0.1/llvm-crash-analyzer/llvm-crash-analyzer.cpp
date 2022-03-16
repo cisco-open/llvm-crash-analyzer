@@ -18,6 +18,7 @@
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/StringSet.h"
 #include "llvm/ADT/Triple.h"
+#include "llvm/CodeGen/MIRPrinter.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/Host.h"
@@ -78,6 +79,11 @@ static opt<bool> PrintPotentialCrashCauseLocation(
     "print-potential-crash-cause-loc", cl::init(false),
     cl::desc("Print line:column that could be the cause of the crash."),
     cat(CrashAnalyzer));
+
+static cl::opt<std::string> PrintDecMIR("print-decompiled-mir",
+                                        cl::desc("Print decompiled LLVM MIR."),
+                                        cl::value_desc("filename"),
+                                        cl::init(""));
 } // namespace
 /// @}
 //===----------------------------------------------------------------------===//
@@ -196,6 +202,26 @@ int main(int argc, char **argv) {
   Dec->setTarget(&coreFile.getTarget());
   TA.setDecompiler(Dec);
   TA.runOnBlameModule(BlameTrace);
+
+  if (PrintDecMIR != "") {
+    StringRef FileName = PrintDecMIR;
+    if (!FileName.endswith(".mir")) {
+		errs() << "MIR file must be with '.mir' extension.\n";
+      return 0;
+    }
+
+    std::error_code EC;
+    raw_fd_ostream OS_FILE{PrintDecMIR, EC, sys::fs::OF_Text};
+    if (EC) {
+      errs() << "Could not open file: " << EC.message() << ", " << PrintDecMIR
+             << '\n';
+      return 0;
+    }
+    printMIR(OS_FILE, Dec->getModule());
+    for (auto &BF : BlameTrace) {
+      if (BF.MF) printMIR(OS_FILE, *BF.MF);
+    }
+  }
 
   return exit_code;
 }

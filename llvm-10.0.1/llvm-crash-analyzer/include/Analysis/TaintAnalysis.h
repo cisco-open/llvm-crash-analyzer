@@ -79,8 +79,8 @@ public:
   TaintAnalysis(StringRef DotFileName, bool PrintPotentialCrashCauseLocation);
   TaintAnalysis(bool b) : isCrashAnalyzerTATool(b) {}
 
-  bool runOnBlameModule(const BlameModule &BM);
-  bool runOnBlameMF(const BlameModule &BM, const MachineFunction &MF,
+  bool runOnBlameModule(BlameModule &BM);
+  bool runOnBlameMF(BlameModule &BM, const MachineFunction &MF,
 	TaintDataFlowGraph &TaintDFG, bool CalleeNotInBT,
     unsigned levelOfCalledFn,
     SmallVector<TaintInfo, 8> *TL_Of_Caller = nullptr,

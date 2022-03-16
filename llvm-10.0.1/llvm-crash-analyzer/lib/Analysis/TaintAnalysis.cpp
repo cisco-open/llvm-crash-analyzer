@@ -683,7 +683,7 @@ RegisterEquivalence *crash_analyzer::TaintAnalysis::getREAnalysis() {
 
 // Return true if taint is terminated.
 // Return false otherwise.
-bool crash_analyzer::TaintAnalysis::runOnBlameMF(const BlameModule &BM,
+bool crash_analyzer::TaintAnalysis::runOnBlameMF(BlameModule &BM,
                                                const MachineFunction &MF,
                                                TaintDataFlowGraph &TaintDFG,
                                                bool CalleeNotInBT,
@@ -813,6 +813,7 @@ bool crash_analyzer::TaintAnalysis::runOnBlameMF(const BlameModule &BM,
                   runOnBlameMF(BM, *MFOnDemand, TaintDFG, true, ++levelOfCalledFn,
                                &TL_Mbb, &MI);
                   MFOnDemand->setCrashOrder(0);
+                  BM.push_back({MFOnDemand->getName(), MFOnDemand});
                 }
               } else {
                 LLVM_DEBUG(
@@ -889,6 +890,7 @@ bool crash_analyzer::TaintAnalysis::runOnBlameMF(const BlameModule &BM,
               runOnBlameMF(BM, *MFOnDemand, TaintDFG, true, ++levelOfCalledFn,
                            &TL_Mbb, &MI);
               MFOnDemand->setCrashOrder(0);
+              BM.push_back({MFOnDemand->getName(), MFOnDemand});
             }
           } else {
             LLVM_DEBUG(
@@ -955,7 +957,7 @@ static bool isInline(MachineFunction* MF) {
 // TODO: Based on the reason of the crash (e.g. signal or error code) read from
 // the core file, perform different types of analysis. At the moment, we are
 // looking for an instruction that has coused a read from null address.
-bool crash_analyzer::TaintAnalysis::runOnBlameModule(const BlameModule &BM) {
+bool crash_analyzer::TaintAnalysis::runOnBlameModule(BlameModule &BM) {
   bool AnalysisStarted = false;
   bool Result = false;
 

@@ -1,4 +1,5 @@
 ## Test that Machine Function is being decompiled for fn out of bt.
+## That is done on demand, during TaintAnalysis.
 
 ## int * global_a;
 ##
@@ -19,14 +20,9 @@
 ##   caller1();
 ##}
 
-# RUN: %llvm-crash-analyzer --print-decompiled-mir=%t.mir --decompile-fns-out-of-bt \
+# RUN: %llvm-crash-analyzer --print-decompiled-mir=%t.mir \
 # RUN:     --core-file=%S/Inputs/core.callee-out-of-bt %S/Inputs/callee-out-of-bt
 # RUN: cat %t.mir | FileCheck %s
-
-# RUN: rm -rf %t.mir
-# RUN: %llvm-crash-analyzer --print-decompiled-mir=%t.mir  \
-# RUN:     --core-file=%S/Inputs/core.callee-out-of-bt %S/Inputs/callee-out-of-bt
-# cat %t.mir | FileCheck %s
 
 # CHECK: name: func1
 # CHECK: bb.0:
