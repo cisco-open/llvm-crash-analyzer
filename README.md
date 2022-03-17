@@ -28,7 +28,7 @@ Steps:
     $ cd llvm-project
     $ mkdir build && cd build
     $ cmake -G "Unix Makefiles" -DLLVM_ENABLE_PROJECTS="clang;llvm-crash-analyzer;lldb;" -DLLVM_ENABLE_LIBCXX=ON ../llvm -DLLDB_TEST_COMPILER=clang
-    $ make && make check-crash-blamer
+    $ make && make check-llvm-crash-analyzer
 
 ## Using the tool
 
