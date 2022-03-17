@@ -25,7 +25,7 @@ There are multiple phases as following:
 There are various steps && variants/combination of CMake usage on the LLVM project builds, but we will point to the one we use on our CISCO dev machines. For further info, please consider using the link: https://llvm.org/docs/CMake.html.
 Steps:
 
-    $ cd llvm-project
+    $ cd llvm-10.0.1
     $ mkdir build && cd build
     $ cmake -G "Unix Makefiles" -DLLVM_ENABLE_PROJECTS="clang;llvm-crash-analyzer;lldb;" -DLLVM_ENABLE_LIBCXX=ON ../llvm -DLLDB_TEST_COMPILER=clang
     $ make && make check-llvm-crash-analyzer
