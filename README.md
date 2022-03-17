@@ -25,14 +25,10 @@ There are multiple phases as following:
 There are various steps && variants/combination of CMake usage on the LLVM project builds, but we will point to the one we use on our CISCO dev machines. For further info, please consider using the link: https://llvm.org/docs/CMake.html.
 Steps:
 
-    $ export CXX=/auto/binos-tools/llvm90/llvm-9.0-p0a/bin/clang++ && export CC=/auto/binos-tools/llvm90/llvm-9.0-p0a/bin/clang
-    $ export LD_LIBRARY_PATH=/router/lib/:$LD_LIBRARY_PATH
-    $ export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/auto/binos-tools/llvm90/llvm-9.0-p0a/lib
-
+    $ cd llvm-project
     $ mkdir build && cd build
-    $ /auto/binos-tools/llvm40/tools/cmake/bin/cmake -G "Unix Makefiles" -DCMAKE_BUILD_TYPE=Release -DLLVM_ENABLE_ASSERTIONS=On -DLLVM_ENABLE_PROJECTS="clang;llvm-crash-analyzer;lldb;" -DLLVM_ENABLE_LIBCXX=ON ../llvm-crash-anal/llvm-10.0.1/llvm -DLLDB_TEST_COMPILER=/auto/binos-tools/llvm90/llvm-9.0-p0a/bin/clang 
-
-    $ make -j30 && make check-crash-blamer -j30
+    $ cmake -G "Unix Makefiles" -DLLVM_ENABLE_PROJECTS="clang;llvm-crash-analyzer;lldb;" -DLLVM_ENABLE_LIBCXX=ON ../llvm -DLLDB_TEST_COMPILER=clang
+    $ make && make check-crash-blamer
 
 ## Using the tool
 
@@ -76,16 +72,13 @@ Steps:
         Analyzing...
 
         Blame Function is b(int*)
-        From File /nobackup/djtodoro/test.cpp
-2a) too see the flow of the critical value
+        From File test.cpp
+2a) to see the flow of the critical value
 
         $ llvm-crash-analyzer --core-file=core.base-case.40698 base-case --print-taint-value-flow-as-dot=test.dot
         $ dot -Tpng test.dot -o test.png
-        The test.png:
-        https://github3.cisco.com/storage/user/8442/files/de6e5280-4c41-11ec-9a56-cb620ca8a5ac
 
-
-2b) too see the potential location (line:column) of the cause for the crash
+2b) to see the potential location (line:column) of the cause for the crash
 
         $ llvm-crash-analyzer --core-file=core.base-case.40698 base-case --print-potential-crash-cause-loc
         Crash Analyzer -- crash analyzer utility
@@ -103,7 +96,7 @@ Steps:
         Analyzing...
 
         Blame Function is f
-        From File /nobackup/djtodoro/llvm_trunk/NEW/crash-blamer/CISCO-git/llvm-crash-anal/c_test_cases/test0.c:18:8
+        From File test0.c:18:8
 
 
 3) to see some intermediate steps check options such as
@@ -114,18 +107,3 @@ Steps:
           $ llvm-crash-analyzer base-case --core-file=core.base-case.40698 --print-dfg-as-dot=base-case.dot
           $ dot -Tpng base-case.dot -o base-case.png
        iiii) ...
-
-## Commiting to the repository
-In order to pass every commit through a code reioew process, it is suggested to create a git pull request for each commit. First create a local branch:
-
-       $ git checkout -tb "branch_name" origin/master
-
-Make your changes and commit them locally:
-
-       $ git commit
-
-Push your changes to GitHub:
-
-       $ git push origin branch_name 
-
-This should create a git pull request on GitHub. Once the changes have been approved, you can merge the changes in.
