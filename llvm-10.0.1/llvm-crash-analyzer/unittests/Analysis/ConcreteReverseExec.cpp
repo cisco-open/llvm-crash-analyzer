@@ -181,7 +181,7 @@ regInfo:         { GPRegs:
     - { reg: r13l, value: '0xa0' }
     - { reg: r14l, value: '0x00' }
     - { reg: r15l, value: '0x00' } }
-crashOreder:     1
+crashOrder:     1
 body:             |
   bb.0:
     successors: %bb.1(0x40000000), %bb.2(0x40000000)

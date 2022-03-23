@@ -186,7 +186,7 @@ regInfo:         { GPRegs:
     - { reg: r15l, value: '0x00' } }
 constants:       []
 machineFunctionInfo: {}
-crashOreder:     1
+crashOrder:     1
 body:             |
   bb.0:
     liveins: $rbp, $rdi
@@ -314,7 +314,7 @@ regInfo:         { GPRegs:
     - { reg: r15l, value: '' } }
 constants:       []
 machineFunctionInfo: {}
-crashOreder:     2
+crashOrder:     2
 body:             |
   bb.0:
     liveins: $rbp, $rdi
@@ -447,7 +447,7 @@ regInfo:         { GPRegs:
     - { reg: r15l, value: '' } }
 constants:       []
 machineFunctionInfo: {}
-crashOreder:     3
+crashOrder:     3
 body:             |
   bb.0:
     liveins: $rbp
@@ -578,7 +578,7 @@ regInfo:         { GPRegs:
     - { reg: r15l, value: '' } }
 constants:       []
 machineFunctionInfo: {}
-crashOreder:     4
+crashOrder:     4
 body:             |
   bb.0:
     liveins: $rbp

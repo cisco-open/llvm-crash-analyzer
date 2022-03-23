@@ -699,7 +699,7 @@ template <> struct MappingTraits<MachineFunction> {
     YamlIO.mapOptional("machineFunctionInfo", MF.MachineFuncInfo);
     if (!YamlIO.outputting() || !MF.JumpTableInfo.Entries.empty())
       YamlIO.mapOptional("jumpTable", MF.JumpTableInfo, MachineJumpTable());
-    YamlIO.mapOptional("crashOreder", MF.CrashOrder, (unsigned)0);
+    YamlIO.mapOptional("crashOrder", MF.CrashOrder, (unsigned)0);
     YamlIO.mapOptional("body", MF.Body, BlockStringValue());
   }
 };

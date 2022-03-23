@@ -415,7 +415,7 @@ private:
   CallSiteInfoMap::iterator getCallSiteInfo(const MachineInstr *MI);
 
   RegisterCrashInfo MFRegInfo;
-  
+
   unsigned CrashOrder = 0;
 
   // Callbacks for insertion and removal.

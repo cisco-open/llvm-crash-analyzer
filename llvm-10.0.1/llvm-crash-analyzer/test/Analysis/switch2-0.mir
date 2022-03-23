@@ -169,7 +169,7 @@ regInfo:         { GPRegs:
     - { reg: r15l, value: '0x00' } }
 constants:       []
 machineFunctionInfo: {}
-crashOreder:     1
+crashOrder:     1
 body:             |
   bb.0:
     successors: %bb.1(0x40000000), %bb.5(0x40000000)
@@ -352,7 +352,7 @@ regInfo:         { GPRegs:
     - { reg: r15l, value: '' } }
 constants:       []
 machineFunctionInfo: {}
-crashOreder:     2
+crashOrder:     2
 body:             |
   bb.0:
     liveins: $rbp
