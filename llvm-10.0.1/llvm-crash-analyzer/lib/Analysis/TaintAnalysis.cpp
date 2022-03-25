@@ -807,7 +807,8 @@ bool crash_analyzer::TaintAnalysis::runOnBlameMF(BlameModule &BM,
                 if (!MFOnDemand) {
                   LLVM_DEBUG(llvm::dbgs()
                              << "#### Callee not found: " << TargetName << "\n";);
-                  continue;
+		  //TODO: Check if the Analysis can still be continued
+                  return Result;
                 } else {
                   MFOnDemand->setCrashOrder(MF.getCrashOrder());
                   runOnBlameMF(BM, *MFOnDemand, TaintDFG, true, ++levelOfCalledFn,
@@ -819,7 +820,8 @@ bool crash_analyzer::TaintAnalysis::runOnBlameMF(BlameModule &BM,
                 LLVM_DEBUG(
                   llvm::dbgs()
                       << "#### Callee not found: " << TargetName << "\n";);
-                continue;
+		//TODO: Check if the Analysis can still be continued
+		return Result;
               }
             }
           }
@@ -967,13 +969,7 @@ bool crash_analyzer::TaintAnalysis::runOnBlameModule(BlameModule &BM) {
 
   // Run the analysis on each blame function.
   for (auto &BF : BM) {
-    // Skip the libc functions for now, if we haven't started the analysis yet.
-    // e.g.: _start() and __libc_start_main().
-    if (!AnalysisStarted && BF.Name.startswith("_")) {
-      LLVM_DEBUG(llvm::dbgs() << "### Skip: " << BF.Name << "\n";);
-      ++analysisStartedAt;
-      continue;
-    }
+    // TODO: Handling of functions like _start, __libc_start_main, etc
 
     if (!AnalysisStarted) {
       if (!BF.MF) {
