@@ -516,10 +516,6 @@ void crash_analyzer::TaintAnalysis::startTaint(DestSourcePair &DS,
 
 // Return true if taint is propagated.
 // Return false if taint is terminated.
-// Currently we continue to propagate even after a constant value is written
-// into the tainted operand so that we can reach the farthest point
-// in the backward direction (which implies the first potential issue
-// in the forward direction).
 bool llvm::crash_analyzer::TaintAnalysis::propagateTaint(
     DestSourcePair &DS, SmallVectorImpl<TaintInfo> &TL,
     const MachineInstr &MI, TaintDataFlowGraph &TaintDFG,
@@ -611,29 +607,6 @@ bool llvm::crash_analyzer::TaintAnalysis::propagateTaint(
     // We have reached a terminating condition where
     // dest is tainted and src is a constant operand.
     removeFromTaintList(Taint, TL);
-
-    if (DS.ImmValue) {
-    // Start tracking the constant as it can be an address which can be
-    // written into later.
-    TaintInfo NewTaint;
-    static MachineOperand MO = MachineOperand::CreateReg(0U, false);
-    MO.setParent(const_cast<MachineInstr*>(&MI));
-    NewTaint.Op = &MO;
-    NewTaint.IsConcreteMemory = true;
-    NewTaint.Offset = *(DS.ImmValue);
-    // Assigning int64_t to uint64_t ?
-    NewTaint.ConcreteMemoryAddress = *(DS.ImmValue);
-    if (addToTaintList(NewTaint, TL)) {
-      Node *newNode = new Node(MF->getCrashOrder(), &MI, NewTaint, false);
-      std::shared_ptr<Node> newTaintNode(newNode);
-      auto &LastTaintedNodeForTheOp = TaintDFG.lastTaintedNode[Taint];
-      TaintDFG.addEdge(LastTaintedNodeForTheOp, newTaintNode, EdgeType::Assigment);
-      TaintDFG.updateLastTaintedNode(NewTaint, newTaintNode);
-      LLVM_DEBUG(dbgs() << "New constant node added \n");
-      printTaintList(TL);
-    }
-   }
-    return true;
   }
 
   if (addToTaintList(SrcTi, TL)) {
@@ -807,7 +780,8 @@ bool crash_analyzer::TaintAnalysis::runOnBlameMF(BlameModule &BM,
                 if (!MFOnDemand) {
                   LLVM_DEBUG(llvm::dbgs()
                              << "#### Callee not found: " << TargetName << "\n";);
-                  continue;
+		  //TODO: Check if the Analysis can still be continued
+                  return Result;
                 } else {
                   MFOnDemand->setCrashOrder(MF.getCrashOrder());
                   runOnBlameMF(BM, *MFOnDemand, TaintDFG, true, ++levelOfCalledFn,
@@ -819,7 +793,8 @@ bool crash_analyzer::TaintAnalysis::runOnBlameMF(BlameModule &BM,
                 LLVM_DEBUG(
                   llvm::dbgs()
                       << "#### Callee not found: " << TargetName << "\n";);
-                continue;
+		//TODO: Check if the Analysis can still be continued
+		return Result;
               }
             }
           }
@@ -967,13 +942,7 @@ bool crash_analyzer::TaintAnalysis::runOnBlameModule(BlameModule &BM) {
 
   // Run the analysis on each blame function.
   for (auto &BF : BM) {
-    // Skip the libc functions for now, if we haven't started the analysis yet.
-    // e.g.: _start() and __libc_start_main().
-    if (!AnalysisStarted && BF.Name.startswith("_")) {
-      LLVM_DEBUG(llvm::dbgs() << "### Skip: " << BF.Name << "\n";);
-      ++analysisStartedAt;
-      continue;
-    }
+    // TODO: Handling of functions like _start, __libc_start_main, etc
 
     if (!AnalysisStarted) {
       if (!BF.MF) {
