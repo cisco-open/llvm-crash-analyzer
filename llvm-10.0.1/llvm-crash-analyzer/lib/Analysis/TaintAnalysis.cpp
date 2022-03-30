@@ -787,7 +787,6 @@ bool crash_analyzer::TaintAnalysis::runOnBlameMF(BlameModule &BM,
                   runOnBlameMF(BM, *MFOnDemand, TaintDFG, true, ++levelOfCalledFn,
                                &TL_Mbb, &MI);
                   MFOnDemand->setCrashOrder(0);
-                  BM.push_back({MFOnDemand->getName(), MFOnDemand});
                 }
               } else {
                 LLVM_DEBUG(
@@ -865,7 +864,6 @@ bool crash_analyzer::TaintAnalysis::runOnBlameMF(BlameModule &BM,
               runOnBlameMF(BM, *MFOnDemand, TaintDFG, true, ++levelOfCalledFn,
                            &TL_Mbb, &MI);
               MFOnDemand->setCrashOrder(0);
-              BM.push_back({MFOnDemand->getName(), MFOnDemand});
             }
           } else {
             LLVM_DEBUG(
