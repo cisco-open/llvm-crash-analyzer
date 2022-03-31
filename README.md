@@ -27,7 +27,7 @@ Steps:
 
     $ cd llvm-10.0.1
     $ mkdir build && cd build
-    $ cmake -G "Unix Makefiles" -DLLVM_ENABLE_PROJECTS="clang;llvm-crash-analyzer;lldb;" -DLLVM_ENABLE_LIBCXX=ON ../llvm -DLLDB_TEST_COMPILER=clang
+    $ $ cmake -G "Ninja" -DLLVM_ENABLE_PROJECTS="clang;llvm-crash-analyzer;lldb;" -DLLVM_ENABLE_LIBCXX=ON ../llvm-crash-analyzer/llvm-10.0.1/llvm -DLLDB_TEST_COMPILER=clang -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER=clang-12 -DCMAKE_CXX_COMPILER=clang++-12 -DLLVM_ENABLE_ASSERTIONS=ON
     $ make && make check-llvm-crash-analyzer
 
 ## Using the tool
@@ -37,24 +37,27 @@ Steps:
        $ llvm-crash-analyzer --help
        Crash Analyzer -- crash analyzer utility
        OVERVIEW: crash analyzer
-
+       
        USAGE: llvm-crash-analyzer [options] <input file>
-
+       
        OPTIONS:
-
+       
        Generic Options:
-
-         --help                                - Display available options (--help-hidden for more)
-         --help-list                           - Display list of available options (--help-list-hidden for more)
-         --version                             - Display the version of this program
-
+       
+         --help                                            - Display available options (--help-hidden for more)
+         --help-list                                       - Display list of available options (--help-list-hidden for more)
+         --version                                         - Display the version of this program
+       
        Specific Options:
+       
+         --core-file=<corefilename>                        - <core-file>
+         --modules-path=<modulespath>                      - <paths>
+         --out-file=<filename>                             - Redirect output to the specified file
+         --print-potential-crash-cause-loc                 - Print line:column that could be the cause of the crash.
+         --print-taint-value-flow-as-dot=<<dot-file-name>> - Print Taint DF Graph as DOT. Please use `$ dot <dot-file-name> -Tpng -o <dot-file-name>.png` to see the graph in form of picture.
+         --solib-search-path=<solibsearchpath>             - <paths>
+         --sysroot=<sysrootpath>                           - <path>
 
-         --core-file=<corefilename>            - <core-file>
-         --modules-path=<modulespath>          - <paths>
-         --out-file=<filename>                 - Redirect output to the specified file
-         --solib-search-path=<solibsearchpath> - <paths>
-         --sysroot=<sysrootpath>               - <path>
   
  2) analysis:
  
