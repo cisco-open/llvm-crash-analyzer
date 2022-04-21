@@ -865,6 +865,8 @@ X86InstrInfo::getDestAndSrc(const MachineInstr &MI) const {
       return DestSourcePair{*Dest, *Src};
       }
       case X86::PUSH64r: {
+        /* FIXME: This needs to be handled appropriately. Setting destination
+           as empty enables the propagation of taint analysis. */
         return DestSourcePair{nullptr, nullptr, None, None, nullptr,
                               None,    nullptr, 0,    0};
       }

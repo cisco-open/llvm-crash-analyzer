@@ -356,6 +356,11 @@ bool crash_analyzer::TaintAnalysis::continueAnalysis(
   for (unsigned i = 0; i < MI.getNumOperands(); i++) {
     TaintInfo Ti;
     Ti.Op = &MI.getOperand(i);
+    // We can only check if register is in the taint list as we do not have
+    // any other information about the specific operands (like reg+offset)
+    // or the concrete memory address.
+    if (!Ti.Op->isReg())
+      continue;
     if (isTainted(Ti, TL, &REAnalysis, &MI).Op != nullptr)
       return false;
   }
