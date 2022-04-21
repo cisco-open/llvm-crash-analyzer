@@ -19,6 +19,7 @@
 #include <sstream>
 
 static constexpr unsigned FrameLevelDepthToGo = 10;
+static bool abortAnalysis = false;
 
 static cl::opt<std::string>
 DumpTaintGraphAsDOT("print-dfg-as-dot",
@@ -341,6 +342,25 @@ crash_analyzer::TaintAnalysis::isTainted(TaintInfo &Op,
     }
   }
   return Empty_op;
+}
+
+// This function is called when we do not know the source and destination
+// operands of a MIR during taint analysis.
+// If any of the machine operands in the given MIR is present in the taint
+// list, conservatively terminate the analysis.
+// Return true if OK to continue Analysis.
+// Return false if Analysis needs to be terminated.
+bool crash_analyzer::TaintAnalysis::continueAnalysis(
+    const MachineInstr &MI, SmallVectorImpl<TaintInfo> &TL,
+    RegisterEquivalence &REAnalysis) {
+  for (unsigned i = 0; i < MI.getNumOperands(); i++) {
+    TaintInfo Ti;
+    Ti.Op = &MI.getOperand(i);
+    if (isTainted(Ti, TL, &REAnalysis, &MI).Op != nullptr)
+      return false;
+  }
+  // No tainted operand found in this MIR, so OK to continue Analysis.
+  return true;
 }
 
 void crash_analyzer::TaintAnalysis::printTaintList(
@@ -888,6 +908,14 @@ bool crash_analyzer::TaintAnalysis::runOnBlameMF(BlameModule &BM,
       if (!DestSrc) {
         LLVM_DEBUG(llvm::dbgs()
                        << "haven't found dest && source for the MI\n";);
+        bool toContinue = continueAnalysis(MI, TL_Mbb, REAnalysis);
+        if (!toContinue) {
+          MI.dump();
+          WithColor::error(errs())
+              << "MIR not handled; Unable to propagate taint analysis\n";
+          abortAnalysis = true;
+          return false;
+        }
         continue;
       }
 
@@ -1046,9 +1074,13 @@ bool crash_analyzer::TaintAnalysis::runOnBlameModule(BlameModule &BM) {
     return false;
   }
 
-  auto crashNode = TaintDFG.getCrashNode();
-  TaintDFG.findBlameFunction(crashNode);
-  Result = TaintDFG.printBlameFunction(PrintPotentialCrashCauseLocation);
+  // Do not print blame function if taint propagation was
+  // prematurely terminated.
+  if (!abortAnalysis) {
+    auto crashNode = TaintDFG.getCrashNode();
+    TaintDFG.findBlameFunction(crashNode);
+    Result = TaintDFG.printBlameFunction(PrintPotentialCrashCauseLocation);
+  }
 
   // Currently we report SUCCESS even if one Blame Function is found.
   // Ideally SUCCESS is only when TaintList.empty() is true.

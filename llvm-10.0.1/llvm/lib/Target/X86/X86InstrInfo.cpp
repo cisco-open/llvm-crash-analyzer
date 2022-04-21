@@ -674,9 +674,9 @@ X86InstrInfo::getDestAndSrc(const MachineInstr &MI) const {
       case X86::CMOV16rr:
       case X86::CMOV32rr:
       case X86::CMOV64rr: {
-      // These are conditional moves.
-      // What to do??
-      return None;
+        /* FIXME: */
+        return DestSourcePair{nullptr, nullptr, None, None, nullptr,
+                              None,    nullptr, 0,    0};
     } case X86::AND8rr:
       case X86::AND16rr:
       case X86::AND32rr:
@@ -863,7 +863,11 @@ X86InstrInfo::getDestAndSrc(const MachineInstr &MI) const {
       const MachineOperand *Dest = &(MI.getOperand(1));
       // TODO: for DIV -- within operand(2) is the remainder.
       return DestSourcePair{*Dest, *Src};
-    }
+      }
+      case X86::PUSH64r: {
+        return DestSourcePair{nullptr, nullptr, None, None, nullptr,
+                              None,    nullptr, 0,    0};
+      }
   }
 
   return None;
