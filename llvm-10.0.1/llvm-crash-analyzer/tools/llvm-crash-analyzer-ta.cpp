@@ -169,9 +169,9 @@ int main(int argc, char **argv) {
   }
   MMI->finalize();
 
-  WithColor::warning(
-    errs()) << "This tool is depracated until we decide how to "
-                "use corefile content here.\n";
+  WithColor::warning(errs())
+      << "This tool is deprecated until we decide how to "
+         "use corefile content here.\n";
 
   crash_analyzer::TaintAnalysis TA(true);
   BlameModule BlameTrace;

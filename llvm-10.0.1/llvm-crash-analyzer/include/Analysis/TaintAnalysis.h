@@ -95,6 +95,8 @@ public:
   void startTaint(DestSourcePair &DS, SmallVectorImpl<TaintInfo> &TL,
                   const MachineInstr &MI, TaintDataFlowGraph &TaintDFG,
                   RegisterEquivalence &REAnalysis);
+  bool continueAnalysis(const MachineInstr &MI, SmallVectorImpl<TaintInfo> &TL,
+                        RegisterEquivalence &REAnalysis);
   void removeFromTaintList(TaintInfo &Op, SmallVectorImpl<TaintInfo> &TL);
   bool addToTaintList(TaintInfo &Ti, SmallVectorImpl<TaintInfo> &TL);
   void printTaintList(SmallVectorImpl<TaintInfo> &TL);
