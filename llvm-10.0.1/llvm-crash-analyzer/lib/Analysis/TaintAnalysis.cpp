@@ -7,15 +7,14 @@
 //===----------------------------------------------------------------------===//
 
 #include "Analysis/TaintAnalysis.h"
-#include "Analysis/RegisterEquivalence.h"
-#include "Decompiler/Decompiler.h"
 #include "Analysis/ConcreteReverseExec.h"
+#include "Analysis/RegisterEquivalence.h"
 #include "Analysis/TaintDataFlowGraph.h"
-
+#include "Decompiler/Decompiler.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/PostOrderIterator.h"
 #include "llvm/IR/DebugInfoMetadata.h"
-
+#include "llvm/Support/Debug.h"
 #include <sstream>
 
 static constexpr unsigned FrameLevelDepthToGo = 10;
@@ -26,6 +25,11 @@ DumpTaintGraphAsDOT("print-dfg-as-dot",
                      cl::desc("Print Tainted graph for the GraphViz."),
                      cl::value_desc("filename"),
                      cl::init(""));
+
+static cl::opt<bool> PrintDestSrcOperands(
+    "print-dest-src-operands",
+    cl::desc("Print Destination and Source Operands for each MIR"),
+    cl::init(false));
 
 using namespace llvm;
 
@@ -406,24 +410,57 @@ void crash_analyzer::TaintAnalysis::printTaintList2(
   } dbgs() << "\n------Taint List End----\n";
 }
 
-void crash_analyzer::TaintAnalysis::printDestSrcInfo(DestSourcePair &DestSrc) {
-  LLVM_DEBUG(
-      if (DestSrc.Destination) {
-        llvm::dbgs() << "dest: ";
-        DestSrc.Destination->dump();
-        if (DestSrc.DestOffset)
-          llvm::dbgs() << "dest offset: " << DestSrc.DestOffset << "\n";
-      } if (DestSrc.Source) {
-        llvm::dbgs() << "src: ";
-        DestSrc.Source->dump();
-        if (DestSrc.SrcOffset)
-          llvm::dbgs() << "src offset: " << DestSrc.SrcOffset << "\n";
-      } if (DestSrc.Source2) {
-        llvm::dbgs() << "src2: ";
-        DestSrc.Source2->dump();
-        if (DestSrc.Src2Offset)
-          llvm::dbgs() << "src2 offset: " << DestSrc.Src2Offset << "\n";
-      });
+inline static bool isDebug() {
+#ifndef NDEBUG
+  return DebugFlag && isCurrentDebugType(DEBUG_TYPE);
+#else
+  return false;
+#endif
+}
+
+// Print the destination and source operands info if either of the option
+// -print-dest-src-operands or --debug-only=taint-analysis is used.
+void crash_analyzer::TaintAnalysis::printDestSrcInfo(DestSourcePair &DestSrc,
+                                                     const MachineInstr &MI) {
+  if (!PrintDestSrcOperands && !isDebug())
+    return;
+
+  MI.dump();
+
+  if (DestSrc.Destination) {
+    llvm::dbgs() << "Destination: ";
+    DestSrc.Destination->dump();
+    if (DestSrc.DestOffset)
+      llvm::dbgs() << "Destination Offset: " << DestSrc.DestOffset << "\n";
+  }
+  if (DestSrc.Source) {
+    llvm::dbgs() << "Source1: ";
+    DestSrc.Source->dump();
+    if (DestSrc.SrcOffset)
+      llvm::dbgs() << "Source1 Offset: " << DestSrc.SrcOffset << "\n";
+  }
+  if (DestSrc.Source2) {
+    llvm::dbgs() << "Source2: ";
+    DestSrc.Source->dump();
+    if (DestSrc.Src2Offset)
+      llvm::dbgs() << "Source2 offset: " << DestSrc.Src2Offset << "\n";
+  }
+  if (DestSrc.DestScaledIndex) {
+    llvm::dbgs() << "DestScaledIndex: ";
+    DestSrc.DestScaledIndex->dump();
+    if (DestSrc.DestOffsetReg) {
+      llvm::dbgs() << "DestOffReg: ";
+      DestSrc.DestOffsetReg->dump();
+    }
+  }
+  if (DestSrc.SrcScaledIndex) {
+    llvm::dbgs() << "SrcScaledIndex: ";
+    DestSrc.SrcScaledIndex->dump();
+    if (DestSrc.SrcOffsetReg) {
+      llvm::dbgs() << "SrcOffReg: ";
+      DestSrc.SrcOffsetReg->dump();
+    }
+  }
 }
 
 MachineFunction* crash_analyzer::TaintAnalysis::getCalledMF(const BlameModule &BM, std::string Name) {
@@ -841,6 +878,7 @@ bool crash_analyzer::TaintAnalysis::runOnBlameMF(BlameModule &BM,
           mergeTaintList(TL_Mbb, TaintList);
           continue;
         }
+        printDestSrcInfo(*DestSrc, MI);
         startTaint(*DestSrc, TL_Mbb, MI2, TaintDFG, REAnalysis);
         continue;
       }
@@ -902,9 +940,6 @@ bool crash_analyzer::TaintAnalysis::runOnBlameMF(BlameModule &BM,
       if (MI.isBranch())
         continue;
 
-      // Print the instruction from crash-start point
-      LLVM_DEBUG(MI.dump(););
-
       // We reached the end of the frame.
       if (TII->isPush(MI))
         break;
@@ -924,7 +959,7 @@ bool crash_analyzer::TaintAnalysis::runOnBlameMF(BlameModule &BM,
         continue;
       }
 
-      printDestSrcInfo(*DestSrc);
+      printDestSrcInfo(*DestSrc, MI);
 
       // Backward Taint Analysis.
       bool TaintResult = propagateTaint(*DestSrc, TL_Mbb, MI, TaintDFG, REAnalysis,
