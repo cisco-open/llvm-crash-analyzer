@@ -1,29 +1,24 @@
 
 # RUN: %llvm-crash-analyzer-ta -print-dest-src-operands %s 2> %t.log
 # RUN: FileCheck %s < %t.log
-# CHECK:   $edx = crash-start MOV32rm $rcx, 1, $noreg, 0, $noreg
-# CHECK: Destination: $edx
-# CHECK: Source1: $rcx
-# CHECK: Source1 Offset: 0
-# CHECK:   ADD64mi8 $rbp, 1, $noreg, 327056915, $noreg, 1, implicit-def $eflags
-# CHECK: Destination: $rbp
-# CHECK: Destination Offset: 327056915
-# CHECK: Source1: 1
-# CHECK:   MOV32mi $rbp, 1, $noreg, -4, $noreg, 0
-# CHECK: Destination: $rbp
-# CHECK: Destination Offset: -4
-# CHECK: Source1: 0
-# CHECK:   TEST8mi $rdx, 1, $noreg, 11, $noreg, 1, implicit-def $eflags
-# CHECK: Source1: $rdx
-# CHECK: Source1 Offset: 11
-# CHECK: Source2: $rdx
-# CHECK:   $eax = XOR32rr undef $eax(tied-def 0), undef $eax, implicit-def $eflags
-# CHECK: Destination: $eax
-# CHECK: Source1: $eax
-# CHECK:   $rbp = MOV64rr $rsp
-# CHECK: Destination: $rbp
-# CHECK: Source1: $rsp
-
+# CHECK:  $edx = crash-start MOV32rm $rcx, 1, $noreg, 0, $noreg
+# CHECK:Dest {reg:$edx}
+# CHECK:Src1 {reg:$rcx; off:0}
+# CHECK:  ADD64mi8 $rbp, 1, $noreg, 327056915, $noreg, 1, implicit-def $eflags
+# CHECK:Dest {reg:$rbp; off:327056915}
+# CHECK:Src1 {imm:1}
+# CHECK:  MOV32mi $rbp, 1, $noreg, -4, $noreg, 0
+# CHECK:Dest {reg:$rbp; off:-4}
+# CHECK:Src1 {imm:0}
+# CHECK:  TEST8mi $rdx, 1, $noreg, 11, $noreg, 1, implicit-def $eflags
+# CHECK:Src1 {reg:$rdx; off:11}
+# CHECK:Src2 {imm:1}
+# CHECK:  $eax = XOR32rr undef $eax(tied-def 0), undef $eax, implicit-def $eflags
+# CHECK:Dest {reg:$eax}
+# CHECK:Src1 {reg:$eax}
+# CHECK:  $rbp = MOV64rr $rsp
+# CHECK:Dest {reg:$rbp}
+# CHECK:Src1 {reg:$rsp}
 --- |
   ; ModuleID = 'a.out'
   source_filename = "a.out"
@@ -153,7 +148,7 @@ machineFunctionInfo: {}
 crashOrder:      1
 body:             |
   bb.0:
-    liveins: $rbp, $r14d, $ecx, $rdx, $rdi, $rsi, $ymm0, $rax
+    liveins: $rbp, $r14d, $ecx, $rdx, $rdi, $rsi, $rax
 
     PUSH64r $rbp, implicit-def $rsp, implicit $rsp
     $rbp = MOV64rr $rsp

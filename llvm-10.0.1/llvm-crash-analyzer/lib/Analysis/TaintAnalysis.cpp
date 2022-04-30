@@ -425,42 +425,40 @@ void crash_analyzer::TaintAnalysis::printDestSrcInfo(DestSourcePair &DestSrc,
   if (!PrintDestSrcOperands && !isDebug())
     return;
 
-  MI.dump();
+  const auto &MF = MI.getParent()->getParent();
+  auto TRI = MF->getSubtarget().getRegisterInfo();
 
+  MI.dump();
   if (DestSrc.Destination) {
-    llvm::dbgs() << "Destination: ";
-    DestSrc.Destination->dump();
+    llvm::dbgs() << "Dest {reg:"
+                 << printReg(DestSrc.Destination->getReg(), TRI);
     if (DestSrc.DestOffset)
-      llvm::dbgs() << "Destination Offset: " << DestSrc.DestOffset << "\n";
+      llvm::dbgs() << "; off:" << DestSrc.DestOffset;
+    llvm::dbgs() << "}\n";
   }
   if (DestSrc.Source) {
-    llvm::dbgs() << "Source1: ";
-    DestSrc.Source->dump();
-    if (DestSrc.SrcOffset)
-      llvm::dbgs() << "Source1 Offset: " << DestSrc.SrcOffset << "\n";
+    llvm::dbgs() << "Src1 {";
+    if (DestSrc.Source->isReg()) {
+      llvm::dbgs() << "reg:" << printReg(DestSrc.Source->getReg(), TRI);
+      if (DestSrc.SrcOffset)
+        llvm::dbgs() << "; off:" << DestSrc.SrcOffset;
+    }
+    if (DestSrc.Source->isImm())
+      llvm::dbgs() << "imm:" << DestSrc.Source->getImm();
+    llvm::dbgs() << "}\n";
   }
   if (DestSrc.Source2) {
-    llvm::dbgs() << "Source2: ";
-    DestSrc.Source->dump();
-    if (DestSrc.Src2Offset)
-      llvm::dbgs() << "Source2 offset: " << DestSrc.Src2Offset << "\n";
-  }
-  if (DestSrc.DestScaledIndex) {
-    llvm::dbgs() << "DestScaledIndex: ";
-    DestSrc.DestScaledIndex->dump();
-    if (DestSrc.DestOffsetReg) {
-      llvm::dbgs() << "DestOffReg: ";
-      DestSrc.DestOffsetReg->dump();
+    llvm::dbgs() << "Src2 {";
+    if (DestSrc.Source2->isReg()) {
+      llvm::dbgs() << "reg:" << printReg(DestSrc.Source2->getReg(), TRI);
+      if (DestSrc.Src2Offset)
+        llvm::dbgs() << "; off:" << DestSrc.Src2Offset;
     }
+    if (DestSrc.Source2->isImm())
+      llvm::dbgs() << "imm:" << DestSrc.Source2->getImm();
+    llvm::dbgs() << "}\n";
   }
-  if (DestSrc.SrcScaledIndex) {
-    llvm::dbgs() << "SrcScaledIndex: ";
-    DestSrc.SrcScaledIndex->dump();
-    if (DestSrc.SrcOffsetReg) {
-      llvm::dbgs() << "SrcOffReg: ";
-      DestSrc.SrcOffsetReg->dump();
-    }
-  }
+  // TODO: Add support for Scaled Index Addressing Mode
 }
 
 MachineFunction* crash_analyzer::TaintAnalysis::getCalledMF(const BlameModule &BM, std::string Name) {
