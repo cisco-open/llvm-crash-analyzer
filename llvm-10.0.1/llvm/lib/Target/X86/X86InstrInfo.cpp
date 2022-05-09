@@ -759,7 +759,16 @@ X86InstrInfo::getDestAndSrc(const MachineInstr &MI) const {
       const MachineOperand *Dest = &(MI.getOperand(0));
       const MachineOperand *Src = &(MI.getOperand(2));
       return DestSourcePair{*Dest, *Src};
-    } case X86::TEST32mi:
+      }
+      case X86::TEST8mi:
+      case X86::TEST16mi:
+      case X86::TEST32mi: {
+        if (!getMemOperandWithOffset(MI, BaseOp, Offset, TRI))
+          return None;
+        return DestSourcePair{
+            nullptr, BaseOp,  None,    Offset, &MI.getOperand(5),
+            None,    nullptr, nullptr, 0};
+      }
       case X86::TEST16i16:
       case X86::TEST16mr:
       case X86::TEST16ri:
@@ -776,7 +785,6 @@ X86InstrInfo::getDestAndSrc(const MachineInstr &MI) const {
       case X86::TEST8mr:
       case X86::TEST8ri:
       case X86::TEST8rr:
-      case X86::TEST8mi:
       case X86::CMP16i16:
       case X86::CMP16mr:
       case X86::CMP16ri:
