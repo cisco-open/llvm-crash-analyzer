@@ -1,0 +1,32 @@
+## This is reproducer (compiled with `clang -g -O0`):
+
+###include <stdio.h>
+## typedef struct inside_str {
+##   int y;
+##   int x;
+## } nested_str;
+## typedef struct node {
+##   nested_str * val2;
+## } info;
+## __attribute__((noinline))
+## void crash (info *node) {
+##   int k = 2;
+##   node->val2->x = ++k;
+## }
+## int main() {
+##   info node;
+##   node.val2 = 0;
+##   crash(&node);
+##   return node.val2->x + 1;
+## }
+
+# RUN: %llvm-crash-analyzer --print-potential-crash-cause-loc --core-file=%S/Inputs/core.taint-dest-base-reg --print-decompiled-mir=%t.mir %S/Inputs/taint-dest-base-reg.out < %s 2>&1 | FileCheck %s
+
+# CHECK: Blame Function is main
+# CHECK: From File {{.*}}/m.c:18:13
+
+# RUN: cat %t.mir | FileCheck --check-prefix=CHECK-MIR %s
+
+# CHECK-MIR: name:            crash
+# CHECK-MIR: crash-start MOV32mr $rcx, 1, $noreg, 4, $noreg, $eax
+## Test fails if we don't taint base-reg $rcx besides memory location $rcx + 4.

@@ -523,6 +523,20 @@ void crash_analyzer::TaintAnalysis::startTaint(DestSourcePair &DS,
       }
     }
 
+    // If Dest was memory operand, we should taint the base reg as well.
+    if (DestTi.Op && DestTi.Op->isReg() && DestTi.Offset) {
+      TaintInfo JustRegFromDstOp = DestTi;
+      JustRegFromDstOp.Offset = llvm::None;
+      JustRegFromDstOp.IsConcreteMemory = false;
+      JustRegFromDstOp.ConcreteMemoryAddress = 0;
+      if (addToTaintList(JustRegFromDstOp, TL)) {
+        Node *sNode = new Node(MF->getCrashOrder(), &MI, JustRegFromDstOp, false);
+        std::shared_ptr<Node> startTaintNode(sNode);
+        TaintDFG.addEdge(crashNode, startTaintNode, EdgeType::Dereference);
+        TaintDFG.updateLastTaintedNode(JustRegFromDstOp, startTaintNode);
+      }
+    }
+
     // FIXME: This should be checking if src is a mem op somehow,
     // by checking if src2 is an index register.
     if (SrcTi.Op && SrcTi.Op->isReg()) {
