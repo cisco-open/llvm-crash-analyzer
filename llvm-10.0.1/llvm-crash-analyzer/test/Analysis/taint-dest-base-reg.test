@@ -30,3 +30,45 @@
 # CHECK-MIR: name:            crash
 # CHECK-MIR: crash-start MOV32mr $rcx, 1, $noreg, 4, $noreg, $eax
 ## Test fails if we don't taint base-reg $rcx besides memory location $rcx + 4.
+
+# RUN: %llvm-crash-analyzer --debug-only=taint-analysis --core-file=%S/Inputs/core.taint-dest-base-reg %S/Inputs/taint-dest-base-reg.out < %s 2>&1 | FileCheck --check-prefix=CHECK-DEBUG %s
+
+# CHECK-DEBUG: MF: crash
+# CHECK-DEBUG-EMPTY:
+# CHECK-DEBUG-NEXT:   crash-start MOV32mr $rcx, 1, $noreg, 4, $noreg, $eax
+## Print Destination Source Pair for the MachineInstr above.
+# CHECK-DEBUG-NEXT: Dest {reg:$rcx; off:4}
+# CHECK-DEBUG-NEXT: Src1 {reg:$eax}
+
+## Add Destination (concrete memory address and base register) and Source to the Taint List.
+# CHECK-DEBUG-NEXT: Add to TL: {reg:$rcx; off:4} (mem addr: 4)
+## Confirm that we taint base-reg $rcx besides memory location $rcx + 4.
+# CHECK-DEBUG-NEXT: Add to TL: {reg:$rcx}
+# CHECK-DEBUG-NEXT: Add to TL: {reg:$eax}
+# CHECK-DEBUG-EMPTY:
+
+## Print Taint List.
+# CHECK-DEBUG-NEXT: -----Taint List Begin------
+# CHECK-DEBUG-NEXT: {reg:$rcx; off:4} (mem addr: 4)
+# CHECK-DEBUG-NEXT: {reg:$rcx}
+# CHECK-DEBUG-NEXT: {reg:$eax}
+# CHECK-DEBUG-NEXT: ------Taint List End----
+
+# CHECK-DEBUG:  $rcx = MOV64rm $rbp, 1, $noreg, -8, $noreg, debug-location !DILocation(line: 13, column: 4, scope: !2); /nobackup/ntesic/PAC/tests/dest-base-reg/for_lit/m.c:13:4
+## Print Destination Source Pair for the MachineInstr above.
+# CHECK-DEBUG-NEXT: Dest {reg:$rcx}
+# CHECK-DEBUG-NEXT: Src1 {reg:$rbp; off:-8}
+
+## Add Source to the Taint List.
+# CHECK-DEBUG-NEXT: Add to TL: {reg:$rbp; off:-8} (mem addr: 140734701020776)
+
+## Remove Destination from the Taint List.
+# CHECK-DEBUG-NEXT: Remove from TL: {reg:$rcx}
+# CHECK-DEBUG-EMPTY:
+
+## Print updated Taint List.
+# CHECK-DEBUG-NEXT: -----Taint List Begin------
+# CHECK-DEBUG-NEXT: {reg:$rcx; off:4} (mem addr: 4)
+# CHECK-DEBUG-NEXT: {reg:$eax}
+# CHECK-DEBUG-NEXT: {reg:$rbp; off:-8} (mem addr: 140734701020776)
+# CHECK-DEBUG-NEXT: ------Taint List End----
