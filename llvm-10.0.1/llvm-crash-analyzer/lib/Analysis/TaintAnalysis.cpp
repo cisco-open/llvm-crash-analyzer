@@ -154,13 +154,16 @@ bool llvm::crash_analyzer::operator<(const TaintInfo &T1, const TaintInfo &T2) {
 raw_ostream &llvm::crash_analyzer::operator<<(raw_ostream &os,
                                               const TaintInfo &T) {
   if (T.Op) {
-    llvm::dbgs() << "{reg:" << *T.Op;
-    if (T.Offset)
-      llvm::dbgs() << "; off:" << T.Offset;
-    llvm::dbgs() << "}";
+    if (T.Op->isReg()) {
+      os << "{reg:" << *T.Op;
+      if (T.Offset)
+        os << "; off:" << T.Offset;
+      os << "}";
+      if (T.IsTaintMemAddr())
+        os << " (mem addr: " << T.GetTaintMemAddr() << ")";
+	} else if (T.Op->isImm())
+		os << "{imm:" << *T.Op << "}";
   }
-  if (T.IsTaintMemAddr())
-    os << " (mem addr: " << T.GetTaintMemAddr() << ")";
   return os;
 }
 
@@ -533,6 +536,9 @@ void crash_analyzer::TaintAnalysis::startTaint(DestSourcePair &DS,
     }
 
     // If Dest was memory operand, we should taint the base reg as well.
+    // In the example MEM[$base-reg + offset] = $src-reg, there is a big
+    // chance that invalid value of $base-reg is the reason why we have
+    // invalid Dest memory address ($base-reg + offset).
     if (DestTi.Op && DestTi.Op->isReg() && DestTi.Offset) {
       TaintInfo JustRegFromDstOp = DestTi;
       JustRegFromDstOp.Offset = llvm::None;
