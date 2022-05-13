@@ -151,6 +151,22 @@ bool llvm::crash_analyzer::operator<(const TaintInfo &T1, const TaintInfo &T2) {
   return false;
 }
 
+raw_ostream &llvm::crash_analyzer::operator<<(raw_ostream &os,
+                                              const TaintInfo &T) {
+  if (T.Op) {
+    if (T.Op->isReg()) {
+      os << "{reg:" << *T.Op;
+      if (T.Offset)
+        os << "; off:" << T.Offset;
+      os << "}";
+      if (T.IsTaintMemAddr())
+        os << " (mem addr: " << T.GetTaintMemAddr() << ")";
+	} else if (T.Op->isImm())
+		os << "{imm:" << *T.Op << "}";
+  }
+  return os;
+}
+
 crash_analyzer::TaintAnalysis::TaintAnalysis(StringRef DotFileName,
     bool PrintPotentialCrashCauseLocation)
     : DotFileName(DotFileName),
@@ -274,6 +290,7 @@ bool crash_analyzer::TaintAnalysis::addToTaintList(
       return false;
 
   if (!Ti.Op->isImm()) {
+    LLVM_DEBUG(dbgs()<<"Add to TL: " << Ti << "\n");
     TaintList.push_back(Ti);
     return true;
   }
@@ -285,6 +302,7 @@ void llvm::crash_analyzer::TaintAnalysis::removeFromTaintList(
   for (auto itr = TaintList.begin(); itr != TaintList.end(); ++itr) {
     if (*itr != Op)
       continue;
+    LLVM_DEBUG(dbgs()<<"Remove from TL: " << Op << "\n");
     TaintList.erase(itr);
     return;
   }
@@ -378,17 +396,10 @@ void crash_analyzer::TaintAnalysis::printTaintList(
     LLVM_DEBUG(dbgs() << "Taint List is empty");
     return;
   }
-  LLVM_DEBUG(
-      dbgs() << "\n-----Taint List Begin------\n"; for (auto itr = TL.begin();
-                                                        itr != TL.end();
-                                                        ++itr) {
-        itr->Op->dump();
-        if (itr->Offset)
-          dbgs() << "offset: " << *(itr->Offset);
-        if (itr->IsTaintMemAddr())
-          dbgs() << "(mem addr: " << itr->GetTaintMemAddr() << ")";
-        dbgs() << '\n';
-      } dbgs() << "\n------Taint List End----\n";);
+  LLVM_DEBUG(dbgs() << "\n-----Taint List Begin------\n";
+             for (auto itr = TL.begin(); itr != TL.end(); ++itr)
+               dbgs() << *itr << '\n';
+             dbgs() << "------Taint List End----\n";);
 }
 
 void crash_analyzer::TaintAnalysis::printTaintList2(
@@ -428,6 +439,7 @@ void crash_analyzer::TaintAnalysis::printDestSrcInfo(DestSourcePair &DestSrc,
   const auto &MF = MI.getParent()->getParent();
   auto TRI = MF->getSubtarget().getRegisterInfo();
 
+  llvm::dbgs() << "\n";
   MI.dump();
   if (DestSrc.Destination) {
     llvm::dbgs() << "Dest {reg:"
@@ -520,6 +532,23 @@ void crash_analyzer::TaintAnalysis::startTaint(DestSourcePair &DS,
         std::shared_ptr<Node> startTaintNode(sNode);
         TaintDFG.addEdge(crashNode, startTaintNode, EdgeType::Dereference);
         TaintDFG.updateLastTaintedNode(DestTi, startTaintNode);
+      }
+    }
+
+    // If Dest was memory operand, we should taint the base reg as well.
+    // In the example MEM[$base-reg + offset] = $src-reg, there is a big
+    // chance that invalid value of $base-reg is the reason why we have
+    // invalid Dest memory address ($base-reg + offset).
+    if (DestTi.Op && DestTi.Op->isReg() && DestTi.Offset) {
+      TaintInfo JustRegFromDstOp = DestTi;
+      JustRegFromDstOp.Offset = llvm::None;
+      JustRegFromDstOp.IsConcreteMemory = false;
+      JustRegFromDstOp.ConcreteMemoryAddress = 0;
+      if (addToTaintList(JustRegFromDstOp, TL)) {
+        Node *sNode = new Node(MF->getCrashOrder(), &MI, JustRegFromDstOp, false);
+        std::shared_ptr<Node> startTaintNode(sNode);
+        TaintDFG.addEdge(crashNode, startTaintNode, EdgeType::Dereference);
+        TaintDFG.updateLastTaintedNode(JustRegFromDstOp, startTaintNode);
       }
     }
 
@@ -876,7 +905,7 @@ bool crash_analyzer::TaintAnalysis::runOnBlameMF(BlameModule &BM,
           mergeTaintList(TL_Mbb, TaintList);
           continue;
         }
-        printDestSrcInfo(*DestSrc, MI);
+        printDestSrcInfo(*DestSrc, MI2);
         startTaint(*DestSrc, TL_Mbb, MI2, TaintDFG, REAnalysis);
         continue;
       }

@@ -58,6 +58,7 @@ struct TaintInfo {
   friend bool operator==(const TaintInfo &T1, const TaintInfo &T2);
   friend bool operator!=(const TaintInfo &T1, const TaintInfo &T2);
   friend bool operator<(const TaintInfo &T1, const TaintInfo &T2);
+  friend raw_ostream& operator<<(raw_ostream& os, const TaintInfo& T);
 };
 
 class TaintAnalysis {
