@@ -228,14 +228,17 @@ void crash_analyzer::TaintAnalysis::calculateMemAddr(TaintInfo &Ti) {
         uint64_t AddrValue = 0;
         std::istringstream converter(rValue);
         converter >> std::hex >> AddrValue;
-        AddrValue += eqR.Offset;
-        if (!Dec || !Dec->getTarget())
-          break;
-
-        // FIXME: Since we now have deref-> should we check here if it is IsDeref
-        // and only in that case to be using that?
-        uint64_t Val =
-          Dec->getTarget()->GetProcess().ReadUnsignedFromMemory(AddrValue, 8, err);
+        uint64_t Val = AddrValue;
+        // If eqR is register location just add the offset to it, if it is a
+        // dereferenced memory location, read the value from memory and add
+        // the offset.
+        if (eqR.IsDeref) {
+          AddrValue += eqR.Offset;
+          if (!Dec || !Dec->getTarget())
+            break;
+          Val = Dec->getTarget()->GetProcess().ReadUnsignedFromMemory(AddrValue,
+                                                                      8, err);
+        }
         Val += *Ti.Offset;
         Ti.ConcreteMemoryAddress = Val;
         return;
@@ -625,7 +628,8 @@ bool llvm::crash_analyzer::TaintAnalysis::propagateTaint(
 
   Src2Ti.Op = DS.Source2;
   Src2Ti.Offset = DS.Src2Offset;
-  // FIXME: Here to calculateMemAddr????
+  if (Src2Ti.Offset)
+    calculateMemAddr(Src2Ti);
 
   DestTi.Op = DS.Destination;
   DestTi.Offset = DS.DestOffset;
