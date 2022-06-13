@@ -21,6 +21,16 @@
 ##   return 0;
 ## }
 
+## Confirm that Concrete Memory Address {reg:$rax; off:8} is calculated
+## properly, using backup location from memory to reconstruct $rax
+## register value.
+# RUN: %llvm-crash-analyzer -debug-only=taint-analysis --core-file=%S/Inputs/core.struct-field-blame %S/Inputs/struct-field-blame.out < %s 2>&1 | FileCheck %s --check-prefix=CHECK-LOC
+
+# CHECK-LOC: $rax = MOV64rm $rax, 1, $noreg, 8, $noreg, debug-location !DILocation(line: 9, column: 25
+# CHECK-LOC-NEXT: Dest {reg:$rax}
+# CHECK-LOC-NEXT: Src1 {reg:$rax; off:8}
+# CHECK-LOC-NEXT: Add to TL: {reg:$rax; off:8} (mem addr: 140726049954216)
+
 # RUN: %llvm-crash-analyzer --print-potential-crash-cause-loc --core-file=%S/Inputs/core.struct-field-blame %S/Inputs/struct-field-blame.out < %s 2>&1 | FileCheck %s
 
 # CHECK: Blame Function is func1
