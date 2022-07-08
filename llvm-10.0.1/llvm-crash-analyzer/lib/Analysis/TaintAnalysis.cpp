@@ -42,6 +42,10 @@ unsigned Node::NextID = 0;
 // New implementation of operator==.
 bool llvm::crash_analyzer::operator==(const TaintInfo &T1,
                                       const TaintInfo &T2) {
+  // Compare immediate values.
+  if (T1.Op->isImm() && T2.Op->isImm())
+    return T1.Op->getImm() == T2.Op->getImm();
+
   // Both operands needs to be reg operands.
   if (!T1.Op->isReg() || !T2.Op->isReg())
     return false;

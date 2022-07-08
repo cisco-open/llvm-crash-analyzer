@@ -221,6 +221,8 @@ body:             |
     PUSH64r $rbp, implicit-def $rsp, implicit $rsp, debug-location !DILocation(line: 11, scope: !2)
     $rbp = MOV64rr $rsp, debug-location !DILocation(line: 11, scope: !2)
     MOV64mr $rbp, 1, $noreg, -8, $noreg, $rdi, debug-location !DILocation(line: 11, scope: !2)
+    MOV64mi32 $rbp, 1, $noreg, -12, $noreg, 2, debug-location !DILocation(line: 11, scope: !2)
+    MOV64mi32 $rbp, 1, $noreg, -20, $noreg, 2, debug-location !DILocation(line: 11, scope: !2)
     $rax = MOV64rm $rbp, 1, $noreg, -8, $noreg, debug-location !DILocation(line: 12, column: 9, scope: !2)
     $ecx = MOV32rm $rax, 1, $noreg, 0, $noreg, debug-location !DILocation(line: 12, column: 12, scope: !2)
     $rax = MOV64rm $rbp, 1, $noreg, -8, $noreg, debug-location !DILocation(line: 12, column: 16, scope: !2)
@@ -256,6 +258,8 @@ body:             |
   // inspecting Taint Info management only.
   for (auto MBBIt = MF->rbegin(); MBBIt != MF->rend(); ++MBBIt) {
     auto &MBB = *MBBIt;
+    crash_analyzer::TaintInfo FirstImmTi, SecImmTi;
+    bool FirstStore = true;
     for (auto MIIt = MBB.rbegin(); MIIt != MBB.rend(); ++MIIt) {
       auto &MI = *MIIt;
       if (MI.getFlag(MachineInstr::CrashStart)) {
@@ -290,6 +294,31 @@ body:             |
         // Confirm that {reg: $rax} is not equal to {reg:$rax; off:8} in the
         // case where we can't calculate Concrete Memory Address.
         ASSERT_FALSE(DestTi == SrcTi);
+      }
+      if (TII->isStore(MI)) {
+        auto DestSrc = TII->getDestAndSrc(MI);
+        if (!DestSrc)
+          continue;
+	    if (!DestSrc->Source->isImm())
+          continue;
+        TA.printDestSrcInfo(*DestSrc, MI);
+        // Extract immediate ({imm:2}) operands from Store instructions.
+        if (FirstStore) {
+          // From MOV64mi32 $rbp, 1, $noreg, -20, $noreg, 2,
+          FirstImmTi.Op = DestSrc->Source;
+          FirstImmTi.Offset = DestSrc->SrcOffset;
+          if (FirstImmTi.Offset)
+            TA.calculateMemAddr(FirstImmTi);
+          FirstStore = false;
+        } else {
+          // From MOV64mi32 $rbp, 1, $noreg, -20, $noreg, 2,
+          SecImmTi.Op = DestSrc->Source;
+          SecImmTi.Offset = DestSrc->SrcOffset;
+          if (SecImmTi.Offset)
+            TA.calculateMemAddr(SecImmTi);
+          // Compare immediate TaintInfos ({imm:2} and {imm:2}).
+          ASSERT_TRUE(FirstImmTi == SecImmTi);
+        }
       }
     }
   }
