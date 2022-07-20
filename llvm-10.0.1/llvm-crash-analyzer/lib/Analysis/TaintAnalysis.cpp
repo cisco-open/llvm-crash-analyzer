@@ -39,85 +39,58 @@ using TaintInfo = llvm::crash_analyzer::TaintInfo;
 
 unsigned Node::NextID = 0;
 
-bool llvm::crash_analyzer::operator==(const TaintInfo &T1, const TaintInfo &T2) {
-  const MachineFunction *MF = T1.Op->getParent()->getMF();
-  auto TRI = MF->getSubtarget().getRegisterInfo();
-  auto CATI = getCATargetInfoInstance();
-  if (!T1.IsTaintMemAddr() && !T2.IsTaintMemAddr()) {
-    // Both operands needs to be reg operands
-    if (!T1.Op->isReg() || !T2.Op->isReg())
-      return false;
+// New implementation of operator==.
+bool llvm::crash_analyzer::operator==(const TaintInfo &T1,
+                                      const TaintInfo &T2) {
+  // Compare immediate values.
+  if (T1.Op->isImm() && T2.Op->isImm())
+    return T1.Op->getImm() == T2.Op->getImm();
 
-    if (T1.Op->getReg() == T2.Op->getReg()) {
-      // Check if both operands have an offset
-      if (T1.Offset && T2.Offset) {
-        std::string RegName = TRI->getRegAsmName(T1.Op->getReg()).lower();
-        // Compare offsets only if they point to a stack location
-        if (CATI->isSPRegister(RegName) || CATI->isBPRegister(RegName)) {
-          return *T1.Offset == *T2.Offset;
-        }
-      } else
-        return true;
-    }
-
-    // Check for noreg case.
-    // Check offsets if both operands are noreg
-    if (!T1.Op->getReg() && !T2.Op->getReg()) {
-      if (T1.Offset && T2.Offset)
-        return *T1.Offset == *T2.Offset;
-    }
-
-    if (!T1.Op->getReg() || !T2.Op->getReg())
-      return false;
-
-    // Check if the registers are alias to each other
-    // eax and rax, for example
-    for (MCRegAliasIterator RAI(T1.Op->getReg(), TRI, true); RAI.isValid();
-         ++RAI) {
-      if ((*RAI).id() == T2.Op->getReg()) {
-        return true;
-      }
-    }
-  }
-
-  // For mem taint ops, compare the actual addresses.
-  if (T1.IsTaintMemAddr() && T2.IsTaintMemAddr())
-    // Here we should be comparing addresses if both available only.
-    return T1.GetTaintMemAddr() == T2.GetTaintMemAddr();
-
+  // Both operands needs to be reg operands.
   if (!T1.Op->isReg() || !T2.Op->isReg())
     return false;
 
-  // Here we check mem addr base and reg.
-  // e.g.: $rsp + 0 == $rsp
-  // TODO: Should we check the offset is 0 here?
-  if (T1.Op->getReg() == T2.Op->getReg()) {
-    if (!T1.Offset && T2.Offset) {
-      return *T2.Offset == 0;
+  const MachineFunction *MF = T1.Op->getParent()->getMF();
+  auto TRI = MF->getSubtarget().getRegisterInfo();
+  // Check if register operands match, including $noreg case.
+  bool RegsMatch = T1.Op->getReg() == T2.Op->getReg();
+  // Check if the registers are aliases to each other eax and rax, for example.
+  if (T1.Op->getReg() && T2.Op->getReg()) {
+    for (MCRegAliasIterator RAI(T1.Op->getReg(), TRI, true); RAI.isValid();
+         ++RAI) {
+      if ((*RAI).id() == T2.Op->getReg()) {
+        RegsMatch = true;
+      }
     }
-    if (!T2.Offset && T1.Offset) {
-      return *T1.Offset == 0;
-    }
-    return *T1.Offset == *T2.Offset;
   }
 
-  // $noreg case
-  if (!T1.Op->getReg() || !T2.Op->getReg())
-    return false;
+  // Both are memory locations.
+  if (T1.Offset && T2.Offset) {
+    // Both have ConcreteMemoryAddress calculated.
+    if (T1.IsTaintMemAddr() && T2.IsTaintMemAddr())
+      // Here we compare addresses if both available only.
+      return T1.GetTaintMemAddr() == T2.GetTaintMemAddr();
 
-  // Check for register aliases.
-  for (MCRegAliasIterator RAI(T1.Op->getReg(), TRI, true); RAI.isValid();
-       ++RAI) {
-    if ((*RAI).id() == T2.Op->getReg()) {
-      if (!T1.Offset && T2.Offset) {
-        return *T2.Offset == 0;
-      }
-      if (!T2.Offset && T1.Offset) {
-        return *T1.Offset == 0;
-      }
+    // Consider cases where ConcreteMemoryAddress is not calculated.
+    if (RegsMatch)
+      // Both Regs and Offsets need to match.
       return *T1.Offset == *T2.Offset;
-    }
+
+    return false;
   }
+
+  // Both are simple register locations.
+  if (!T1.Offset && !T2.Offset)
+    // Just regsiters need to match.
+    return RegsMatch;
+
+  // Consider cases where one TaintInfo is memory location and other is
+  // register. If one has offset zero and other doesn't have offset, consider
+  // them the same. ex. rax == rax + 0 or eax = rax + 0
+  uint64_t Off = T1.Offset ? *T1.Offset : *T2.Offset;
+  if (Off == 0)
+    // Just registers need to match.
+    return RegsMatch;
 
   return false;
 }
