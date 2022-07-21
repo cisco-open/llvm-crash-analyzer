@@ -37,3 +37,8 @@
 # RUN:     %S/Inputs/ptr-arith-1 < %s 2>&1 | FileCheck %s
 
 # CHECK: Blame Function is test_cf
+
+## Test printed DFG format.
+# RUN: %llvm-crash-analyzer --print-dfg-as-dot=%t.dot --core-file=%S/Inputs/core.ptr-arith-1 %S/Inputs/ptr-arith-1 < %s
+# RUN: cat %t.dot | FileCheck --check-prefix=CHECK-DFG %s
+# CHECK-DFG-NOT: {{.*}}CONSTANT: {{[0-9]+}}}"  ->
