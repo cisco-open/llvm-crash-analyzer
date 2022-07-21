@@ -35,6 +35,8 @@ class ConcreteReverseExec;
 namespace llvm {
 namespace crash_analyzer {
 
+enum TaintInfoType { ImmediateVal, RegisterLoc, MemoryLoc };
+
 // Tainted Operands in a Machine Instruction.
 // This is a Reg-Offset pair.
 // TODO: Take into account:
@@ -54,6 +56,7 @@ struct TaintInfo {
   uint64_t GetTaintMemAddr() const {
     return ConcreteMemoryAddress;
   }
+  std::tuple<unsigned,int,int> getTuple() const;
 
   friend bool operator==(const TaintInfo &T1, const TaintInfo &T2);
   friend bool operator!=(const TaintInfo &T1, const TaintInfo &T2);

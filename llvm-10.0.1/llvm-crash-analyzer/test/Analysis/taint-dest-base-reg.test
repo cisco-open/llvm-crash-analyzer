@@ -72,3 +72,8 @@
 # CHECK-DEBUG-NEXT: {reg:$eax}
 # CHECK-DEBUG-NEXT: {reg:$rbp; off:-8} (mem addr: 140734701020776)
 # CHECK-DEBUG-NEXT: ------Taint List End----
+
+## Test printed DFG format.
+# RUN: %llvm-crash-analyzer --print-dfg-as-dot=%t.dot --core-file=%S/Inputs/core.taint-dest-base-reg %S/Inputs/taint-dest-base-reg.out < %s
+# RUN: cat %t.dot | FileCheck --check-prefix=CHECK-DFG %s
+# CHECK-DFG-NOT: {{.*}}CONSTANT: {{[0-9]+}}}"  ->

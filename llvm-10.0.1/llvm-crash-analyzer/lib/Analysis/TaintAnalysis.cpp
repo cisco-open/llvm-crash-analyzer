@@ -99,29 +99,49 @@ bool llvm::crash_analyzer::operator!=(const TaintInfo &T1, const TaintInfo &T2) 
   return !operator==(T1, T2);
 }
 
-bool llvm::crash_analyzer::operator<(const TaintInfo &T1, const TaintInfo &T2) {
-  if (T1.Op->isReg() && T2.Op->isReg()) {
-    if (T1.Op->getReg() && T2.Op->getReg()) {
-    // Check if the registers are alias to each other
-    // eax and rax, for example
-    const MachineFunction *MF = T1.Op->getParent()->getMF();
+// Convert TaintInfo to a tuple which contains the following fields:
+// 1. TaintInfoType - ImmediateVal = 0, RegisterLoc = 1, MemoryLoc = 2;
+// 2. RegisterID - Register ID (from TargetInfo) or -1 for $noreg;
+// 3. IntegerValue - Value of Immediate or Offset of Memory Location.
+std::tuple<unsigned, int, int>
+llvm::crash_analyzer::TaintInfo::getTuple() const {
+  // For Immediate TI type, just set IntegerValue of the tuple.
+  if (Op->isImm())
+    return {TaintInfoType::ImmediateVal, 0, Op->getImm()};
+
+  assert(Op->isReg() && "TaintInfo operand is either Immediate or Register");
+  // Get register ID from TargetInfo. For $noreg it will be -1.
+  int RegOpID = -1;
+  if (Op->getReg()) {
+    auto CATI = getCATargetInfoInstance();
+    const MachineFunction *MF = Op->getParent()->getMF();
     auto TRI = MF->getSubtarget().getRegisterInfo();
-    for (MCRegAliasIterator RAI(T1.Op->getReg(), TRI, true); RAI.isValid();
-         ++RAI) {
-      if ((*RAI).id() == T2.Op->getReg()) {
-        return false;
-      }
-    }
-    if (T1.Op->getReg() < T2.Op->getReg())
-      return true;
-    }
-    // Check for noreg
-    if (!T1.Op->getReg() && !T2.Op->getReg()) {
-      if (T1.Offset && T2.Offset)
-        return *T1.Offset < *T2.Offset;
-    }
+    std::string RegName = TRI->getRegAsmName(Op->getReg()).lower();
+    // For register operand get ID.
+    assert(CATI->getID(RegName) && "We should be able to get Regsiter Op ID");
+    RegOpID = *CATI->getID(RegName);
   }
-  return false;
+  // If there is no offset, TI is a Register, so just set the register ID.
+  if (!Offset)
+    return {TaintInfoType::RegisterLoc, RegOpID, 0};
+
+  int Off = *Offset;
+  // For Memory locations, set ID of the Base Register and Offset as well.
+  return {TaintInfoType::MemoryLoc, RegOpID, Off};
+}
+
+// New implementation of the operator<. Based on the tuple representation of
+// TaintInfo.
+bool llvm::crash_analyzer::operator<(const TaintInfo &T1, const TaintInfo &T2) {
+  auto Tup1 = T1.getTuple();
+  auto Tup2 = T2.getTuple();
+  if (std::get<0>(Tup1) == std::get<0>(Tup2)) {
+    if (std::get<1>(Tup1) == std::get<1>(Tup2)) {
+      return std::get<2>(Tup1) < std::get<2>(Tup2);
+    }
+    return std::get<1>(Tup1) < std::get<1>(Tup2);
+  }
+  return std::get<0>(Tup1) < std::get<0>(Tup2);
 }
 
 raw_ostream &llvm::crash_analyzer::operator<<(raw_ostream &os,
