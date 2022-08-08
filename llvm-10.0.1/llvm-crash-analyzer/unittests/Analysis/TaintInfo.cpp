@@ -253,7 +253,7 @@ body:             |
   ASSERT_TRUE(TRI);
   ASSERT_TRUE(TII);
 
-  crash_analyzer::TaintAnalysis TA("", false);
+  crash_analyzer::TaintAnalysis TA(false);
   // Here we simulate backward Taint Analysis, but we are interested in
   // inspecting Taint Info management only.
   for (auto MBBIt = MF->rbegin(); MBBIt != MF->rend(); ++MBBIt) {
