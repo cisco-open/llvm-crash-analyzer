@@ -90,7 +90,7 @@ static opt<bool> PrintPotentialCrashCauseLocation(
 static cl::opt<std::string> PrintDecMIR("print-decompiled-mir",
                                         cl::desc("Print decompiled LLVM MIR."),
                                         cl::value_desc("filename"),
-                                        cl::init(""));
+                                        cl::init(""), cat(CrashAnalyzer));
 } // namespace
 /// @}
 //===----------------------------------------------------------------------===//
