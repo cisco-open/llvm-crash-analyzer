@@ -72,3 +72,22 @@
 # CHECK-DEBUG-NEXT: {reg:$eax}
 # CHECK-DEBUG-NEXT: {reg:$rbp; off:-8} (mem addr: 140734701020776)
 # CHECK-DEBUG-NEXT: ------Taint List End----
+
+## Test printed DFG format (MIR representation).
+# RUN: %llvm-crash-analyzer --print-dfg-as-dot=%t1.dot --core-file=%S/Inputs/core.taint-dest-base-reg %S/Inputs/taint-dest-base-reg.out < %s
+# RUN: cat %t1.dot | FileCheck --check-prefix=CHECK-DFG %s
+# CHECK-DFG-NOT: {{.*}}CONSTANT: {{[0-9]+}}}"  ->
+
+## Test printed DFG format (source code lines).
+# RUN: %llvm-crash-analyzer --print-taint-value-flow-as-dot=%t2.dot --core-file=%S/Inputs/core.taint-dest-base-reg %S/Inputs/taint-dest-base-reg.out < %s
+# RUN: cat %t2.dot | FileCheck --check-prefix=CHECK-TAINT-DFG %s
+# CHECK-TAINT-DFG: digraph TaintDataFlowGraph {
+# CHECK-TAINT-DFG-NEXT: crashNode  -> "[[TEST_FILE:[^:]*]]:13:18" [color="red"];
+# CHECK-TAINT-DFG-NEXT: crashNode  -> "[[TEST_FILE]]:13:18" [color="red"];
+# CHECK-TAINT-DFG-NEXT: crashNode  -> "[[TEST_FILE]]:13:18" [color="red"];
+# CHECK-TAINT-DFG-NEXT: "[[TEST_FILE]]:13:18"  -> "[[TEST_FILE]]:13:4";
+# CHECK-TAINT-DFG-NEXT: "[[TEST_FILE]]:13:18"  -> "[[TEST_FILE]]:13:20";
+# CHECK-TAINT-DFG-NEXT: "[[TEST_FILE]]:13:4"  -> "[[TEST_FILE]]:11:0";
+# CHECK-TAINT-DFG-NEXT: "[[TEST_FILE]]:13:20"  -> "[[TEST_FILE]]:12:8" [color="red"];
+# CHECK-TAINT-DFG-NEXT: "[[TEST_FILE]]:11:0"  -> "[[TEST_FILE]]:19:3";
+# CHECK-TAINT-DFG-NEXT: "[[TEST_FILE]]:19:3"  -> "[[TEST_FILE]]:18:13" [color="red"];
