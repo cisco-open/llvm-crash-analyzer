@@ -75,6 +75,13 @@ static opt<std::string> PrintTaintValueFlowAsDot(
     cl::value_desc("<dot-file-name>"),
     cat(CrashAnalyzer));
 
+static cl::opt<std::string> DumpTaintGraphAsDOT(
+    "print-dfg-as-dot",
+    cl::desc("Print MIR representation Taint DF Graph as DOT. "
+             "Please use `$ dot <dot-file-name> -Tpng -o "
+             "<dot-file-name>.png` to see the graph in form of picture."),
+    cl::value_desc("filename"), cl::init(""), cat(CrashAnalyzer));
+
 static opt<bool> PrintPotentialCrashCauseLocation(
     "print-potential-crash-cause-loc", cl::init(false),
     cl::desc("Print line:column that could be the cause of the crash."),
@@ -83,7 +90,7 @@ static opt<bool> PrintPotentialCrashCauseLocation(
 static cl::opt<std::string> PrintDecMIR("print-decompiled-mir",
                                         cl::desc("Print decompiled LLVM MIR."),
                                         cl::value_desc("filename"),
-                                        cl::init(""));
+                                        cl::init(""), cat(CrashAnalyzer));
 } // namespace
 /// @}
 //===----------------------------------------------------------------------===//
@@ -187,17 +194,26 @@ int main(int argc, char **argv) {
       llvm::dbgs() << "No code generated for " << f.Name << "\n";
   });
 
-  // Run the analysis.
-  StringRef DotFileName = "";
-  if (PrintTaintValueFlowAsDot != "") {
-    DotFileName = PrintTaintValueFlowAsDot;
-    if (!DotFileName.endswith(".dot") && !DotFileName.endswith(".gv")) {
+  // Check DOT file argument.
+  StringRef TaintDotFileName = PrintTaintValueFlowAsDot;
+  if (!TaintDotFileName.empty()) {
+    if (!TaintDotFileName.endswith(".dot") && !TaintDotFileName.endswith(".gv")) {
       errs() << "DOT file must have `.dot` or `.gv` extension.\n";
       return 0;
     }
   }
 
-  crash_analyzer::TaintAnalysis TA(DotFileName,
+  // Check DOT file argument.
+  StringRef MirDotFileName = DumpTaintGraphAsDOT;
+  if (!MirDotFileName.empty()) {
+    if (!MirDotFileName.endswith(".dot") && !MirDotFileName.endswith(".gv")) {
+      errs() << "DOT file must have `.dot` or `.gv` extension.\n";
+      return 0;
+    }
+  }
+
+  // Run the analysis.
+  crash_analyzer::TaintAnalysis TA(TaintDotFileName, MirDotFileName,
                                    PrintPotentialCrashCauseLocation);
   Dec->setTarget(&coreFile.getTarget());
   TA.setDecompiler(Dec);

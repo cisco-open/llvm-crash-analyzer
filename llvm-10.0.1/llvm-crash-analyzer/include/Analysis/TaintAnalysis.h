@@ -63,7 +63,8 @@ struct TaintInfo {
 
 class TaintAnalysis {
 private:
-  StringRef DotFileName = "";
+  StringRef TaintDotFileName;
+  StringRef MirDotFileName;
   SmallVector<TaintInfo, 8> TaintList;
   Decompiler *Dec = nullptr;
   // We use this flag to avoid decompilation on demand
@@ -77,7 +78,7 @@ private:
   RegisterEquivalence *REA = nullptr;
 public:
 
-  TaintAnalysis(StringRef DotFileName, bool PrintPotentialCrashCauseLocation);
+  TaintAnalysis(StringRef TaintDotFileName, StringRef MirDotFileName, bool PrintPotentialCrashCauseLocation);
   TaintAnalysis(bool b) : isCrashAnalyzerTATool(b) {}
 
   bool runOnBlameModule(BlameModule &BM);

@@ -20,12 +20,6 @@
 static constexpr unsigned FrameLevelDepthToGo = 10;
 static bool abortAnalysis = false;
 
-static cl::opt<std::string>
-DumpTaintGraphAsDOT("print-dfg-as-dot",
-                     cl::desc("Print Tainted graph for the GraphViz."),
-                     cl::value_desc("filename"),
-                     cl::init(""));
-
 static cl::opt<bool> PrintDestSrcOperands(
     "print-dest-src-operands",
     cl::desc("Print Destination and Source Operands for each MIR"),
@@ -140,9 +134,9 @@ raw_ostream &llvm::crash_analyzer::operator<<(raw_ostream &os,
   return os;
 }
 
-crash_analyzer::TaintAnalysis::TaintAnalysis(StringRef DotFileName,
-    bool PrintPotentialCrashCauseLocation)
-    : DotFileName(DotFileName),
+crash_analyzer::TaintAnalysis::TaintAnalysis(StringRef TaintDotFileName,
+    StringRef MirDotFileName, bool PrintPotentialCrashCauseLocation)
+    : TaintDotFileName(TaintDotFileName), MirDotFileName(MirDotFileName),
       PrintPotentialCrashCauseLocation(PrintPotentialCrashCauseLocation) {}
 
 void crash_analyzer::TaintAnalysis::calculateMemAddr(TaintInfo &Ti) {
@@ -1045,17 +1039,13 @@ bool crash_analyzer::TaintAnalysis::runOnBlameModule(BlameModule &BM) {
       WithColor::warning()
         << "No symbols found for function " << FnName << " from backtrace"
         << ", so analysis is stopped there.\n";
-      if (DumpTaintGraphAsDOT != "") {
-        StringRef file_name = DumpTaintGraphAsDOT;
-        if (!file_name.endswith(".dot") && !file_name.endswith(".gv"))
-          errs() << "error: DOT file must be with '.dot' or '.gv' extension.\n";
-        else
-          TaintDFG.printAsDOT(file_name.str());
+      if (!MirDotFileName.empty()) {
+        TaintDFG.printAsDOT(MirDotFileName.str());
       }
       TaintDFG.dump();
       // Dump user friendly DFG.
-      if (DotFileName != "") {
-        TaintDFG.printAsDOT(DotFileName.str(), true /*Verbose*/);
+      if (!TaintDotFileName.empty()) {
+        TaintDFG.printAsDOT(TaintDotFileName.str(), true /*Verbose*/);
       }
       if (!TaintDFG.getBlameNodesSize()) {
         llvm::outs() << "\nNo blame function found.\n";
@@ -1071,18 +1061,14 @@ bool crash_analyzer::TaintAnalysis::runOnBlameModule(BlameModule &BM) {
     if (runOnBlameMF(BM, *(BF.MF), TaintDFG, false, 0)) {
       LLVM_DEBUG(dbgs() << "\nTaint Analysis done.\n");
       if (TaintList.empty()) {
-        if (DumpTaintGraphAsDOT != "") {
-          StringRef file_name = DumpTaintGraphAsDOT;
-          if (!file_name.endswith(".dot") && !file_name.endswith(".gv"))
-            errs() << "error: DOT file must be with '.dot' or '.gv' extension.\n";
-          else
-           TaintDFG.printAsDOT(file_name.str());
+        if (!MirDotFileName.empty()) {
+          TaintDFG.printAsDOT(MirDotFileName.str());
         }
         TaintDFG.dump();
 
         // Dump user friendly DFG.
-        if (DotFileName != "") {
-          TaintDFG.printAsDOT(DotFileName.str(), true /*Verbose*/);
+        if (!TaintDotFileName.empty()) {
+          TaintDFG.printAsDOT(TaintDotFileName.str(), true /*Verbose*/);
         }
 
         if (!TaintDFG.getBlameNodesSize()) {
@@ -1098,19 +1084,15 @@ bool crash_analyzer::TaintAnalysis::runOnBlameModule(BlameModule &BM) {
     }
   }
 
-  if (DumpTaintGraphAsDOT != "") {
-    StringRef file_name = DumpTaintGraphAsDOT;
-    if (!file_name.endswith(".dot") && !file_name.endswith(".gv"))
-      errs() << "error: DOT file must be with '.dot' or '.gv' extension.\n";
-    else
-      TaintDFG.printAsDOT(file_name.str());
+  if (!MirDotFileName.empty()) {
+    TaintDFG.printAsDOT(MirDotFileName.str());
   }
 
   TaintDFG.dump();
 
   // Dump user friendly DFG.
-  if (DotFileName != "") {
-    TaintDFG.printAsDOT(DotFileName.str(), true /*Verbose*/);
+  if (!TaintDotFileName.empty()) {
+    TaintDFG.printAsDOT(TaintDotFileName.str(), true /*Verbose*/);
   }
 
   if (!TaintDFG.getBlameNodesSize()) {
