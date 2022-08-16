@@ -63,8 +63,8 @@ struct TaintInfo {
 
 class TaintAnalysis {
 private:
-  StringRef TaintDotFileName = "";
-  StringRef MirDotFileName = "";
+  StringRef TaintDotFileName;
+  StringRef MirDotFileName;
   SmallVector<TaintInfo, 8> TaintList;
   Decompiler *Dec = nullptr;
   // We use this flag to avoid decompilation on demand

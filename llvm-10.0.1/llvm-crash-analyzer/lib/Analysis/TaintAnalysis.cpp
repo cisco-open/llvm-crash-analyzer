@@ -1039,12 +1039,12 @@ bool crash_analyzer::TaintAnalysis::runOnBlameModule(BlameModule &BM) {
       WithColor::warning()
         << "No symbols found for function " << FnName << " from backtrace"
         << ", so analysis is stopped there.\n";
-      if (MirDotFileName != "") {
+      if (!MirDotFileName.empty()) {
         TaintDFG.printAsDOT(MirDotFileName.str());
       }
       TaintDFG.dump();
       // Dump user friendly DFG.
-      if (TaintDotFileName != "") {
+      if (!TaintDotFileName.empty()) {
         TaintDFG.printAsDOT(TaintDotFileName.str(), true /*Verbose*/);
       }
       if (!TaintDFG.getBlameNodesSize()) {
@@ -1061,13 +1061,13 @@ bool crash_analyzer::TaintAnalysis::runOnBlameModule(BlameModule &BM) {
     if (runOnBlameMF(BM, *(BF.MF), TaintDFG, false, 0)) {
       LLVM_DEBUG(dbgs() << "\nTaint Analysis done.\n");
       if (TaintList.empty()) {
-        if (MirDotFileName != "") {
+        if (!MirDotFileName.empty()) {
           TaintDFG.printAsDOT(MirDotFileName.str());
         }
         TaintDFG.dump();
 
         // Dump user friendly DFG.
-        if (TaintDotFileName != "") {
+        if (!TaintDotFileName.empty()) {
           TaintDFG.printAsDOT(TaintDotFileName.str(), true /*Verbose*/);
         }
 
@@ -1084,14 +1084,14 @@ bool crash_analyzer::TaintAnalysis::runOnBlameModule(BlameModule &BM) {
     }
   }
 
-  if (MirDotFileName != "") {
+  if (!MirDotFileName.empty()) {
     TaintDFG.printAsDOT(MirDotFileName.str());
   }
 
   TaintDFG.dump();
 
   // Dump user friendly DFG.
-  if (TaintDotFileName != "") {
+  if (!TaintDotFileName.empty()) {
     TaintDFG.printAsDOT(TaintDotFileName.str(), true /*Verbose*/);
   }
 

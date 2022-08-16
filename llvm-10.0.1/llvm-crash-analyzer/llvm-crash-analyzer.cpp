@@ -194,26 +194,25 @@ int main(int argc, char **argv) {
       llvm::dbgs() << "No code generated for " << f.Name << "\n";
   });
 
-  // Run the analysis.
-  StringRef TaintDotFileName = "";
-  if (PrintTaintValueFlowAsDot != "") {
-    TaintDotFileName = PrintTaintValueFlowAsDot;
+  // Check DOT file argument.
+  StringRef TaintDotFileName = PrintTaintValueFlowAsDot;
+  if (!TaintDotFileName.empty()) {
     if (!TaintDotFileName.endswith(".dot") && !TaintDotFileName.endswith(".gv")) {
       errs() << "DOT file must have `.dot` or `.gv` extension.\n";
       return 0;
     }
   }
 
-  // Run the analysis.
-  StringRef MirDotFileName = "";
-  if (DumpTaintGraphAsDOT != "") {
-    MirDotFileName = DumpTaintGraphAsDOT;
+  // Check DOT file argument.
+  StringRef MirDotFileName = DumpTaintGraphAsDOT;
+  if (!MirDotFileName.empty()) {
     if (!MirDotFileName.endswith(".dot") && !MirDotFileName.endswith(".gv")) {
       errs() << "DOT file must have `.dot` or `.gv` extension.\n";
       return 0;
     }
   }
 
+  // Run the analysis.
   crash_analyzer::TaintAnalysis TA(TaintDotFileName, MirDotFileName,
                                    PrintPotentialCrashCauseLocation);
   Dec->setTarget(&coreFile.getTarget());
