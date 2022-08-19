@@ -312,6 +312,7 @@ void TaintDataFlowGraph::printAsDOT(std::string fileName,
           if (node->MI) {
             MyDotFile << node->MI->getParent()->getParent()->getCrashOrder()
                       << "; ";
+            MyDotFile << node->getID() << "; ";
             node->MI->print(MyDotFile, /*IsStandalone*/ true,
                             /*SkipOpers*/ false, /*SkipDebugLoc*/ true,
                             /*AddNewLine*/ false);
@@ -360,6 +361,7 @@ void TaintDataFlowGraph::printAsDOT(std::string fileName,
           if (adjNode->MI) {
             MyDotFile << adjNode->MI->getParent()->getParent()->getCrashOrder()
                       << "; ";
+            MyDotFile << adjNode->getID() << "; ";
             adjNode->MI->print(MyDotFile, /*IsStandalone*/ true,
                                /*SkipOpers*/ false, /*SkipDebugLoc*/ true,
                                /*AddNewLine*/ false);
