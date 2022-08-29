@@ -35,3 +35,14 @@
 
 # CHECK: Blame Function is func1
 # CHECK: From File {{.*}}/test.c:14:12
+
+## Test printed DFG format (MIR representation).
+# RUN: %llvm-crash-analyzer --print-dfg-as-dot=%t1.dot --core-file=%S/Inputs/core.taint-dest-base-reg %S/Inputs/taint-dest-base-reg.out < %s
+# RUN: cat %t1.dot | FileCheck --check-prefix=CHECK-DFG %s
+# CHECK-DFG: digraph TaintDataFlowGraph {
+# CHECK-DFG-NEXT: crashNode  ->  "{1; 1; crash-start MOV32mr $rcx, 1, $noreg, 4, $noreg, $eax;  MEM: 4}" [color="red"];
+# CHECK-DFG-NEXT: crashNode  ->  "{1; 2; crash-start MOV32mr $rcx, 1, $noreg, 4, $noreg, $eax;  REG: $rcx}" [color="red"];
+# CHECK-DFG-NEXT: crashNode  ->  "{1; 3; crash-start MOV32mr $rcx, 1, $noreg, 4, $noreg, $eax;  REG: $eax}" [color="red"];
+# CHECK-DFG-NEXT: "{1; 2; crash-start MOV32mr $rcx, 1, $noreg, 4, $noreg, $eax;  REG: $rcx}"  ->  "{1; 4; $rcx = MOV64rm $rbp, 1, $noreg, -8, $noreg;  MEM: 140734701020776}";
+# CHECK-DFG-NEXT: "{1; 3; crash-start MOV32mr $rcx, 1, $noreg, 4, $noreg, $eax;  REG: $eax}"  ->  "{1; 5; $eax = MOV32rm $rbp, 1, $noreg, -12, $noreg;  MEM: 140734701020772}";
+# CHECK-DFG-NEXT: "{1; 4; $rcx = MOV64rm $rbp, 1, $noreg, -8, $noreg;  MEM: 140734701020776}"  ->  "{1; 7; MOV64mr $rbp, 1, $noreg, -8, $noreg, $rdi;  REG: $rdi}";
