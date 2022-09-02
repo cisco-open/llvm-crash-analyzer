@@ -964,11 +964,11 @@ bool crash_analyzer::TaintAnalysis::runOnBlameMF(BlameModule &BM,
 
       auto DestSrc = TII->getDestAndSrc(MI);
       if (!DestSrc) {
+        MI.dump();
         LLVM_DEBUG(llvm::dbgs()
                        << "haven't found dest && source for the MI\n";);
         bool toContinue = continueAnalysis(MI, TL_Mbb, REAnalysis);
         if (!toContinue) {
-          MI.dump();
           WithColor::error(errs())
               << "MIR not handled; Unable to propagate taint analysis\n";
           abortAnalysis = true;
