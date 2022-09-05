@@ -656,13 +656,16 @@ X86InstrInfo::getDestAndSrc(const MachineInstr &MI) const {
       const MachineOperand *Src = &(MI.getOperand(0));
       const MachineOperand *Source2 = &(MI.getOperand(1));
       return DestSourcePair{nullptr, Src, None, None, Source2, None, nullptr, 0, 0};
-    } case X86::CMP32rm: {
+    }
+    case X86::CMP32rm:
+    case X86::CMP64rm: {
       const MachineOperand *Src = &(MI.getOperand(0));
       if (!getMemOperandWithOffset(MI, BaseOp, Offset, TRI))
         return None;
       return DestSourcePair{nullptr, Src, None, None, BaseOp, Offset, nullptr, 0, 0};
-    } case X86::CMP8mi:
-      case X86::CMP32mi8: {
+    }
+    case X86::CMP8mi:
+    case X86::CMP32mi8: {
       const MachineOperand *Src2 = &(MI.getOperand(5));
       if (!getMemOperandWithOffset(MI, BaseOp, Offset, TRI))
         return None;
@@ -769,22 +772,26 @@ X86InstrInfo::getDestAndSrc(const MachineInstr &MI) const {
             nullptr, BaseOp,  None,    Offset, &MI.getOperand(5),
             None,    nullptr, nullptr, 0};
       }
+      case X86::TEST8rr:
+      case X86::TEST16rr:
+      case X86::TEST32rr:
+      case X86::TEST64rr: {
+        return DestSourcePair{nullptr, &MI.getOperand(0), None,
+                              None,    &MI.getOperand(1), None,
+                              nullptr, nullptr,           0};
+      }
       case X86::TEST16i16:
       case X86::TEST16mr:
       case X86::TEST16ri:
-      case X86::TEST16rr:
       case X86::TEST32i32:
       case X86::TEST32mr:
       case X86::TEST32ri:
-      case X86::TEST32rr:
       case X86::TEST64i32:
       case X86::TEST64mr:
       case X86::TEST64ri32:
-      case X86::TEST64rr:
       case X86::TEST8i8:
       case X86::TEST8mr:
       case X86::TEST8ri:
-      case X86::TEST8rr:
       case X86::CMP16i16:
       case X86::CMP16mr:
       case X86::CMP16ri:
@@ -802,7 +809,6 @@ X86InstrInfo::getDestAndSrc(const MachineInstr &MI) const {
       case X86::CMP64mr:
       case X86::CMP64ri32:
       case X86::CMP64ri8:
-      case X86::CMP64rm:
       case X86::CMP64rr:
       case X86::CMP64rr_REV:
       case X86::CMP64mi8:
@@ -872,6 +878,7 @@ X86InstrInfo::getDestAndSrc(const MachineInstr &MI) const {
       // TODO: for DIV -- within operand(2) is the remainder.
       return DestSourcePair{*Dest, *Src};
       }
+      case X86::POP64r:
       case X86::PUSH64r: {
         /* FIXME: This needs to be handled appropriately. Setting destination
            as empty enables the propagation of taint analysis. */

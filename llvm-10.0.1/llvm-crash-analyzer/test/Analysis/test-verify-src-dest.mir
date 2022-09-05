@@ -13,6 +13,12 @@
 # CHECK:  TEST8mi $rdx, 1, $noreg, 11, $noreg, 1, implicit-def $eflags
 # CHECK:Src1 {reg:$rdx; off:11}
 # CHECK:Src2 {imm:1}
+# CHECK:TEST64rr $rdi, $rdi, implicit-def $eflags
+# CHECK:Src1 {reg:$rdi}
+# CHECK:Src2 {reg:$rdi}
+# CHECK: CMP64rm $rax, $rdi, 1, $noreg, 24, $noreg, implicit-def $eflags
+# CHECK:Src1 {reg:$rax}
+# CHECK:Src2 {reg:$rdi; off:24}
 # CHECK:  $eax = XOR32rr undef $eax(tied-def 0), undef $eax, implicit-def $eflags
 # CHECK:Dest {reg:$eax}
 # CHECK:Src1 {reg:$eax}
@@ -153,6 +159,8 @@ body:             |
     PUSH64r $rbp, implicit-def $rsp, implicit $rsp
     $rbp = MOV64rr $rsp
     $eax = XOR32rr undef $eax, undef $eax, implicit-def $eflags
+    CMP64rm $rax, $rdi, 1, $noreg, 24, $noreg, implicit-def $eflags
+    TEST64rr $rdi, $rdi, implicit-def $eflags
     TEST8mi $rdx, 1, $noreg, 11, $noreg, 1, implicit-def $eflags
     MOV32mi $rbp, 1, $noreg, -4, $noreg, 0
     ADD64mi8 $rbp, 1, $noreg, 327056915, $noreg, 1, implicit-def $eflags
