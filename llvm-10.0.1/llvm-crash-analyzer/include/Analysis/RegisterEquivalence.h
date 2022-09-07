@@ -83,6 +83,9 @@ public:
   void invalidateRegEq(MachineInstr &MI,
                        RegisterOffsetPair Reg);
 
+  void invalidateAllRegUses(MachineInstr &MI,
+                            RegisterOffsetPair Reg);
+
   void setRegEq(MachineInstr &MI, RegisterOffsetPair Src,
                 RegisterOffsetPair Dest);
 
@@ -101,6 +104,10 @@ public:
   // all regs equivalent to Reg2.
   bool verifyEquivalenceTransitivity(MachineInstr &MI, RegisterOffsetPair Reg1,
                                      RegisterOffsetPair Reg2);
+
+  // If Register is redefined and its equivalances are invalidated,
+  // confirm that that is done for all sub/super registers as well.
+  bool verifyOverlapsInvalidation(MachineInstr &MI, unsigned RegNum);
 
   void join(MachineBasicBlock &MBB, RegisterEqSet &LiveIns);
   void registerEqDFAnalysis(MachineFunction &MF);
