@@ -149,6 +149,7 @@ body:             |
     MOV64mr $rsi, 1, $noreg, 16, $noreg, $rax, debug-location !DILocation(line: 4, scope: !5)
     $rbp = XOR64rr undef $rbp, undef $rbp, implicit-def $eflags, debug-location !DILocation(line: 4, column: 2, scope: !5)
     MOV64mi32 $rax, 1, $noreg, 0, $noreg, 0, debug-location !DILocation(line: 4, column: 4, scope: !5)
+    $eax = MOV32ri 111111, debug-location !DILocation(line: 4, column: 4, scope: !5)
     $rbp = POP64r implicit-def $rsp, implicit $rsp, debug-location !DILocation(line: 5, column: 1, scope: !5)
     crash-start RETQ debug-location !DILocation(line: 5, column: 1, scope: !5)
 
@@ -231,6 +232,15 @@ body:             |
               REAnalysis.getEqRegsAfterMI(&MI, {Reg1, -8, true}).size() == 1);
         }
         continue;
+      }
+      // Test Mov Immediate impact ($eax = MOV32ri 111111).
+      // Verify that redefined Reg1 ($eax) triggers invalidation
+      // of all super/sub regs ($rax).
+      if (MI.getNumOperands() == 2 && MI.getOperand(0).isReg() &&
+          MI.getOperand(1).isImm()) {
+        REAnalysis.dumpRegTableAfterMI(&MI);
+        unsigned Reg1 = MI.getOperand(0).getReg();
+        ASSERT_TRUE(REAnalysis.verifyOverlapsInvalidation(MI, Reg1));
       }
     }
   }

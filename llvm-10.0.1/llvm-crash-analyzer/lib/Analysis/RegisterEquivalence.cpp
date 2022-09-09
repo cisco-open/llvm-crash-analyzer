@@ -125,6 +125,26 @@ void RegisterEquivalence::invalidateRegEq(
   RegInfo[&MI][Reg].insert(Reg);
 }
 
+void RegisterEquivalence::invalidateAllRegUses(MachineInstr &MI,
+                                               RegisterOffsetPair Reg) {
+  const MachineFunction *MF = MI.getMF();
+  auto TRI = MF->getSubtarget().getRegisterInfo();
+  // Firstly, invalidate all equivalences of the Reg.
+  invalidateRegEq(MI, Reg);
+  if (Reg.IsDeref)
+    return;
+  auto &Regs = RegInfo[&MI];
+  // Then, if the Reg is simple register (ex. $eax):
+  // - Invalidate Reg uses as a base register (deref->($eax)+(Offset)).
+  // - Invalidate Regs sub/super registers uses as simple registers. (ex. $rax)
+  // - Invalidate Regs sub/super registers as base registers. (ex.
+  // deref->($rax)+(Offset))
+  for (auto &eqs : Regs) {
+    if (eqs.first.RegNum && TRI->regsOverlap(eqs.first.RegNum, Reg.RegNum))
+      invalidateRegEq(MI, eqs.first);
+  }
+}
+
 void RegisterEquivalence::setRegEq(MachineInstr &MI, RegisterOffsetPair Src,
                                    RegisterOffsetPair Dest) {
   if (RegInfo[&MI][Dest].find(Src) != RegInfo[&MI][Dest].end())
@@ -161,15 +181,8 @@ bool RegisterEquivalence::applyRegisterCopy(MachineInstr &MI) {
   RegisterOffsetPair Src{SrcReg};
   RegisterOffsetPair Dest{DestReg};
 
-  // Erase entries for deref->(Dest)+(Offset) also since the
-  // Dest is redefined.
-  auto &Regs = RegInfo[&MI];
-  for (auto &eqs : Regs) {
-    if (eqs.first.RegNum == Dest.RegNum && eqs.first.IsDeref)
-      invalidateRegEq(MI, eqs.first);
-  }
-
-  invalidateRegEq(MI, Dest);
+  // First invalidate dest reg, since it is being rewritten.
+  invalidateAllRegUses(MI,Dest);
 
   // Set (transitive) equivalence.
   setRegEq(MI, Src, Dest);
@@ -197,16 +210,8 @@ bool RegisterEquivalence::applyLoad(MachineInstr &MI) {
   Src.IsDeref = true;
   RegisterOffsetPair Dest{DestReg};
 
-  // Erase entries for deref->(Dest)+(Offset) also since the
-  // Dest is redefined.
-  auto &Regs = RegInfo[&MI];
-  for (auto &eqs : Regs) {
-    if (eqs.first.RegNum == Dest.RegNum && eqs.first.IsDeref)
-      invalidateRegEq(MI, eqs.first);
-  }
-
   // First invalidate dest reg, since it is being rewritten.
-  invalidateRegEq(MI, Dest);
+  invalidateAllRegUses(MI, Dest);
 
   // Set (transitive) equivalence.
   setRegEq(MI, Src, Dest);
@@ -235,7 +240,7 @@ bool RegisterEquivalence::applyStore(MachineInstr &MI) {
 
   // We are storing a constant.
   if (!srcDest->Source->isReg()) {
-    invalidateRegEq(MI, Dest);
+    invalidateAllRegUses(MI, Dest);
     return true;
   }
 
@@ -243,7 +248,7 @@ bool RegisterEquivalence::applyStore(MachineInstr &MI) {
   RegisterOffsetPair Src{SrcReg};
 
   // First invalidate dest reg, since it is being rewritten.
-  invalidateRegEq(MI, Dest);
+  invalidateAllRegUses(MI, Dest);
 
   // Set (transitive) equivalence.
   setRegEq(MI, Src, Dest);
@@ -270,16 +275,7 @@ bool RegisterEquivalence::applyRegDef(MachineInstr &MI) {
   for (MachineOperand &MO : MI.operands()) {
     if (MO.isReg() && MO.isDef()) {
       RegisterOffsetPair RegDef{MO.getReg()};
-
-      // Erase entries for deref->(RegDef)+(Offset) also since the
-      // RegDef is redefined.
-      auto &Regs = RegInfo[&MI];
-      for (auto &eqs : Regs) {
-        if (eqs.first.RegNum == RegDef.RegNum && eqs.first.IsDeref)
-          invalidateRegEq(MI, eqs.first);
-      }
-
-      invalidateRegEq(MI, RegDef);
+      invalidateAllRegUses(MI, RegDef);
     }
   }
   return true;
@@ -343,6 +339,19 @@ bool RegisterEquivalence::verifyEquivalenceTransitivity(
       return false;
   }
 
+  return true;
+}
+
+bool RegisterEquivalence::verifyOverlapsInvalidation(MachineInstr &MI,
+                                                     unsigned RegNum) {
+  auto &Regs = RegInfo[&MI];
+  for (auto &eqs : Regs) {
+    const MachineFunction *MF = MI.getMF();
+    auto TRI = MF->getSubtarget().getRegisterInfo();
+    if (eqs.first.RegNum && TRI->regsOverlap(eqs.first.RegNum, RegNum))
+      if (eqs.second.size() > 1)
+        return false;
+  }
   return true;
 }
 
