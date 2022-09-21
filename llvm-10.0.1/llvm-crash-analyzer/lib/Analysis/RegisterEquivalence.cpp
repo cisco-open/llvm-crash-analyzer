@@ -213,6 +213,13 @@ bool RegisterEquivalence::applyLoad(MachineInstr &MI) {
   // First invalidate dest reg, since it is being rewritten.
   invalidateAllRegUses(MI, Dest);
 
+  // If SrcReg is redefined (same as DestReg), set only identity equivalence.
+  if (Src.RegNum == Dest.RegNum) {
+    if (RegInfo[&MI][Dest].find(Src) == RegInfo[&MI][Dest].end())
+      RegInfo[&MI][Src].insert(Src);
+    return true;
+  }
+
   // Set (transitive) equivalence.
   setRegEq(MI, Src, Dest);
   //dumpRegTableAfterMI(&MI);

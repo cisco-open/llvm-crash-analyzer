@@ -150,6 +150,7 @@ body:             |
     $rbp = XOR64rr undef $rbp, undef $rbp, implicit-def $eflags, debug-location !DILocation(line: 4, column: 2, scope: !5)
     MOV64mi32 $rax, 1, $noreg, 0, $noreg, 0, debug-location !DILocation(line: 4, column: 4, scope: !5)
     $eax = MOV32ri 111111, debug-location !DILocation(line: 4, column: 4, scope: !5)
+    $rax = MOV64rm $rax, 1, $noreg, -8, $noreg, debug-location !DILocation(line: 4, column: 4, scope: !5)
     $rbp = POP64r implicit-def $rsp, implicit $rsp, debug-location !DILocation(line: 5, column: 1, scope: !5)
     crash-start RETQ debug-location !DILocation(line: 5, column: 1, scope: !5)
 
@@ -182,13 +183,16 @@ body:             |
         unsigned Reg1 = MI.getOperand(0).getReg();
         unsigned Reg2 = MI.getOperand(1).getReg();
         int64_t Offset = MI.getOperand(4).getImm();
-        ASSERT_TRUE(REAnalysis.isEquivalent(MI, {Reg1}, {Reg2, Offset, true}));
-        ASSERT_TRUE(REAnalysis.isEquivalent(MI, {Reg2, Offset, true}, {Reg1}));
+        // If Source BaseReg is same as DestReg, equivalance is not valid.
+        ASSERT_TRUE((Reg1 == Reg2) !=
+                    REAnalysis.isEquivalent(MI, {Reg1}, {Reg2, Offset, true}));
+        ASSERT_TRUE((Reg1 == Reg2) !=
+                    REAnalysis.isEquivalent(MI, {Reg2, Offset, true}, {Reg1}));
 
-        ASSERT_TRUE(REAnalysis.verifyEquivalenceTransitivity(
-            MI, {Reg1}, {Reg2, Offset, true}));
-        ASSERT_TRUE(REAnalysis.verifyEquivalenceTransitivity(
-            MI, {Reg2, Offset, true}, {Reg1}));
+        ASSERT_TRUE((Reg1 == Reg2) != REAnalysis.verifyEquivalenceTransitivity(
+                                          MI, {Reg1}, {Reg2, Offset, true}));
+        ASSERT_TRUE((Reg1 == Reg2) != REAnalysis.verifyEquivalenceTransitivity(
+                                          MI, {Reg2, Offset, true}, {Reg1}));
         continue;
       }
       // Test store impact on RegisterEquivalence.
