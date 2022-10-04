@@ -130,6 +130,9 @@ public:
       std::unordered_map<uint64_t, StringRef> &FuncStartSymbols,
       lldb::SBTarget &target);
 
+  MachineInstr *addNoop(MachineFunction *MF, MachineBasicBlock *MBB,
+                        DebugLoc *Loc);
+
   bool DecodeIntrsToMIR(
       Triple TheTriple, lldb::SBInstructionList &Instructions,
       lldb::SBAddress &FuncStart, lldb::SBAddress &FuncEnd,
