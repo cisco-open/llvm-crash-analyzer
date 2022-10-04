@@ -205,6 +205,20 @@ MachineInstr *crash_analyzer::Decompiler::addInstr(
   return &*Builder;
 }
 
+MachineInstr *crash_analyzer::Decompiler::addNoop(MachineFunction *MF,
+                                                  MachineBasicBlock *MBB,
+                                                  DebugLoc *Loc) {
+  auto TII = MF->getSubtarget().getInstrInfo();
+  llvm::MCInst Inst;
+  TII->getNoop(Inst);
+  if (const unsigned NoopOpcode = Inst.getOpcode()) {
+    const MCInstrDesc &MCID = MII->get(NoopOpcode);
+    MachineInstrBuilder Builder = BuildMI(MBB, DebugLoc(), MCID);
+    return &*Builder;
+  }
+  return nullptr;
+}
+
 MachineFunction &crash_analyzer::Decompiler::createMF(StringRef FunctionName) {
   // Create a dummy IR Function.
   auto &Context = Module->getContext();
@@ -253,7 +267,7 @@ bool crash_analyzer::Decompiler::DecodeIntrsToMIR(
   std::unordered_multimap<uint64_t, MachineInstr *> BranchesToUpdate;
 
   std::pair<lldb::addr_t, lldb::addr_t> FuncRange{FuncStart.GetFileAddress(),
-                                                   FuncEnd.GetFileAddress()};
+                                                  FuncEnd.GetFileAddress()};
   lldb::addr_t FuncLoadAddr = FuncStart.GetLoadAddress(Target);
 
   lldb::DataBufferSP BufferSp(
@@ -267,6 +281,7 @@ bool crash_analyzer::Decompiler::DecodeIntrsToMIR(
   Disassembler_sp->DecodeInstructions(FuncLoadAddr, Extractor, 0,
                                       Instructions.GetSize(), false, false);
 
+  bool CrashStartSet = false;
   lldb_private::InstructionList &InstructionList =
       Disassembler_sp->GetInstructionList();
   size_t numInstr = InstructionList.GetSize();
@@ -288,7 +303,7 @@ bool crash_analyzer::Decompiler::DecodeIntrsToMIR(
         InlinedFnName = SBInst.GetAddress().GetBlock().GetInlinedName();
         if (!AlreadyDecompiledFns.count(InlinedFnName.str())) {
           auto InlineFnOutOfBt =
-             decompileInlinedFnOutOfbt(InlinedFnName, DISP->getFile());
+              decompileInlinedFnOutOfbt(InlinedFnName, DISP->getFile());
           (void)InlineFnOutOfBt;
         }
       }
@@ -296,7 +311,8 @@ bool crash_analyzer::Decompiler::DecodeIntrsToMIR(
 
     llvm::MCInst Inst;
     auto InstSize = InstSP->GetMCInst(Inst);
-    if (InstSize == 0) return false;
+    if (InstSize == 0)
+      return false;
 
     const unsigned Opcode = Inst.getOpcode();
     const MCInstrDesc &MCID = MII->get(Opcode);
@@ -316,16 +332,19 @@ bool crash_analyzer::Decompiler::DecodeIntrsToMIR(
           !PrevBranch) {
         MachineBasicBlock *OldBB = MBB;
         MBB = MF->CreateMachineBasicBlock();
-        if (!OldBB->isSuccessor(MBB)) OldBB->addSuccessor(MBB);
+        if (!OldBB->isSuccessor(MBB))
+          OldBB->addSuccessor(MBB);
         MF->push_back(MBB);
       }
 
       // This is used to prevent wrong DI SP attached to inlined
       // instructions.
       if (InlinedFnName != "") {
-        if (SPs.count(InlinedFnName)) DISP = SPs[InlinedFnName];
+        if (SPs.count(InlinedFnName))
+          DISP = SPs[InlinedFnName];
       } else {
-        if (SPs.count(OriginalFunction)) DISP = SPs[OriginalFunction];
+        if (SPs.count(OriginalFunction))
+          DISP = SPs[OriginalFunction];
       }
 
       auto DILoc = DILocation::get(Ctx, Line, Column, DISP);
@@ -333,13 +352,15 @@ bool crash_analyzer::Decompiler::DecodeIntrsToMIR(
       // For the functions out of backtrace we should analize whole
       // function, so crash-start flag should go at the end of the fn.
       if (IsFnOutOfBt && k == (numInstr - 1))
-        MI = addInstr(MF, MBB, Inst, &Loc, true,
-                      DefinedRegs, FuncStartSymbols, Target);
+        MI = addInstr(MF, MBB, Inst, &Loc, true, DefinedRegs, FuncStartSymbols,
+                      Target);
       else
         MI = addInstr(MF, MBB, Inst, &Loc, CrashStartAddr == Addr.Address,
                       DefinedRegs, FuncStartSymbols, Target);
 
       if (MI) {
+        if (MI->getFlag(MachineInstr::CrashStart))
+          CrashStartSet = true;
         // There could be multiple branches targeting the same
         // MBB.
         while (BranchesToUpdate.count(Addr.Address)) {
@@ -353,6 +374,16 @@ bool crash_analyzer::Decompiler::DecodeIntrsToMIR(
           if (!BranchInstr->getParent()->isSuccessor(MBB))
             BranchInstr->getParent()->addSuccessor(MBB);
           BranchesToUpdate.erase(BranchIt);
+        }
+
+        // If the last decompiled instruction is a Call, check if it is the
+        // crash-start for this function.
+        if (k + 1 == numInstr && !CrashStartSet && MI->isCall()) {
+          auto NoopInst = addNoop(MF, MBB, &Loc);
+          if (NoopInst && CrashStartAddr == Addr.Address + InstSize) {
+            NoopInst->setFlag(MachineInstr::CrashStart);
+            CrashStartSet = true;
+          }
         }
       }
     }
@@ -379,6 +410,8 @@ bool crash_analyzer::Decompiler::DecodeIntrsToMIR(
     InlinedFnName = "";
   }
 
+  assert(CrashStartSet &&
+         "Decompiled function should contain crash-start instruction");
   return true;
 }
 
