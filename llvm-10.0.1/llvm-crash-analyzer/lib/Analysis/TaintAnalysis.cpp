@@ -665,6 +665,10 @@ bool llvm::crash_analyzer::TaintAnalysis::propagateTaint(
       ConstantFound = true;
   } else if (TII->isXORSimplifiedSetToZero(MI)) {
     // xor eax, eax is the same as move eax, 0
+    // Set artificial Zero TaintInfo to ensure termination.
+    TaintInfo ZeroTi;
+    ZeroTi.Op =  new MachineOperand(MachineOperand::CreateImm(0));
+    SrcTi = ZeroTi;
     ConstantFound = true;
   }
 
