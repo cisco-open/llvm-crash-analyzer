@@ -26,3 +26,5 @@
 # CHECK-NOT:!4{2; $edi = XOR32rr undef $edi(tied-def 0), undef $edi, implicit-def $eflags; CONSTANT: $edi}
 # CHECK-NOT:  ---> !5{2; $edi = XOR32rr undef $edi(tied-def 0), undef $edi, implicit-def $eflags; REG: $edi}
 # CHECK-NEXT: ***> !4{2; $edi = XOR32rr undef $edi(tied-def 0), undef $edi, implicit-def $eflags; CONSTANT: 0}
+# Empty TaintList should not result in nodes from non-entry function attached to the crash-node.
+# CHECK-NOT:{crash-node}
