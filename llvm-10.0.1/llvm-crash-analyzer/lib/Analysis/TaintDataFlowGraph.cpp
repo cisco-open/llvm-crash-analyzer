@@ -328,6 +328,11 @@ void TaintDataFlowGraph::printAsDOT(std::string fileName,
             } else if (node->TaintOp.IsConcreteMemory) {
               MyDotFile << "MEM: ";
               MyDotFile << node->TaintOp.GetTaintMemAddr();
+            } else if (node->TaintOp.Offset) {
+              MyDotFile << "MEM: ";
+              MyDotFile << *node->TaintOp.Op;
+              MyDotFile << " + ";
+              MyDotFile << *node->TaintOp.Offset;
             } else {
               MyDotFile << "REG: ";
               MyDotFile << *(node->TaintOp.Op);
@@ -377,6 +382,11 @@ void TaintDataFlowGraph::printAsDOT(std::string fileName,
             } else if (adjNode->TaintOp.IsConcreteMemory) {
               MyDotFile << "MEM: ";
               MyDotFile << adjNode->TaintOp.GetTaintMemAddr();
+            } else if (adjNode->TaintOp.Offset) {
+              MyDotFile << "MEM: ";
+              MyDotFile << *adjNode->TaintOp.Op;
+              MyDotFile << " + ";
+              MyDotFile << *adjNode->TaintOp.Offset;
             } else {
               MyDotFile << "REG: ";
               MyDotFile << *(adjNode->TaintOp.Op);
