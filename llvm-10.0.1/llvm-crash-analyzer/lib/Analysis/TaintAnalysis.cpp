@@ -665,6 +665,10 @@ bool llvm::crash_analyzer::TaintAnalysis::propagateTaint(
       ConstantFound = true;
   } else if (TII->isXORSimplifiedSetToZero(MI)) {
     // xor eax, eax is the same as move eax, 0
+    // Set artificial Zero TaintInfo to ensure termination.
+    TaintInfo ZeroTi;
+    ZeroTi.Op =  new MachineOperand(MachineOperand::CreateImm(0));
+    SrcTi = ZeroTi;
     ConstantFound = true;
   }
 
@@ -1078,29 +1082,30 @@ bool crash_analyzer::TaintAnalysis::runOnBlameModule(BlameModule &BM) {
       return Result;
     }
 
-    if (runOnBlameMF(BM, *(BF.MF), TaintDFG, false, 0)) {
+    runOnBlameMF(BM, *(BF.MF), TaintDFG, false, 0);
+
+    // After the MF analysis, if the TaintList is empty, stop the analysis.
+    if (TaintList.empty()) {
       LLVM_DEBUG(dbgs() << "\nTaint Analysis done.\n");
-      if (TaintList.empty()) {
-        if (!MirDotFileName.empty()) {
-          TaintDFG.printAsDOT(MirDotFileName.str());
-        }
-        TaintDFG.dump();
-
-        // Dump user friendly DFG.
-        if (!TaintDotFileName.empty()) {
-          TaintDFG.printAsDOT(TaintDotFileName.str(), true /*Verbose*/);
-        }
-
-        if (!TaintDFG.getBlameNodesSize()) {
-          llvm::outs() << "\nNo blame function found.\n";
-          return false;
-        }
-
-        auto crashNode = TaintDFG.getCrashNode();
-        TaintDFG.findBlameFunction(crashNode);
-        Result = TaintDFG.printBlameFunction(PrintPotentialCrashCauseLocation);
-        return Result;
+      if (!MirDotFileName.empty()) {
+        TaintDFG.printAsDOT(MirDotFileName.str());
       }
+      TaintDFG.dump();
+
+      // Dump user friendly DFG.
+      if (!TaintDotFileName.empty()) {
+        TaintDFG.printAsDOT(TaintDotFileName.str(), true /*Verbose*/);
+      }
+
+      if (!TaintDFG.getBlameNodesSize()) {
+        llvm::outs() << "\nNo blame function found.\n";
+        return false;
+      }
+
+      auto crashNode = TaintDFG.getCrashNode();
+      TaintDFG.findBlameFunction(crashNode);
+      Result = TaintDFG.printBlameFunction(PrintPotentialCrashCauseLocation);
+      return Result;
     }
   }
 
