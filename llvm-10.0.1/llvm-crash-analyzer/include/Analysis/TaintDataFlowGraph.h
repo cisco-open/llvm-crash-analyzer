@@ -65,6 +65,11 @@ struct Node {
         } else if (TaintOp.IsConcreteMemory) {
           llvm::dbgs() << "MEM: ";
           llvm::dbgs() << TaintOp.GetTaintMemAddr();
+        } else if (TaintOp.Offset) {
+          llvm::dbgs() << "MEM: ";
+          llvm::dbgs() << *TaintOp.Op;
+          llvm::dbgs() << " + ";
+          llvm::dbgs() << *TaintOp.Offset;
         } else {
           llvm::dbgs() << "REG: ";
           llvm::dbgs() << *TaintOp.Op;
