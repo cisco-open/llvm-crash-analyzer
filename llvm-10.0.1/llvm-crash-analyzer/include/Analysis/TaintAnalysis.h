@@ -62,6 +62,7 @@ struct TaintInfo {
   friend bool operator!=(const TaintInfo &T1, const TaintInfo &T2);
   friend bool operator<(const TaintInfo &T1, const TaintInfo &T2);
   friend raw_ostream& operator<<(raw_ostream& os, const TaintInfo& T);
+  bool isTargetStartTaint(unsigned CrashOrder) const;
 };
 
 class TaintAnalysis {
@@ -98,6 +99,9 @@ public:
                       RegisterEquivalence &REAnalysis,
                       const MachineInstr* CallMI = nullptr);
   void startTaint(DestSourcePair &DS, SmallVectorImpl<TaintInfo> &TL,
+                  const MachineInstr &MI, TaintDataFlowGraph &TaintDFG,
+                  RegisterEquivalence &REAnalysis);
+  void insertTaint(DestSourcePair &DS, SmallVectorImpl<TaintInfo> &TL,
                   const MachineInstr &MI, TaintDataFlowGraph &TaintDFG,
                   RegisterEquivalence &REAnalysis);
   bool continueAnalysis(const MachineInstr &MI, SmallVectorImpl<TaintInfo> &TL,

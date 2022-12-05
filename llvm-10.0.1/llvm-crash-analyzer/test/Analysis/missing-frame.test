@@ -1,0 +1,53 @@
+## Following code from m.c is compiled with:
+## $ clang -mspeculative-load-hardening -g m.c -c -o m.o
+
+## extern void missing(int, int, int*);
+## __attribute__((optnone))
+## int main(){
+##   void (*fun_ptr)(int, int, int*) = &missing;
+##   int *p = 0; // blame
+##   (*fun_ptr)(0,1,p);
+##   return *p - 1;
+## }
+
+## Following code from func.c is compiled with:
+## $ clang -O2 -g func.c -c -o func.o
+## __attribute((noinline))
+## void set(int* adr, int val){
+##   *adr = val; // crash
+## }
+## __attribute((noinline))
+## void missing(int x, int y, int* ptr)
+## {
+##    set(ptr, x + y);
+## }
+
+## Link command:
+## $ clang func.o m.o -o m
+
+## Frame for function "missing" is not present in the backtrace.
+## Function "set" is called from "missing" via tail call (jmp), so there is
+## only one frame on the stack for functions "missing" and "set".
+## Function "missing" is called from main via llvm_retpoline indirect call,
+## so there is no call site info for that call, and LLDB cannot reconstruct
+## the artificial frame.
+
+## Since one frame is missing from the backtrace, crash-analyzer cannot find
+## the right blame function.
+# RUN: %llvm-crash-analyzer --core-file=%S/Inputs/core.missing-frame \
+# RUN: %S/Inputs/missing-frame.out --print-potential-crash-cause-loc < %s 2>&1 | FileCheck %s
+
+# CHECK: Blame Function is main
+# CHECK: Blame Function is main
+# CHECK-NOT: From File {{.*}}/m.c:9:8
+
+## Use -start-taint-reg=rdx and -start-crash-order=2 to specify crash-analyzer that
+## it should start Taint Analysis from frame with crash-order 2 and to look
+## for value loaded into register location $rdx.
+# RUN: %llvm-crash-analyzer --core-file=%S/Inputs/core.missing-frame \
+# RUN: -start-taint-reg=rdx -start-crash-order=2 \
+# RUN: %S/Inputs/missing-frame.out --print-potential-crash-cause-loc \
+# RUN: < %s 2>&1 | FileCheck %s --check-prefix=EXPLICIT
+
+# EXPLICIT: Blame Function is main
+# EXPLICIT: From File {{.*}}/m.c:9:8
