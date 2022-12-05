@@ -25,6 +25,26 @@ static cl::opt<bool> PrintDestSrcOperands(
     cl::desc("Print Destination and Source Operands for each MIR"),
     cl::init(false));
 
+// For development purpose, it is possible to explicitly set location, from
+// which we should start Taint Analysis.
+// Use -start-taint-reg to specify location register (simple register location
+// or memory location base register).
+static cl::opt<std::string>
+    StartTaintReg("start-taint-reg",
+                  cl::desc("Explicitlly set start Taint Info register."),
+                  cl::value_desc("start_reg"), cl::init(""));
+// Use -start-taint-offset to specify offset to the memory location.
+static cl::opt<std::string>
+    StartTaintOff("start-taint-offset",
+                  cl::desc("Explicitlly set start Taint Info offset."),
+                  cl::value_desc("start_off"), cl::init(""));
+// Use -start-crash-order to specify crash order of the function, from which
+// we should start Taint Analysis.
+static cl::opt<unsigned>
+    StartCrashOrder("start-crash-order",
+                    cl::desc("Set frame to start tracking target taint info."),
+                    cl::value_desc("start_crash_order"), cl::init(0));
+
 using namespace llvm;
 
 #define DEBUG_TYPE "taint-analysis"
@@ -122,6 +142,31 @@ llvm::crash_analyzer::TaintInfo::getTuple() const {
   int Off = *Offset;
   // For Memory locations, set ID of the Base Register and Offset as well.
   return {TaintInfoType::MemoryLoc, RegOpID, Off};
+}
+
+bool llvm::crash_analyzer::TaintInfo::isTargetStartTaint(
+    unsigned CrashOrder) const {
+  if (StartCrashOrder != CrashOrder)
+    return false;
+  auto Tup1 = getTuple();
+  std::tuple<unsigned, int, int> Tup2;
+  // Get target TaintInfo register.
+  int RegOpID = -1;
+  if (StartTaintReg != "") {
+    auto CATI = getCATargetInfoInstance();
+    // Get register ID.
+    if (!CATI->getID(StartTaintReg))
+      return false;
+    RegOpID = *CATI->getID(StartTaintReg);
+  }
+  if (StartTaintOff == "") {
+    Tup2 = {TaintInfoType::RegisterLoc, RegOpID, 0};
+    return Tup1 == Tup2;
+  }
+  // Get target TaintInfo offset.
+  int Off = std::stoi(StartTaintOff);
+  Tup2 = {TaintInfoType::MemoryLoc, RegOpID, Off};
+  return Tup1 == Tup2;
 }
 
 // New implementation of the operator<. Based on the tuple representation of
@@ -484,6 +529,33 @@ Decompiler *crash_analyzer::TaintAnalysis::getDecompiler() const {
   return Dec;
 }
 
+void crash_analyzer::TaintAnalysis::insertTaint(
+    DestSourcePair &DS, SmallVectorImpl<TaintInfo> &TL, const MachineInstr &MI,
+    TaintDataFlowGraph &TaintDFG, RegisterEquivalence &REAnalysis) {
+  TaintInfo DestTi;
+  DestTi.Op = DS.Destination;
+  DestTi.Offset = DS.DestOffset;
+  if (DestTi.Offset)
+    calculateMemAddr(DestTi);
+
+  if (!TL.empty())
+    resetTaintList(TL);
+  const auto &MF = MI.getParent()->getParent();
+  LLVM_DEBUG(dbgs() << "TaintAnalysis::insertTaint\n");
+  Node *cNode = new Node(0, nullptr, DestTi, true);
+  std::shared_ptr<Node> crashNode(cNode);
+  // We want to taint destination only if it is a mem operand
+  if (addToTaintList(DestTi, TL)) {
+    StartCrashOrder = 0;
+    Node *sNode = new Node(MF->getCrashOrder(), &MI, DestTi, false);
+    std::shared_ptr<Node> startTaintNode(sNode);
+    TaintDFG.addEdge(crashNode, startTaintNode, EdgeType::Dereference);
+    TaintDFG.updateLastTaintedNode(DestTi, startTaintNode);
+  }
+
+  printTaintList(TL);
+}
+
 void crash_analyzer::TaintAnalysis::startTaint(DestSourcePair &DS,
                                              SmallVectorImpl<TaintInfo> &TL,
                                              const MachineInstr &MI,
@@ -491,6 +563,9 @@ void crash_analyzer::TaintAnalysis::startTaint(DestSourcePair &DS,
                                              RegisterEquivalence &REAnalysis) {
   TaintInfo SrcTi, DestTi, Src2Ti, SrcScaleReg;
 
+  // Don't startTaint if target taint is explicitly specified.
+  if (StartCrashOrder)
+    return;
   SrcTi.Op = DS.Source;
   SrcTi.Offset = DS.SrcOffset;
   if (SrcTi.Offset)
@@ -602,7 +677,7 @@ bool llvm::crash_analyzer::TaintAnalysis::propagateTaint(
     const MachineInstr* CallMI) {
   // If empty taint list, we do nothing and we continue to
   // to propagate the taint along the other paths
-  if (TL.empty()) {
+  if (TL.empty() && !StartCrashOrder) {
     LLVM_DEBUG(dbgs() << "\n No taint to propagate");
     return true;
   }
@@ -629,12 +704,18 @@ bool llvm::crash_analyzer::TaintAnalysis::propagateTaint(
   // Check if Dest is already tainted.
   auto Taint = isTainted(DestTi, TL, &REAnalysis, &MI);
 
-  // If Destination is not tainted, nothing to do, just move on.
-  if (Taint.Op == nullptr)
-    return true;
 
   const auto &MF = MI.getParent()->getParent();
   auto TII = MF->getSubtarget().getInstrInfo();
+  // Check if DestTi is explicitly set as a starting point.
+  if (DestTi.Op && DestTi.isTargetStartTaint(MF->getCrashOrder())) {
+    insertTaint(DS, TL, MI, TaintDFG, REAnalysis);
+    Taint = isTainted(DestTi, TL, &REAnalysis, &MI);
+  }
+
+  // If Destination is not tainted, nothing to do, just move on.
+  if (Taint.Op == nullptr)
+    return true;
 
   bool BaseTaintFlag = false;
   // Heuristic to allow taint propagation in certain cases
@@ -1039,6 +1120,9 @@ bool crash_analyzer::TaintAnalysis::runOnBlameModule(BlameModule &BM) {
         return Result;
       }
     }
+    // Skip frames if explicit start frame is not reached.
+    if (BF.MF->getCrashOrder() < StartCrashOrder)
+      continue;
 
     if (!BF.MF->getCrashOrder()) {
       LLVM_DEBUG(llvm::dbgs() << "### Skip a call target: " << BF.Name
