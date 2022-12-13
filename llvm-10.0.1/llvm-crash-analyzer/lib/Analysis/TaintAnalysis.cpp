@@ -38,6 +38,11 @@ static cl::opt<std::string>
     StartTaintOff("start-taint-offset",
                   cl::desc("Explicitlly set start Taint Info offset."),
                   cl::value_desc("start_off"), cl::init(""));
+// Use -start-taint-deref-lvl to specify deref level to the memory location.
+static cl::opt<std::string>
+    StartTaintDerefLevel("start-taint-deref-lvl",
+                  cl::desc("Explicitlly set start Taint Info deref level."),
+                  cl::value_desc("start_deref_lvl"), cl::init(""));
 // Use -start-crash-order to specify crash order of the function, from which
 // we should start Taint Analysis.
 static cl::opt<unsigned>
@@ -568,6 +573,8 @@ void crash_analyzer::TaintAnalysis::insertTaint(
   DestTi.Offset = DS.DestOffset;
   if (DestTi.Offset)
     calculateMemAddr(DestTi);
+  if (StartTaintDerefLevel != "")
+    DestTi.DerefLevel = std::stoi(StartTaintDerefLevel);
 
   if (!TL.empty())
     resetTaintList(TL);

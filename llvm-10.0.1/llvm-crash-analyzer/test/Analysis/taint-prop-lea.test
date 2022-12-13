@@ -38,4 +38,25 @@
 # CHECK: Blame Function is main
 # CHECK-NEXT: From File {{.*}}/m.c:7:5
 
+## Use options to explicitly set Taint Info to start Analysis.
+# RUN: %llvm-crash-analyzer --print-potential-crash-cause-loc \
+# RUN: -start-crash-order=1 -start-taint-reg=rbp -start-taint-offset=-16 -start-taint-deref-lvl=-1 \
+# RUN: %S/Inputs/taint-prop-lea.out --core-file=%S/Inputs/core.taint-prop-lea \
+# RUN: --debug-only=taint-dfg < %s 2>&1 | FileCheck %s --check-prefix=EXPLICIT
+
+# EXPLICIT: === Taint Data Flow Graph ===
+# EXPLICIT: {crash-node}
+# EXPLICIT-NEXT:   ***> !1{1; MOV64mr $rbp, 1, $noreg, -16, $noreg, $rax; MEM: 140732201699632; DEREF-LVL: -1}
+# EXPLICIT-NEXT:!1{1; MOV64mr $rbp, 1, $noreg, -16, $noreg, $rax; MEM: 140732201699632; DEREF-LVL: -1}
+# EXPLICIT-NEXT:  ---> !2{1; MOV64mr $rbp, 1, $noreg, -16, $noreg, $rax; REG: $rax; DEREF-LVL: 0}
+# EXPLICIT-NEXT:!2{1; MOV64mr $rbp, 1, $noreg, -16, $noreg, $rax; REG: $rax; DEREF-LVL: 0}
+# EXPLICIT-NEXT:  ***> !3{1; $eax = MOV32ri 1; CONSTANT: 1; DEREF-LVL: 0}
+
+## Confirm that blame node has zero dereference level from the initial taint.
+# EXPLICIT: Blame Nodes:
+# EXPLICIT-NEXT: !3{1; $eax = MOV32ri 1; CONSTANT: 1; DEREF-LVL: 0}
+# EXPLICIT-NEXT: Blame line: 7
+
+# EXPLICIT: Blame Function is main
+# EXPLICIT-NEXT: From File {{.*}}/m.c:7:5
 
