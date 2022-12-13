@@ -74,6 +74,7 @@ struct Node {
           llvm::dbgs() << "REG: ";
           llvm::dbgs() << *TaintOp.Op;
         }
+        llvm::dbgs() << "; DEREF-LVL: " << TaintOp.DerefLevel;
       } else
         llvm::dbgs() << "unknown taint operand\n";
 

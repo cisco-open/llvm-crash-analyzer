@@ -196,7 +196,20 @@ raw_ostream &llvm::crash_analyzer::operator<<(raw_ostream &os,
 	} else if (T.Op->isImm())
 		os << "{imm:" << *T.Op << "}";
   }
+  os << "[deref-level: " << T.DerefLevel << "]";
   return os;
+}
+
+
+// Store and Load instructions change Dereference level of Tainted location,
+// starting from the crash point.
+void crash_analyzer::TaintInfo::propagateDerefLevel(const MachineInstr &MI) {
+  const auto &MF = MI.getParent()->getParent();
+  auto TII = MF->getSubtarget().getInstrInfo();
+  if (TII->isStore(MI))
+    ++DerefLevel;
+  else if (TII->isLoad(MI))
+    --DerefLevel;
 }
 
 crash_analyzer::TaintAnalysis::TaintAnalysis(StringRef TaintDotFileName,
@@ -315,17 +328,35 @@ void crash_analyzer::TaintAnalysis::resetTaintList(
   printTaintList(TL);
 }
 
+void crash_analyzer::TaintAnalysis::updateTaintDerefLevel(
+    TaintInfo &Ti, SmallVectorImpl<TaintInfo> &TaintList,
+    const MachineInstr &MI) {
+  for (auto itr = TaintList.begin(); itr != TaintList.end(); ++itr)
+    if (Ti == *itr) {
+      itr->DerefLevel = Ti.DerefLevel;
+      itr->propagateDerefLevel(MI);
+      LLVM_DEBUG(dbgs() << "Force Update Deref level in Taint List:\n For "
+                        << *itr << "\n");
+    }
+}
+
 bool crash_analyzer::TaintAnalysis::addToTaintList(
     TaintInfo &Ti, SmallVectorImpl<TaintInfo> &TaintList) {
   if (!Ti.Op)
     return false;
 
   for (auto itr = TaintList.begin(); itr != TaintList.end(); ++itr)
-    if (Ti == *itr)
+    if (Ti == *itr) {
+      if (Ti.DerefLevel != itr->DerefLevel) {
+        LLVM_DEBUG(dbgs() << "Update Deref level in Taint List:\n For " << *itr
+                          << " use level of " << Ti << "\n");
+        itr->DerefLevel = Ti.DerefLevel;
+      }
       return false;
+    }
 
   if (!Ti.Op->isImm()) {
-    LLVM_DEBUG(dbgs()<<"Add to TL: " << Ti << "\n");
+    LLVM_DEBUG(dbgs() << "Add to TL: " << Ti << "\n");
     TaintList.push_back(Ti);
     return true;
   }
@@ -753,6 +784,10 @@ bool llvm::crash_analyzer::TaintAnalysis::propagateTaint(
     ConstantFound = true;
   }
 
+  // Propagate dereference level (from crash) from the Taint to the SrcTi.
+  SrcTi.DerefLevel = Taint.DerefLevel;
+  SrcTi.propagateDerefLevel(MI);
+
   // FIXME: Since now we have corefile content we can check if this constant
   // is the same from the crash point, and by doing that we avoid FALSE
   // positives -- CHECK THAT.
@@ -799,6 +834,10 @@ bool llvm::crash_analyzer::TaintAnalysis::propagateTaint(
 
     if (!BaseTaintFlag)
       removeFromTaintList(Taint, TL);
+    else
+      // FIXME: Update DerefLevel of Taint's equivalent in TL or remove it
+      // and insert Taint again?
+      updateTaintDerefLevel(Taint, TL, MI);
   }
 
   printTaintList(TL);
