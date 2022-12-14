@@ -48,7 +48,7 @@
         "@types/mocha": "^2.2.32",
         "@types/node": "^6.0.40",
         "clang-format": "1.2.4",
-        "mocha": "^5.2.0",
+        "mocha": "^10.2.0",
         "typescript": "^2.0.3",
         "vscode": "^1.1.0"
     },
