@@ -498,14 +498,14 @@ void MachineInstr::cloneInstrSymbols(MachineFunction &MF,
   setHeapAllocMarker(MF, MI.getHeapAllocMarker());
 }
 
-uint16_t MachineInstr::mergeFlagsWith(const MachineInstr &Other) const {
+uint32_t MachineInstr::mergeFlagsWith(const MachineInstr &Other) const {
   // For now, the just return the union of the flags. If the flags get more
   // complicated over time, we might need more logic here.
   return getFlags() | Other.getFlags();
 }
 
-uint16_t MachineInstr::copyFlagsFromInstruction(const Instruction &I) {
-  uint16_t MIFlags = 0;
+uint32_t MachineInstr::copyFlagsFromInstruction(const Instruction &I) {
+  uint32_t MIFlags = 0;
   // Copy the wrapping flags.
   if (const OverflowingBinaryOperator *OB =
           dyn_cast<OverflowingBinaryOperator>(&I)) {
@@ -1608,6 +1608,8 @@ void MachineInstr::print(raw_ostream &OS, ModuleSlotTracker &MST,
     OS << "nofpexcept ";
   if (getFlag(MachineInstr::NoMerge))
     OS << "nomerge ";
+  if (getFlag(MachineInstr::CrashStart))
+    OS << "crash-start ";
 
   // Print the opcode name.
   if (TII)

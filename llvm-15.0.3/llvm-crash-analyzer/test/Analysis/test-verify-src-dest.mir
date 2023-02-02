@@ -1,0 +1,172 @@
+
+# RUN: %llvm-crash-analyzer-ta -print-dest-src-operands %s 2> %t.log
+# RUN: FileCheck %s < %t.log
+# CHECK:  $edx = crash-start MOV32rm $rcx, 1, $noreg, 0, $noreg
+# CHECK:Dest {reg:$edx}
+# CHECK:Src1 {reg:$rcx; off:0}
+# CHECK:  ADD64mi8 $rbp, 1, $noreg, 327056915, $noreg, 1, implicit-def $eflags
+# CHECK:Dest {reg:$rbp; off:327056915}
+# CHECK:Src1 {imm:1}
+# CHECK:  MOV32mi $rbp, 1, $noreg, -4, $noreg, 0
+# CHECK:Dest {reg:$rbp; off:-4}
+# CHECK:Src1 {imm:0}
+# CHECK:  TEST8mi $rdx, 1, $noreg, 11, $noreg, 1, implicit-def $eflags
+# CHECK:Src1 {reg:$rdx; off:11}
+# CHECK:Src2 {imm:1}
+# CHECK:TEST64rr $rdi, $rdi, implicit-def $eflags
+# CHECK:Src1 {reg:$rdi}
+# CHECK:Src2 {reg:$rdi}
+# CHECK: CMP64rm $rax, $rdi, 1, $noreg, 24, $noreg, implicit-def $eflags
+# CHECK:Src1 {reg:$rax}
+# CHECK:Src2 {reg:$rdi; off:24}
+# CHECK:  $eax = XOR32rr undef $eax(tied-def 0), undef $eax, implicit-def $eflags
+# CHECK:Dest {reg:$eax}
+# CHECK:Src1 {reg:$eax}
+# CHECK:  $rbp = MOV64rr $rsp
+# CHECK:Dest {reg:$rbp}
+# CHECK:Src1 {reg:$rsp}
+--- |
+  ; ModuleID = 'a.out'
+  source_filename = "a.out"
+  target datalayout = "e-m:e-p270:32:32-p271:32:32-p272:64:64-i64:64-f80:128-n8:16:32:64-S128"
+
+  ; Materializable
+  define void @main() {
+  entry:
+    unreachable
+  }
+
+...
+---
+name:            main
+alignment:       16
+exposesReturnsTwice: false
+legalized:       false
+regBankSelected: false
+selected:        false
+failedISel:      false
+tracksRegLiveness: true
+hasWinCFI:       false
+registers:       []
+liveins:         []
+frameInfo:
+  isFrameAddressTaken: false
+  isReturnAddressTaken: false
+  hasStackMap:     false
+  hasPatchPoint:   false
+  stackSize:       0
+  offsetAdjustment: 0
+  maxAlignment:    1
+  adjustsStack:    false
+  hasCalls:        false
+  stackProtector:  ''
+  maxCallFrameSize: 4294967295
+  cvBytesOfCalleeSavedRegisters: 0
+  hasOpaqueSPAdjustment: false
+  hasVAStart:      false
+  hasMustTailInVarArgFunc: false
+  localFrameSize:  0
+  savePoint:       ''
+  restorePoint:    ''
+fixedStack:      []
+stack:           []
+callSites:       []
+debugValueSubstitutions: []
+regInfo:         { GPRegs:
+    - { reg: rax, value: '0x0000000000000000' }
+    - { reg: rbx, value: '0x0000000000000000' }
+    - { reg: rcx, value: '0x0000000000000000' }
+    - { reg: rdx, value: '0x00007ffd565bba88' }
+    - { reg: rdi, value: '0x0000000000000001' }
+    - { reg: rsi, value: '0x00007ffd565bba78' }
+    - { reg: rbp, value: '0x00007ffd565bb990' }
+    - { reg: rsp, value: '0x00007ffd565bb990' }
+    - { reg: r8, value: '0x00007f6851f9ed20' }
+    - { reg: r9, value: '0x00007f6851f9ed20' }
+    - { reg: r10, value: '0x0000000000000001' }
+    - { reg: r11, value: '0x0000000000000206' }
+    - { reg: r12, value: '0x0000000000400450' }
+    - { reg: r13, value: '0x00007ffd565bba70' }
+    - { reg: r14, value: '0x0000000000000000' }
+    - { reg: r15, value: '0x0000000000000000' }
+    - { reg: rip, value: '0x0000000000400559' }
+    - { reg: rflags, value: '0x0000000000010246' }
+    - { reg: cs, value: '0x0000000000000033' }
+    - { reg: fs, value: '0x0000000000000000' }
+    - { reg: gs, value: '0x0000000000000000' }
+    - { reg: ss, value: '0x000000000000002b' }
+    - { reg: ds, value: '0x0000000000000000' }
+    - { reg: es, value: '0x0000000000000000' }
+    - { reg: eax, value: '0x00000000' }
+    - { reg: ebx, value: '0x00000000' }
+    - { reg: ecx, value: '0x00000000' }
+    - { reg: edx, value: '0x565bba88' }
+    - { reg: edi, value: '0x00000001' }
+    - { reg: esi, value: '0x565bba78' }
+    - { reg: ebp, value: '0x565bb990' }
+    - { reg: esp, value: '0x565bb990' }
+    - { reg: r8d, value: '0x51f9ed20' }
+    - { reg: r9d, value: '0x51f9ed20' }
+    - { reg: r10d, value: '0x00000001' }
+    - { reg: r11d, value: '0x00000206' }
+    - { reg: r12d, value: '0x00400450' }
+    - { reg: r13d, value: '0x565bba70' }
+    - { reg: r14d, value: '0x00000000' }
+    - { reg: r15d, value: '0x00000000' }
+    - { reg: ax, value: '0x0000' }
+    - { reg: bx, value: '0x0000' }
+    - { reg: cx, value: '0x0000' }
+    - { reg: dx, value: '0xba88' }
+    - { reg: di, value: '0x0001' }
+    - { reg: si, value: '0xba78' }
+    - { reg: bp, value: '0xb990' }
+    - { reg: sp, value: '0xb990' }
+    - { reg: r8w, value: '0xed20' }
+    - { reg: r9w, value: '0xed20' }
+    - { reg: r10w, value: '0x0001' }
+    - { reg: r11w, value: '0x0206' }
+    - { reg: r12w, value: '0x0450' }
+    - { reg: r13w, value: '0xba70' }
+    - { reg: r14w, value: '0x0000' }
+    - { reg: r15w, value: '0x0000' }
+    - { reg: ah, value: '0x00' }
+    - { reg: bh, value: '0x00' }
+    - { reg: ch, value: '0x00' }
+    - { reg: dh, value: '0xba' }
+    - { reg: al, value: '0x00' }
+    - { reg: bl, value: '0x00' }
+    - { reg: cl, value: '0x00' }
+    - { reg: dl, value: '0x88' }
+    - { reg: dil, value: '0x01' }
+    - { reg: sil, value: '0x78' }
+    - { reg: bpl, value: '0x90' }
+    - { reg: spl, value: '0x90' }
+    - { reg: r8l, value: '0x20' }
+    - { reg: r9l, value: '0x20' }
+    - { reg: r10l, value: '0x01' }
+    - { reg: r11l, value: '0x06' }
+    - { reg: r12l, value: '0x50' }
+    - { reg: r13l, value: '0x70' }
+    - { reg: r14l, value: '0x00' }
+    - { reg: r15l, value: '0x00' } }
+constants:       []
+machineFunctionInfo: {}
+crashOrder:      1
+body:             |
+  bb.0:
+    liveins: $rbp, $r14d, $ecx, $rdx, $rdi, $rsi, $rax
+
+    PUSH64r $rbp, implicit-def $rsp, implicit $rsp
+    $rbp = MOV64rr $rsp
+    $eax = XOR32rr undef $eax, undef $eax, implicit-def $eflags
+    CMP64rm $rax, $rdi, 1, $noreg, 24, $noreg, implicit-def $eflags
+    TEST64rr $rdi, $rdi, implicit-def $eflags
+    TEST8mi $rdx, 1, $noreg, 11, $noreg, 1, implicit-def $eflags
+    MOV32mi $rbp, 1, $noreg, -4, $noreg, 0
+    ADD64mi8 $rbp, 1, $noreg, 327056915, $noreg, 1, implicit-def $eflags
+    $edx = crash-start MOV32rm $rcx, 1, $noreg, 0, $noreg
+    $edx = ADD32ri8 $edx, 2, implicit-def $eflags
+    MOV32mr $rbp, 1, $noreg, -20, $noreg, $edx
+    $rbp = POP64r implicit-def $rsp, implicit $rsp
+    RET64
+...

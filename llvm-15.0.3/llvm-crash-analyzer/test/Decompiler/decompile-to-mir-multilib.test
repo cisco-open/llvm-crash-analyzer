@@ -1,0 +1,12 @@
+## Test Machine Functions decompiled.
+# RUN: %llvm-crash-analyzer --print-decompiled-mir=%t.mir --core-file=%S/Inputs/core.multilib %S/Inputs/multilib-exe
+# RUN: cat %t.mir | FileCheck %s
+
+# CHECK: name: h
+# CHECK: PUSH64r $rbp, implicit-def $rsp, implicit $rsp, debug-location !DILocation(
+# CHECK: $rbp = MOV64rr $rsp, debug-location !DILocation(
+# CHECK: MOV64mr $rbp, 1, $noreg, -8, $noreg, $rdi, debug-location !DILocation(
+# CHECK: $rax = MOV64rm $rbp, 1, $noreg, -8, $noreg, debug-location !DILocation(
+# CHECK: crash-start MOV32mi $rax, 1, $noreg, 0, $noreg, 0, debug-location !DILocation(
+# CHECK: $rbp = POP64r implicit-def $rsp, implicit $rsp, debug-location !DILocation(
+# CHECK: RET64 debug-location !DILocation(

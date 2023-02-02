@@ -1,0 +1,21 @@
+#// array
+##include <stdio.h>
+#
+#void fillbuffer( char *string, unsigned len) {
+# int i = 0;
+# for (i = 0; i < len; i++) {
+#   string[i] = 'A';
+# }
+#}
+#
+#int main() {
+# char *str = NULL;
+# fillbuffer(str, 16);
+# return 0;
+#}
+
+# XFAIL: *
+# RUN: %llvm-crash-analyzer --core-file=%S/Inputs/core.test2-1 \
+# RUN:     %S/Inputs/test2-1 < %s 2>&1 | FileCheck %s
+
+# CHECK: Blame Function is main

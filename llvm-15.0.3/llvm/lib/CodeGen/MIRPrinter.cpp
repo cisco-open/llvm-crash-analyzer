@@ -122,6 +122,9 @@ public:
   void convertCallSiteObjects(yaml::MachineFunction &YMF,
                               const MachineFunction &MF,
                               ModuleSlotTracker &MST);
+  void convertCrashRegObjects(yaml::MachineFunction &YMF,
+                              const MachineFunction &MF,
+                              ModuleSlotTracker &MST);
   void convertMachineMetadataNodes(yaml::MachineFunction &YMF,
                                    const MachineFunction &MF,
                                    MachineModuleSlotTracker &MST);
@@ -220,6 +223,10 @@ void MIRPrinter::print(const MachineFunction &MF) {
   convert(MST, YamlMF.FrameInfo, MF.getFrameInfo());
   convertStackObjects(YamlMF, MF, MST);
   convertCallSiteObjects(YamlMF, MF, MST);
+  convertCrashRegObjects(YamlMF, MF, MST);
+
+  YamlMF.CrashOrder = MF.getCrashOrder();
+
   for (const auto &Sub : MF.DebugValueSubstitutions) {
     const auto &SubSrc = Sub.Src;
     const auto &SubDest = Sub.Dest;
@@ -552,6 +559,22 @@ void MIRPrinter::convertMachineMetadataNodes(yaml::MachineFunction &YMF,
   }
 }
 
+void MIRPrinter::convertCrashRegObjects(yaml::MachineFunction &YMF,
+                                        const MachineFunction &MF,
+                                        ModuleSlotTracker &MST) {
+  yaml::RegisterCrashInfo YmlRegInfo;
+  auto MFRegInfo = MF.getCrashRegInfo();
+
+  for (auto RegInfo : MFRegInfo) {
+    yaml::RegisterCrashInfo::RegisterCrashValue YmlReg;
+    YmlReg.Name = RegInfo.Name;
+    YmlReg.Value = RegInfo.Value;
+    YmlRegInfo.Regs.push_back(YmlReg);
+  }
+
+  YMF.MFRegInfo = YmlRegInfo;
+}
+
 void MIRPrinter::convert(yaml::MachineFunction &MF,
                          const MachineConstantPool &ConstantPool) {
   unsigned ID = 0;
@@ -782,6 +805,8 @@ void MIPrinter::print(const MachineInstr &MI) {
     OS << "nofpexcept ";
   if (MI.getFlag(MachineInstr::NoMerge))
     OS << "nomerge ";
+  if (MI.getFlag(MachineInstr::CrashStart))
+    OS << "crash-start ";
 
   OS << TII->getName(MI.getOpcode());
   if (I < E)

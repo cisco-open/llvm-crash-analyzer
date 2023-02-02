@@ -1,0 +1,43 @@
+## Produced with MIR modifications:
+## 1. clang -g -O0 -S -emit-llvm -Xclang -disable-llvm-passes m.c -o m.ll
+## 2. llc m.ll -stop-after=livedebugvalues -o m.mir
+## 3. Modify m.mir
+## 4. llc m.mir -start-after=livedebugvalues -filetype=obj -o m.o
+## 5. ld m.o -e main -o m
+
+## typedef struct node {
+##   int *fn;
+## } T;
+##
+## __attribute__((noinline))
+## void access(T *q) {
+##   *q->fn = 3;
+## }
+##
+## __attribute__((noinline))
+## int main() {
+##   T p;
+##   p.fn = 0; //blame point
+##   access(&p);
+##   return 0;
+## }
+
+# RUN: %llvm-crash-analyzer --print-potential-crash-cause-loc --debug-only=taint-analysis \
+# RUN: --core-file=%S/Inputs/core.backup-reg-value %S/Inputs/backup-reg-value.out \
+# RUN: --print-decompiled-mir=%t.mir < %s 2>&1 | FileCheck %s
+
+# CHECK:  $rax = MOV64rm $rax, 1, $noreg, 0, $noreg
+# CHECK: Dest {reg:$rax}
+# CHECK: Src1 {reg:$rax; off:0}
+# CHECK: Add to TL: {reg:$rax; off:0} (mem addr: 140732681235136)
+
+# RUN: cat %t.mir | FileCheck --check-prefix=CHECK-MIR %s
+
+# CHECK-MIR: name:            access
+# CHECK-MIR: regInfo:         { GPRegs:
+# CHECK-MIR:     - { reg: rdi, value: '0x00007ffee1792ac0' }
+
+## Confirm that value of equivalent register is used as backup value to 
+## calculate Concrete Memory Address. 
+## {reg:$rax; off:0} == {reg:$rdi}
+## (mem addr: 140732681235136) == { reg: rdi, value: '0x00007ffee1792ac0' }

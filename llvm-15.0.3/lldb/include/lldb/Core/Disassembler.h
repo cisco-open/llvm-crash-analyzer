@@ -24,6 +24,7 @@
 #include "lldb/lldb-forward.h"
 #include "lldb/lldb-private-enumerations.h"
 #include "lldb/lldb-types.h"
+#include "llvm/MC/MCInst.h"
 
 #include "llvm/ADT/StringRef.h"
 
@@ -162,6 +163,8 @@ public:
   virtual bool DoesBranch() = 0;
 
   virtual bool HasDelaySlot();
+
+  virtual uint64_t GetMCInst(llvm::MCInst &mc_inst) { return 0; }
 
   virtual bool IsLoad() = 0;
 

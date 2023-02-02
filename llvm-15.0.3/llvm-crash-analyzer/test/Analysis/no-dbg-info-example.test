@@ -1,0 +1,44 @@
+## Comes from (clang -O0):
+###include<stdio.h>
+##
+##typedef struct{
+##    int *a;
+##      float b;
+##} T;
+##
+##float f() {
+##  T p;
+##  p.a = NULL;
+##  g(&p);
+##  return p.b;
+##}
+##
+##g(T *q) {
+##  int *t = q->a;
+##  float fl = q->b;
+##  if (fl > 0.0) {
+##    q->b = 2.0;
+##  }
+##  else {
+##    q->b = 3.0;
+##  }
+##
+##
+##  h(t);
+##}
+##
+##h(int *r) {
+##    *r = 0; // crash!!
+##}
+##
+##main() {
+##  float val = f();
+##  printf("%f\n", val);
+##  return 0;
+##}
+
+# RUN: %llvm-crash-analyzer --core-file=%S/Inputs/core.no-dbg-example.49881 \
+# RUN:     %S/Inputs/no-dbg-example < %s 2>&1 | FileCheck %s
+
+# CHECK: warning: No debugging info found for a function from backtrace. Please provide debugging info for the exe and all libraries.
+# CHECK: Blame Function is f

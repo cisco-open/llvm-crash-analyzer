@@ -1,0 +1,10 @@
+## Test register read/write from core-file.
+## Ideally, this should have been tested with unittests.
+
+# RUN: %llvm-crash-analyzer -debug-only=llvm-crash-analyzer-corefile \
+# RUN:     --core-file=%S/../Decompiler/Inputs/core-test-1 \
+# RUN:     %S/../Decompiler/Inputs/test-1 < %s 2>&1 | FileCheck %s
+
+# CHECK: Function: main
+# CHECK: Regs:
+# CHECK: reg: rip val: 0x00005599d9d5b044

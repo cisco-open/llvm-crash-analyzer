@@ -1,0 +1,27 @@
+## #include <stdio.h>
+##
+## int do_cmp(int *num) {
+##   int y = 8;
+##   if (y != 0)
+##     ++y;
+##   if (y == *num)
+##     --y;
+##   return y;
+## }
+##
+## int main() {
+##   int *num = NULL;
+##   int res = do_cmp(num);
+##   return res;
+## }
+##
+
+# RUN: %llvm-crash-analyzer --core-file=%S/Inputs/core.null-cmp-O0 \
+# RUN:     %S/Inputs/null-cmp-O0 < %s 2>&1 | FileCheck %s
+
+# CHECK: Blame Function is main
+
+## Test printed DFG format.
+# RUN: %llvm-crash-analyzer --print-dfg-as-dot=%t.dot --core-file=%S/Inputs/core.null-cmp-O0 %S/Inputs/null-cmp-O0 < %s
+# RUN: cat %t.dot | FileCheck --check-prefix=CHECK-DFG %s
+# CHECK-DFG-NOT: {{.*}}CONSTANT: {{[0-9]+}}}"  ->

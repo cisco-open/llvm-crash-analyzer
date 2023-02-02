@@ -45,3 +45,5 @@ add_llvm_external_project(openmp)
 if(LLVM_INCLUDE_TESTS)
   add_llvm_external_project(cross-project-tests)
 endif()
+
+add_llvm_external_project(llvm-crash-analyzer)

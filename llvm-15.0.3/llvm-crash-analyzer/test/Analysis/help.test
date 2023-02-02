@@ -1,0 +1,16 @@
+## Test help command output.
+# RUN: %llvm-crash-analyzer --help 2>&1 | FileCheck %s
+
+# CHECK: USAGE: llvm-crash-analyzer [options] <input file>
+
+# CHECK: Specific Options:
+# CHECK-EMPTY:
+# CHECK-NEXT:  --core-file=<corefilename>                        - <core-file>
+# CHECK-NEXT:  --modules-path=<modulespath>                      - <paths>
+# CHECK-NEXT:  --out-file=<filename>                             - Redirect output to the specified file
+# CHECK-NEXT:  --print-decompiled-mir=<filename>                 - Print decompiled LLVM MIR.
+# CHECK-NEXT:  --print-dfg-as-dot=<filename>                     - Print MIR representation Taint DF Graph as DOT. Please use `$ dot <dot-file-name> -Tpng -o <dot-file-name>.png` to see the graph in form of picture.
+# CHECK-NEXT:  --print-potential-crash-cause-loc                 - Print line:column that could be the cause of the crash.
+# CHECK-NEXT:  --print-taint-value-flow-as-dot=<<dot-file-name>> - Print Taint DF Graph as DOT. Please use `$ dot <dot-file-name> -Tpng -o <dot-file-name>.png` to see the graph in form of picture.
+# CHECK-NEXT:  --solib-search-path=<solibsearchpath>             - <paths>
+# CHECK-NEXT:  --sysroot=<sysrootpath>                           - <path>

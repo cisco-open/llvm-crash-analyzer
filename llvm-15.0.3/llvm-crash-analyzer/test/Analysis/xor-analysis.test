@@ -1,0 +1,19 @@
+## Test case compiled with clang -O0 -g
+## #include <stdio.h>
+##
+## int do_xor(int *num) {
+##   int y = 8 ^ *num;
+##   return y;
+## }
+##
+## int main() {
+##   int *num = NULL;
+##   int res = do_xor(num);
+##   return res;
+## }
+##
+
+# RUN: %llvm-crash-analyzer --core-file=%S/Inputs/core.xor-example.41153 \
+# RUN:     %S/Inputs/xor-example < %s 2>&1 | FileCheck %s
+
+# CHECK: Blame Function is main

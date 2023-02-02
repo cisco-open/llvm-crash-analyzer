@@ -275,6 +275,7 @@ static MIToken::TokenKind getIdentifierKind(StringRef Identifier) {
       .Case("unknown-size", MIToken::kw_unknown_size)
       .Case("unknown-address", MIToken::kw_unknown_address)
       .Case("distinct", MIToken::kw_distinct)
+      .Case("crash-start", MIToken::kw_crash_start)
       .Default(MIToken::Identifier);
 }
 

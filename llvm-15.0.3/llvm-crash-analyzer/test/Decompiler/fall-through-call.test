@@ -1,0 +1,39 @@
+## From the following source code:
+## int k = 0;
+## int* p = &k;
+## int set(){
+##   p = 0; // blame-line
+##   return foo();
+## }
+## __attribute__((noinline))
+## int foo(){
+##   return *p;
+## }
+## int main(){
+##   return set();
+## }
+## Compiled to asm and modified by removing function prologue & epilogue
+## for function set, to perform fall-through call from set to foo.
+##
+## set:
+## ...
+##    callq foo
+##    noop
+## foo:
+## ...
+
+# RUN: %llvm-crash-analyzer --core-file=%S/Inputs/core.fall-through-call %S/Inputs/fall-through-call.out \
+# RUN:      --print-decompiled-mir=%t.mir | FileCheck %s --check-prefix=STDOUT
+# STDOUT: Decompiling...
+# STDOUT-NEXT: Decompiling foo
+# STDOUT-NEXT: Decompiling set
+## Decompiling main - no main in the backtrace
+# STDOUT-NEXT: Decompiled.
+# STDOUT: Blame Function is set
+
+## Test set Machine Function decompiled.
+# RUN: cat %t.mir | FileCheck %s --check-prefix=DEC-MIR
+# DEC-MIR: name:            set
+# DEC-MIR: MOV64mi32 $noreg, 1, $noreg, 6295584, $noreg, 0, debug-location !DILocation(line: 5,
+# DEC-MIR-NEXT: CALL64pcrel32 @foo, csr_64, implicit $rsp, implicit $ssp
+# DEC-MIR-NEXT: crash-start NOOP

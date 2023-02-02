@@ -129,6 +129,7 @@ struct MIToken {
     kw_bbsections,
     kw_unknown_size,
     kw_unknown_address,
+    kw_crash_start,
 
     // Metadata types.
     kw_distinct,

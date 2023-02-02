@@ -439,6 +439,15 @@ public:
   using CallSiteInfo = SmallVector<ArgRegPair, 1>;
   using CallSiteInfoImpl = SmallVectorImpl<ArgRegPair>;
 
+  /// Used for the purpose of crash-blamer tool. It represents
+  /// the state of the registers at the time of the crash.
+  struct RegisterCrashValue {
+    std::string Name;
+    std::string Value;
+  };
+  using RegisterCrashInfo = SmallVector<RegisterCrashValue, 8>;
+  using RegisterCrashInfoImpl = SmallVectorImpl<RegisterCrashValue>;
+
 private:
   Delegate *TheDelegate = nullptr;
   GISelChangeObserver *Observer = nullptr;
@@ -450,6 +459,10 @@ private:
   /// A helper function that returns call site info for a give call
   /// instruction if debug entry value support is enabled.
   CallSiteInfoMap::iterator getCallSiteInfo(const MachineInstr *MI);
+
+  RegisterCrashInfo MFRegInfo;
+
+  unsigned CrashOrder = 0;
 
   // Callbacks for insertion and removal.
   void handleInsertion(MachineInstr &MI);
@@ -1243,6 +1256,21 @@ public:
 
   const CallSiteInfoMap &getCallSitesInfo() const {
     return CallSitesInfo;
+  }
+
+  void addCrashRegInfo(RegisterCrashInfo &regs) { MFRegInfo = regs; }
+  const RegisterCrashInfo &getCrashRegInfo() const { return MFRegInfo; }
+
+  void setCrashOrder(unsigned num) { CrashOrder = num; }
+  unsigned getCrashOrder() const { return CrashOrder; }
+
+  // TODO: Optimize this.
+  std::string getRegValueFromCrash(std::string Reg) const {
+    for (auto &R : MFRegInfo) {
+      if (R.Name == Reg)
+        return R.Value;
+    }
+    return "";
   }
 
   /// Following functions update call site info. They should be called before

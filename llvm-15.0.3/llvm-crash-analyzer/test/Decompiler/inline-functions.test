@@ -1,0 +1,44 @@
+## Test:
+## $ cat test.cpp
+## void b(int *p) {
+##   *p = 4; //crash
+## }
+##
+## bool f() {
+##   return false;
+## }
+##
+## inline __attribute__((always_inline)) int f1() {
+##   if (bool b = f())
+##     return 1;
+##   return 2;
+## }
+##
+## inline __attribute__((always_inline)) int f2() {
+##   if (bool b = f())
+##     return 3;
+##   int *ptr = nullptr;
+##   b(ptr);
+##   return 4;
+## }
+##
+## int main() {
+##   f1();
+##   f2();
+## }
+##
+## Compiled as:
+## $ clang -g -O0 test.cpp
+
+# RUN: %llvm-crash-analyzer --print-decompiled-mir=%t.mir \
+# RUN:     --core-file=%S/Inputs/core.inline-fns-test.59664 %S/Inputs/inline-fns-test
+# RUN: cat %t.mir | FileCheck %s
+
+# CHECK: !2 = distinct !DISubprogram(name: "b(int*)"
+# CHECK: !5 = distinct !DISubprogram(name: "f2()"
+# CHECK: !6 = distinct !DISubprogram(name: "main"
+# CHECK: name: 'b(int*)'
+# CHECK: name: 'f2()'
+# CHECK: MOV64mi32 $rbp, 1, $noreg, -16, $noreg, 0, debug-location !DILocation(line: 18, column: 8, scope: !5)
+# CHECK: $rdi = MOV64rm $rbp, 1, $noreg, -16, $noreg, debug-location !DILocation(line: 19, column: 5, scope: !5)
+# CHECK: CALL64pcrel32 @"b(int*)", csr_64, implicit $rsp, implicit $ssp, debug-location !DILocation(line: 19, column: 3, scope: !5)
