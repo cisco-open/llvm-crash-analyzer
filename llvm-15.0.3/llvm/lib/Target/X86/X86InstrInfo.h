@@ -217,6 +217,17 @@ public:
   ///
   /// FIXME: This should become part of our instruction tables.
   static bool isDataInvariantLoad(MachineInstr &MI);
+  bool isLoad(const MachineInstr &MI) const override;
+  bool isStore(const MachineInstr &MI) const override;
+  bool isNoopInstr(const MachineInstr &MI) const override;
+  bool isXORSimplifiedSetToZero(const MachineInstr &MI) const override;
+  bool isPush(const MachineInstr &MI) const override;
+  bool isPop(const MachineInstr &MI) const override;
+
+  Optional<RegImmPair> isAddImmediate(const MachineInstr &MI,
+                                      Register Reg) const override;
+
+  Optional<DestSourcePair> getDestAndSrc(const MachineInstr &MI) const override;
 
   unsigned isLoadFromStackSlot(const MachineInstr &MI,
                                int &FrameIndex) const override;

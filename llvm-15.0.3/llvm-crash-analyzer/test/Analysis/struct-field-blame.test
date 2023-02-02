@@ -1,0 +1,48 @@
+## This is reproducer (compiled with `clang -g -O0`):
+## #include <stdio.h>
+##
+## typedef struct node {
+##   char *x;
+##   int *val;
+## } info;
+##
+## void print_info (info *node) {
+##   printf("\n %d", node->val[0]);
+## }
+##
+## static void func1() {
+##   info node;
+##   node.val = NULL;
+##   print_info(&node);
+## }
+##
+## int main() {
+##   func1();
+##   return 0;
+## }
+
+## Confirm that Concrete Memory Address {reg:$rax; off:8} is calculated
+## properly, using backup location from memory to reconstruct $rax
+## register value.
+# RUN: %llvm-crash-analyzer -debug-only=taint-analysis --core-file=%S/Inputs/core.struct-field-blame %S/Inputs/struct-field-blame.out < %s 2>&1 | FileCheck %s --check-prefix=CHECK-LOC
+
+# CHECK-LOC: $rax = MOV64rm $rax, 1, $noreg, 8, $noreg, debug-location !DILocation(line: 9, column: 25
+# CHECK-LOC-NEXT: Dest {reg:$rax}
+# CHECK-LOC-NEXT: Src1 {reg:$rax; off:8}
+# CHECK-LOC-NEXT: Add to TL: {reg:$rax; off:8} (mem addr: 140726049954216)
+
+# RUN: %llvm-crash-analyzer --print-potential-crash-cause-loc --core-file=%S/Inputs/core.struct-field-blame %S/Inputs/struct-field-blame.out < %s 2>&1 | FileCheck %s
+
+# CHECK: Blame Function is func1
+# CHECK: From File {{.*}}/test.c:14:12
+
+## Test printed DFG format (MIR representation).
+# RUN: %llvm-crash-analyzer --print-dfg-as-dot=%t1.dot --core-file=%S/Inputs/core.taint-dest-base-reg %S/Inputs/taint-dest-base-reg.out < %s
+# RUN: cat %t1.dot | FileCheck --check-prefix=CHECK-DFG %s
+# CHECK-DFG: digraph TaintDataFlowGraph {
+# CHECK-DFG-NEXT: crashNode  ->  "{1; 1; crash-start MOV32mr $rcx, 1, $noreg, 4, $noreg, $eax;  MEM: 4}" [color="red"];
+# CHECK-DFG-NEXT: crashNode  ->  "{1; 2; crash-start MOV32mr $rcx, 1, $noreg, 4, $noreg, $eax;  REG: $rcx}" [color="red"];
+# CHECK-DFG-NEXT: crashNode  ->  "{1; 3; crash-start MOV32mr $rcx, 1, $noreg, 4, $noreg, $eax;  REG: $eax}" [color="red"];
+# CHECK-DFG-NEXT: "{1; 2; crash-start MOV32mr $rcx, 1, $noreg, 4, $noreg, $eax;  REG: $rcx}"  ->  "{1; 4; $rcx = MOV64rm $rbp, 1, $noreg, -8, $noreg;  MEM: 140734701020776}";
+# CHECK-DFG-NEXT: "{1; 3; crash-start MOV32mr $rcx, 1, $noreg, 4, $noreg, $eax;  REG: $eax}"  ->  "{1; 5; $eax = MOV32rm $rbp, 1, $noreg, -12, $noreg;  MEM: 140734701020772}";
+# CHECK-DFG-NEXT: "{1; 4; $rcx = MOV64rm $rbp, 1, $noreg, -8, $noreg;  MEM: 140734701020776}"  ->  "{1; 7; MOV64mr $rbp, 1, $noreg, -8, $noreg, $rdi;  REG: $rdi}";

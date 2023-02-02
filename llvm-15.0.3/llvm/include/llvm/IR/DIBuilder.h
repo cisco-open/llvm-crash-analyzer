@@ -48,6 +48,9 @@ namespace llvm {
     Function *LabelFn;       ///< llvm.dbg.label
     Function *AddrFn;        ///< llvm.dbg.addr
 
+    // When using crash-blamer, it is posible to add more than one CU.
+    SmallVector<Metadata *, 4> AllCUs;
+
     SmallVector<Metadata *, 4> AllEnumTypes;
     /// Track the RetainTypes, since they can be updated later on.
     SmallVector<TrackingMDNodeRef, 4> AllRetainTypes;
@@ -163,7 +166,7 @@ namespace llvm {
                       DICompileUnit::DebugNameTableKind NameTableKind =
                           DICompileUnit::DebugNameTableKind::Default,
                       bool RangesBaseAddress = false, StringRef SysRoot = {},
-                      StringRef SDK = {});
+                      StringRef SDK = {}, bool CrashBlamerModule = false);
 
     /// Create a file descriptor to hold debugging information for a file.
     /// \param Filename  File name.

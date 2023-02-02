@@ -1,0 +1,326 @@
+## $ cat test0.c
+## #include <stdio.h>
+## typedef struct node {
+##   int *fn;
+## } T;
+##
+## void h(int *r) {
+##   *r = 3; // crash
+## }
+##
+## void g (T*q) {
+##   int *t = q->fn;
+##   h(t);
+## }
+##
+## void f() {
+##   T p;
+##   T q2;
+##   p.fn = NULL; // blame point
+##   q2.fn = NULL;
+##   g(&p);
+## }
+##
+## int main() {
+##  f();
+##  return 0;
+## }
+## $ clang -g -O2 test0.c
+## $ llvm-crash-analyzer a.out --core-file=core.a.out.107857 --print-decompiled-mir=test.mir
+
+# RUN: %llvm-crash-analyzer-ta %s | FileCheck %s
+# CHECK: No blame function found.
+
+--- |
+  ; ModuleID = 'a.out'
+  source_filename = "a.out"
+  target datalayout = "e-m:e-p270:32:32-p271:32:32-p272:64:64-i64:64-f80:128-n8:16:32:64-S128"
+  
+  ; Materializable
+  define void @f() !dbg !2 {
+  entry:
+    unreachable
+  }
+  
+  ; Materializable
+  define void @g() !dbg !5 {
+  entry:
+    unreachable
+  }
+  
+  ; Materializable
+  define void @h() !dbg !6 {
+  entry:
+    unreachable
+  }
+  
+  ; Materializable
+  define void @main() !dbg !7 {
+  entry:
+    unreachable
+  }
+  
+  !llvm.dbg.cu = !{!0}
+  
+  !0 = distinct !DICompileUnit(language: DW_LANG_C, file: !1, producer: "llvm-crash-analyzer", isOptimized: true, runtimeVersion: 0, emissionKind: FullDebug)
+  !1 = !DIFile(filename: "/nobackup/djtodoro/llvm_trunk/NEW/llvm-crash-analyzer/CISCO-git/test-dfg/base-case/O2/test0.c", directory: "/")
+  !2 = distinct !DISubprogram(name: "f", linkageName: "f", scope: null, file: !1, line: 1, type: !3, scopeLine: 1, spFlags: DISPFlagDefinition | DISPFlagOptimized, unit: !0, retainedNodes: !4)
+  !3 = !DISubroutineType(types: !4)
+  !4 = !{}
+  !5 = distinct !DISubprogram(name: "g", linkageName: "g", scope: null, file: !1, line: 1, type: !3, scopeLine: 1, spFlags: DISPFlagDefinition | DISPFlagOptimized, unit: !0, retainedNodes: !4)
+  !6 = distinct !DISubprogram(name: "h", linkageName: "h", scope: null, file: !1, line: 1, type: !3, scopeLine: 1, spFlags: DISPFlagDefinition | DISPFlagOptimized, unit: !0, retainedNodes: !4)
+  !7 = distinct !DISubprogram(name: "main", linkageName: "main", scope: null, file: !1, line: 1, type: !3, scopeLine: 1, spFlags: DISPFlagDefinition | DISPFlagOptimized, unit: !0, retainedNodes: !4)
+
+...
+---
+name:            h
+alignment:       16
+exposesReturnsTwice: false
+legalized:       false
+regBankSelected: false
+selected:        false
+failedISel:      false
+tracksRegLiveness: true
+hasWinCFI:       false
+registers:       []
+liveins:         []
+frameInfo:
+  isFrameAddressTaken: false
+  isReturnAddressTaken: false
+  hasStackMap:     false
+  hasPatchPoint:   false
+  stackSize:       0
+  offsetAdjustment: 0
+  maxAlignment:    1
+  adjustsStack:    false
+  hasCalls:        false
+  stackProtector:  ''
+  maxCallFrameSize: 4294967295
+  cvBytesOfCalleeSavedRegisters: 0
+  hasOpaqueSPAdjustment: false
+  hasVAStart:      false
+  hasMustTailInVarArgFunc: false
+  localFrameSize:  0
+  savePoint:       ''
+  restorePoint:    ''
+fixedStack:      []
+stack:           []
+callSites:       []
+debugValueSubstitutions: []
+regInfo:         { GPRegs: [] }
+constants:       []
+machineFunctionInfo: {}
+crashOrder:     1
+body:             |
+  bb.0:
+    NOOP
+
+...
+---
+name:            g
+alignment:       16
+exposesReturnsTwice: false
+legalized:       false
+regBankSelected: false
+selected:        false
+failedISel:      false
+tracksRegLiveness: true
+hasWinCFI:       false
+registers:       []
+liveins:         []
+frameInfo:
+  isFrameAddressTaken: false
+  isReturnAddressTaken: false
+  hasStackMap:     false
+  hasPatchPoint:   false
+  stackSize:       0
+  offsetAdjustment: 0
+  maxAlignment:    1
+  adjustsStack:    false
+  hasCalls:        false
+  stackProtector:  ''
+  maxCallFrameSize: 4294967295
+  cvBytesOfCalleeSavedRegisters: 0
+  hasOpaqueSPAdjustment: false
+  hasVAStart:      false
+  hasMustTailInVarArgFunc: false
+  localFrameSize:  0
+  savePoint:       ''
+  restorePoint:    ''
+fixedStack:      []
+stack:           []
+callSites:       []
+debugValueSubstitutions: []
+regInfo:         { GPRegs: [] }
+constants:       []
+machineFunctionInfo: {}
+crashOrder:     2
+body:             |
+  bb.0:
+    NOOP
+
+...
+---
+name:            f
+alignment:       16
+exposesReturnsTwice: false
+legalized:       false
+regBankSelected: false
+selected:        false
+failedISel:      false
+tracksRegLiveness: true
+hasWinCFI:       false
+registers:       []
+liveins:         []
+frameInfo:
+  isFrameAddressTaken: false
+  isReturnAddressTaken: false
+  hasStackMap:     false
+  hasPatchPoint:   false
+  stackSize:       0
+  offsetAdjustment: 0
+  maxAlignment:    1
+  adjustsStack:    false
+  hasCalls:        false
+  stackProtector:  ''
+  maxCallFrameSize: 4294967295
+  cvBytesOfCalleeSavedRegisters: 0
+  hasOpaqueSPAdjustment: false
+  hasVAStart:      false
+  hasMustTailInVarArgFunc: false
+  localFrameSize:  0
+  savePoint:       ''
+  restorePoint:    ''
+fixedStack:      []
+stack:           []
+callSites:       []
+debugValueSubstitutions: []
+regInfo:         { GPRegs: [] }
+constants:       []
+machineFunctionInfo: {}
+crashOrder:     3
+body:             |
+  bb.0:
+    NOOP
+
+...
+---
+name:            main
+alignment:       16
+exposesReturnsTwice: false
+legalized:       false
+regBankSelected: false
+selected:        false
+failedISel:      false
+tracksRegLiveness: true
+hasWinCFI:       false
+registers:       []
+liveins:         []
+frameInfo:
+  isFrameAddressTaken: false
+  isReturnAddressTaken: false
+  hasStackMap:     false
+  hasPatchPoint:   false
+  stackSize:       0
+  offsetAdjustment: 0
+  maxAlignment:    1
+  adjustsStack:    false
+  hasCalls:        false
+  stackProtector:  ''
+  maxCallFrameSize: 4294967295
+  cvBytesOfCalleeSavedRegisters: 0
+  hasOpaqueSPAdjustment: false
+  hasVAStart:      false
+  hasMustTailInVarArgFunc: false
+  localFrameSize:  0
+  savePoint:       ''
+  restorePoint:    ''
+fixedStack:      []
+stack:           []
+callSites:       []
+debugValueSubstitutions: []
+regInfo:         { GPRegs: 
+    - { reg: rax, value: '0x0000000000401170' }
+    - { reg: rbx, value: '0x0000000000000000' }
+    - { reg: rcx, value: '0x0000000000401180' }
+    - { reg: rdx, value: '0x00007ffdd7b0f928' }
+    - { reg: rdi, value: '0x0000000000000001' }
+    - { reg: rsi, value: '0x00007ffdd7b0f918' }
+    - { reg: rbp, value: '0x0000000000000000' }
+    - { reg: rsp, value: '0x00007ffdd7b0f838' }
+    - { reg: r8, value: '0x00007f5718f9ee80' }
+    - { reg: r9, value: '0x0000000000000000' }
+    - { reg: r10, value: '0x00007ffdd7b0f360' }
+    - { reg: r11, value: '0x00007f5718bf8460' }
+    - { reg: r12, value: '0x0000000000401050' }
+    - { reg: r13, value: '0x00007ffdd7b0f910' }
+    - { reg: r14, value: '0x0000000000000000' }
+    - { reg: r15, value: '0x0000000000000000' }
+    - { reg: rip, value: '0x0000000000401170' }
+    - { reg: rflags, value: '0x0000000000010246' }
+    - { reg: cs, value: '0x0000000000000033' }
+    - { reg: fs, value: '0x0000000000000000' }
+    - { reg: gs, value: '0x0000000000000000' }
+    - { reg: ss, value: '0x000000000000002b' }
+    - { reg: ds, value: '0x0000000000000000' }
+    - { reg: es, value: '0x0000000000000000' }
+    - { reg: eax, value: '0x00401170' }
+    - { reg: ebx, value: '0x00000000' }
+    - { reg: ecx, value: '0x00401180' }
+    - { reg: edx, value: '0xd7b0f928' }
+    - { reg: edi, value: '0x00000001' }
+    - { reg: esi, value: '0xd7b0f918' }
+    - { reg: ebp, value: '0x00000000' }
+    - { reg: esp, value: '0xd7b0f838' }
+    - { reg: r8d, value: '0x18f9ee80' }
+    - { reg: r9d, value: '0x00000000' }
+    - { reg: r10d, value: '0xd7b0f360' }
+    - { reg: r11d, value: '0x18bf8460' }
+    - { reg: r12d, value: '0x00401050' }
+    - { reg: r13d, value: '0xd7b0f910' }
+    - { reg: r14d, value: '0x00000000' }
+    - { reg: r15d, value: '0x00000000' }
+    - { reg: ax, value: '0x1170' }
+    - { reg: bx, value: '0x0000' }
+    - { reg: cx, value: '0x1180' }
+    - { reg: dx, value: '0xf928' }
+    - { reg: di, value: '0x0001' }
+    - { reg: si, value: '0xf918' }
+    - { reg: bp, value: '0x0000' }
+    - { reg: sp, value: '0xf838' }
+    - { reg: r8w, value: '0xee80' }
+    - { reg: r9w, value: '0x0000' }
+    - { reg: r10w, value: '0xf360' }
+    - { reg: r11w, value: '0x8460' }
+    - { reg: r12w, value: '0x1050' }
+    - { reg: r13w, value: '0xf910' }
+    - { reg: r14w, value: '0x0000' }
+    - { reg: r15w, value: '0x0000' }
+    - { reg: ah, value: '0x11' }
+    - { reg: bh, value: '0x00' }
+    - { reg: ch, value: '0x11' }
+    - { reg: dh, value: '0xf9' }
+    - { reg: al, value: '0x70' }
+    - { reg: bl, value: '0x00' }
+    - { reg: cl, value: '0x80' }
+    - { reg: dl, value: '0x28' }
+    - { reg: dil, value: '0x01' }
+    - { reg: sil, value: '0x18' }
+    - { reg: bpl, value: '0x00' }
+    - { reg: spl, value: '0x38' }
+    - { reg: r8l, value: '0x80' }
+    - { reg: r9l, value: '0x00' }
+    - { reg: r10l, value: '0x60' }
+    - { reg: r11l, value: '0x60' }
+    - { reg: r12l, value: '0x50' }
+    - { reg: r13l, value: '0x10' }
+    - { reg: r14l, value: '0x00' }
+    - { reg: r15l, value: '0x00' } }
+constants:       []
+machineFunctionInfo: {}
+crashOrder:     4
+body:             |
+  bb.0:
+    crash-start TRAP debug-location !DILocation(line: 7, column: 6, scope: !6)
+
+...

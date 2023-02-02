@@ -1,0 +1,294 @@
+##include <stdio.h>
+#
+#void foo(int **p) {
+#   *p = NULL;
+#}
+#
+#int main() {
+# int *a ;
+# foo(&a);
+# printf("%d", *a);
+# return 0;
+#}
+
+# XFAIL: *
+# RUN: %llvm-crash-analyzer-ta %s | FileCheck %s
+# CHECK: Blame Function is foo
+
+# Currently, we do not analyze function calls with tainted parameters 
+
+--- |
+  ; ModuleID = 'a.out'
+  source_filename = "a.out"
+  target datalayout = "e-m:e-p270:32:32-p271:32:32-p272:64:64-i64:64-f80:128-n8:16:32:64-S128"
+  
+  ; Materializable
+  define void @main() !dbg !2 {
+  entry:
+    unreachable
+  }
+  
+  ; Materializable
+  define void @foo() !dbg !5 {
+  entry:
+    unreachable
+  }
+  
+  ; Materializable
+  define void @printf() {
+  entry:
+    unreachable
+  }
+  
+  !llvm.dbg.cu = !{!0}
+  
+  !0 = distinct !DICompileUnit(language: DW_LANG_C, file: !1, producer: "llvm-crash-analyzer", isOptimized: true, runtimeVersion: 0, emissionKind: FullDebug)
+  !1 = !DIFile(filename: "/auto/compiler-migration/bseshadr/pac/llvm-crash-anal/build/pactest/alias1.c", directory: "/")
+  !2 = distinct !DISubprogram(name: "main", linkageName: "main", scope: null, file: !1, line: 1, type: !3, scopeLine: 1, spFlags: DISPFlagDefinition | DISPFlagOptimized, unit: !0, retainedNodes: !4)
+  !3 = !DISubroutineType(types: !4)
+  !4 = !{}
+  !5 = distinct !DISubprogram(name: "foo", linkageName: "foo", scope: null, file: !1, line: 1, type: !3, scopeLine: 1, spFlags: DISPFlagDefinition | DISPFlagOptimized, unit: !0, retainedNodes: !4)
+
+...
+---
+name:            main
+alignment:       16
+exposesReturnsTwice: false
+legalized:       false
+regBankSelected: false
+selected:        false
+failedISel:      false
+tracksRegLiveness: true
+hasWinCFI:       false
+registers:       []
+liveins:         []
+frameInfo:
+  isFrameAddressTaken: false
+  isReturnAddressTaken: false
+  hasStackMap:     false
+  hasPatchPoint:   false
+  stackSize:       0
+  offsetAdjustment: 0
+  maxAlignment:    1
+  adjustsStack:    false
+  hasCalls:        false
+  stackProtector:  ''
+  maxCallFrameSize: 4294967295
+  cvBytesOfCalleeSavedRegisters: 0
+  hasOpaqueSPAdjustment: false
+  hasVAStart:      false
+  hasMustTailInVarArgFunc: false
+  localFrameSize:  0
+  savePoint:       ''
+  restorePoint:    ''
+fixedStack:      []
+stack:           []
+callSites:       []
+debugValueSubstitutions: []
+regInfo:         { GPRegs: 
+    - { reg: rax, value: '0x0000000000000000' }
+    - { reg: rbx, value: '0x0000000000000000' }
+    - { reg: rcx, value: '0x00007ff53f35c738' }
+    - { reg: rdx, value: '0x00007fff1f8daf08' }
+    - { reg: rdi, value: '0x00007fff1f8dae00' }
+    - { reg: rsi, value: '0x00007fff1f8daef8' }
+    - { reg: rbp, value: '0x00007fff1f8dae10' }
+    - { reg: rsp, value: '0x00007fff1f8dadf0' }
+    - { reg: r8, value: '0x00007ff53f35dce0' }
+    - { reg: r9, value: '0x00007ff53f35dce0' }
+    - { reg: r10, value: '0x0000000000000000' }
+    - { reg: r11, value: '0x00007ff53f11f070' }
+    - { reg: r12, value: '0x00000000004004c0' }
+    - { reg: r13, value: '0x00007fff1f8daef0' }
+    - { reg: r14, value: '0x0000000000000000' }
+    - { reg: r15, value: '0x0000000000000000' }
+    - { reg: rip, value: '0x00000000004005ec' }
+    - { reg: rflags, value: '0x0000000000010206' }
+    - { reg: cs, value: '0x0000000000000033' }
+    - { reg: fs, value: '0x0000000000000000' }
+    - { reg: gs, value: '0x0000000000000000' }
+    - { reg: ss, value: '0x000000000000002b' }
+    - { reg: ds, value: '0x0000000000000000' }
+    - { reg: es, value: '0x0000000000000000' }
+    - { reg: eax, value: '0x00000000' }
+    - { reg: ebx, value: '0x00000000' }
+    - { reg: ecx, value: '0x3f35c738' }
+    - { reg: edx, value: '0x1f8daf08' }
+    - { reg: edi, value: '0x1f8dae00' }
+    - { reg: esi, value: '0x1f8daef8' }
+    - { reg: ebp, value: '0x1f8dae10' }
+    - { reg: esp, value: '0x1f8dadf0' }
+    - { reg: r8d, value: '0x3f35dce0' }
+    - { reg: r9d, value: '0x3f35dce0' }
+    - { reg: r10d, value: '0x00000000' }
+    - { reg: r11d, value: '0x3f11f070' }
+    - { reg: r12d, value: '0x004004c0' }
+    - { reg: r13d, value: '0x1f8daef0' }
+    - { reg: r14d, value: '0x00000000' }
+    - { reg: r15d, value: '0x00000000' }
+    - { reg: ax, value: '0x0000' }
+    - { reg: bx, value: '0x0000' }
+    - { reg: cx, value: '0xc738' }
+    - { reg: dx, value: '0xaf08' }
+    - { reg: di, value: '0xae00' }
+    - { reg: si, value: '0xaef8' }
+    - { reg: bp, value: '0xae10' }
+    - { reg: sp, value: '0xadf0' }
+    - { reg: r8w, value: '0xdce0' }
+    - { reg: r9w, value: '0xdce0' }
+    - { reg: r10w, value: '0x0000' }
+    - { reg: r11w, value: '0xf070' }
+    - { reg: r12w, value: '0x04c0' }
+    - { reg: r13w, value: '0xaef0' }
+    - { reg: r14w, value: '0x0000' }
+    - { reg: r15w, value: '0x0000' }
+    - { reg: ah, value: '0x00' }
+    - { reg: bh, value: '0x00' }
+    - { reg: ch, value: '0xc7' }
+    - { reg: dh, value: '0xaf' }
+    - { reg: al, value: '0x00' }
+    - { reg: bl, value: '0x00' }
+    - { reg: cl, value: '0x38' }
+    - { reg: dl, value: '0x08' }
+    - { reg: dil, value: '0x00' }
+    - { reg: sil, value: '0xf8' }
+    - { reg: bpl, value: '0x10' }
+    - { reg: spl, value: '0xf0' }
+    - { reg: r8l, value: '0xe0' }
+    - { reg: r9l, value: '0xe0' }
+    - { reg: r10l, value: '0x00' }
+    - { reg: r11l, value: '0x70' }
+    - { reg: r12l, value: '0xc0' }
+    - { reg: r13l, value: '0xf0' }
+    - { reg: r14l, value: '0x00' }
+    - { reg: r15l, value: '0x00' } }
+constants:       []
+machineFunctionInfo: {}
+crashOrder:     1
+body:             |
+  bb.0:
+    liveins: $rbp
+  
+    PUSH64r $rbp, implicit-def $rsp, implicit $rsp, debug-location !DILocation(line: 7, scope: !2)
+    $rbp = MOV64rr $rsp, debug-location !DILocation(line: 7, scope: !2)
+    $rsp = SUB64ri8 $rsp, 32, implicit-def $eflags, debug-location !DILocation(line: 7, scope: !2)
+    MOV32mi $rbp, 1, $noreg, -4, $noreg, 0, debug-location !DILocation(line: 7, scope: !2)
+    $rdi = LEA64r $rbp, 1, $noreg, -16, $noreg, debug-location !DILocation(line: 9, column: 2, scope: !2)
+    CALL64pcrel32 @foo, csr_64, implicit $rsp, implicit $ssp, implicit-def $rax, debug-location !DILocation(line: 9, column: 2, scope: !2)
+    $rax = MOV64rm $rbp, 1, $noreg, -16, $noreg, debug-location !DILocation(line: 10, column: 16, scope: !2)
+    $esi = crash-start MOV32rm $rax, 1, $noreg, 0, $noreg, debug-location !DILocation(line: 10, column: 15, scope: !2)
+    $rdi = MOV64ri 4196008, debug-location !DILocation(line: 10, column: 2, scope: !2)
+    $al = MOV8ri 0, debug-location !DILocation(line: 10, column: 2, scope: !2)
+    CALL64pcrel32 @printf, csr_64, implicit $rsp, implicit $ssp, implicit-def $eax, debug-location !DILocation(line: 10, column: 2, scope: !2)
+    $ecx = XOR32rr undef $ecx, undef $ecx, implicit-def $eflags, debug-location !DILocation(line: 10, column: 2, scope: !2)
+    MOV32mr $rbp, 1, $noreg, -20, $noreg, $eax, debug-location !DILocation(line: 10, column: 2, scope: !2)
+    $eax = MOV32rr $ecx, debug-location !DILocation(line: 11, column: 2, scope: !2)
+    $rsp = ADD64ri8 $rsp, 32, implicit-def $eflags, debug-location !DILocation(line: 11, column: 2, scope: !2)
+    $rbp = POP64r implicit-def $rsp, implicit $rsp, debug-location !DILocation(line: 11, column: 2, scope: !2)
+    RET64 debug-location !DILocation(line: 11, column: 2, scope: !2)
+
+...
+---
+name:            foo
+alignment:       16
+exposesReturnsTwice: false
+legalized:       false
+regBankSelected: false
+selected:        false
+failedISel:      false
+tracksRegLiveness: true
+hasWinCFI:       false
+registers:       []
+liveins:         []
+frameInfo:
+  isFrameAddressTaken: false
+  isReturnAddressTaken: false
+  hasStackMap:     false
+  hasPatchPoint:   false
+  stackSize:       0
+  offsetAdjustment: 0
+  maxAlignment:    1
+  adjustsStack:    false
+  hasCalls:        false
+  stackProtector:  ''
+  maxCallFrameSize: 4294967295
+  cvBytesOfCalleeSavedRegisters: 0
+  hasOpaqueSPAdjustment: false
+  hasVAStart:      false
+  hasMustTailInVarArgFunc: false
+  localFrameSize:  0
+  savePoint:       ''
+  restorePoint:    ''
+fixedStack:      []
+stack:           []
+callSites:       []
+debugValueSubstitutions: []
+regInfo:         { GPRegs: [] }
+constants:       []
+machineFunctionInfo: {}
+crashOrder:     0
+body:             |
+  bb.0:
+    liveins: $rbp, $rdi
+  
+    PUSH64r $rbp, implicit-def $rsp, implicit $rsp, debug-location !DILocation(line: 3, scope: !5)
+    $rbp = MOV64rr $rsp, debug-location !DILocation(line: 3, scope: !5)
+    MOV64mr $rbp, 1, $noreg, -8, $noreg, $rdi, debug-location !DILocation(line: 3, scope: !5)
+    $rax = MOV64rm $rbp, 1, $noreg, -8, $noreg, debug-location !DILocation(line: 4, column: 5, scope: !5)
+    MOV64mi32 $rax, 1, $noreg, 0, $noreg, 0, debug-location !DILocation(line: 4, column: 7, scope: !5)
+    $rbp = POP64r implicit-def $rsp, implicit $rsp, debug-location !DILocation(line: 5, column: 1, scope: !5)
+    crash-start RET64 debug-location !DILocation(line: 5, column: 1, scope: !5)
+
+...
+---
+name:            printf
+alignment:       16
+exposesReturnsTwice: false
+legalized:       false
+regBankSelected: false
+selected:        false
+failedISel:      false
+tracksRegLiveness: true
+hasWinCFI:       false
+registers:       []
+liveins:         []
+frameInfo:
+  isFrameAddressTaken: false
+  isReturnAddressTaken: false
+  hasStackMap:     false
+  hasPatchPoint:   false
+  stackSize:       0
+  offsetAdjustment: 0
+  maxAlignment:    1
+  adjustsStack:    false
+  hasCalls:        false
+  stackProtector:  ''
+  maxCallFrameSize: 4294967295
+  cvBytesOfCalleeSavedRegisters: 0
+  hasOpaqueSPAdjustment: false
+  hasVAStart:      false
+  hasMustTailInVarArgFunc: false
+  localFrameSize:  0
+  savePoint:       ''
+  restorePoint:    ''
+fixedStack:      []
+stack:           []
+callSites:       []
+debugValueSubstitutions: []
+regInfo:         { GPRegs: [] }
+constants:       []
+machineFunctionInfo: {}
+crashOrder:     0
+body:             |
+  bb.0:
+    liveins: $rip
+  
+    JMP64m $rip, 1, $noreg, 2100066, $noreg
+  
+  bb.1:
+    PUSH64i32 0, implicit-def $rsp, implicit $rsp
+    crash-start JMP_4 4195488
+  
+  bb.2:
+
+...

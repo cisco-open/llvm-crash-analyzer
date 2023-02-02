@@ -13,6 +13,7 @@
 #include "lldb/Utility/DataExtractor.h"
 #include "lldb/Utility/LLDBLog.h"
 #include "lldb/Utility/Log.h"
+#include "llvm/Support/Host.h"
 
 #include "Plugins/Process/Utility/RegisterContextFreeBSD_i386.h"
 #include "Plugins/Process/Utility/RegisterContextFreeBSD_mips64.h"
@@ -78,7 +79,14 @@ ThreadElfCore::CreateRegisterContextForFrame(StackFrame *frame) {
     ArchSpec arch = process->GetArchitecture();
     RegisterInfoInterface *reg_interface = nullptr;
 
-    switch (arch.GetTriple().getOS()) {
+    auto OSType = arch.GetTriple().getOS();
+    if (OSType == llvm::Triple::UnknownOS) {
+      llvm::Triple DefaultTriple(
+          llvm::Triple::normalize(llvm::sys::getDefaultTargetTriple()));
+      OSType = DefaultTriple.getOS();
+    }
+
+    switch (OSType) {
     case llvm::Triple::FreeBSD: {
       switch (arch.GetMachine()) {
       case llvm::Triple::aarch64:
