@@ -1,0 +1,41 @@
+## Test Machine Functions decompiled correctly when crashstart is on a nop
+## to reproduce the executable, use gcc to compile:
+## 
+## void do_things (int);
+## 
+## struct s_t {
+##   int a;
+##   void (*fptr)(int);
+## };
+## struct s_t s1 = {1,do_things};
+## struct s_t s2 = {2,do_things};
+## struct s_t *sptr;
+## 
+## struct s_t *get_ptr (void) {
+##   return sptr;
+## }
+## 
+## void do_things (int a) {
+##   *((int *) 1 ) = a;
+## }
+## 
+## void initiate (int val) {
+##   struct s_t *ptr = get_ptr ();
+##   ptr->fptr (val);
+## }
+## 
+## int main (int argc, char **argv) {
+##   if (argc > 0)
+##     sptr = &s1;
+##   else
+##     sptr = &s2;
+## 
+##   initiate (argc);
+##   return 0;
+## }
+
+# RUN: %llvm-crash-analyzer --print-decompiled-mir=%t.mir \
+# RUN:     --core-file=%S/Inputs/core.nop_crashstart %S/Inputs/nop_crashstart | FileCheck %s
+
+# CHECK: Decompiled.
+

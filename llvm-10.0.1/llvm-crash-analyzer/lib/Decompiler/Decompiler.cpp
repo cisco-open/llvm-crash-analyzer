@@ -56,6 +56,18 @@ static cl::opt<bool> ShowDisassembly("show-disassemble", cl::Hidden,
 
 LLVMContext crash_analyzer::Decompiler::Ctx;
 
+const char *format_str (const char *msg, uint64_t n) {
+  static char buf[256];
+  if (strlen (msg) > 230) {
+    int i;
+    for (i=0; i<100; i++) buf[i] = msg[i];
+    buf[i] = 0;
+  } else {
+    sprintf (buf, msg, n);
+  }
+  return buf;
+}
+
 crash_analyzer::Decompiler::Decompiler() {
   DisassemblerLLVMC::Initialize();
 }
@@ -119,12 +131,6 @@ MachineInstr *crash_analyzer::Decompiler::addInstr(
 
   auto TII = MF->getSubtarget().getInstrInfo();
   auto TRI = MF->getSubtarget().getRegisterInfo();
-  // No need for the NOOPs within MIR representation.
-  // TODO: Optimize this. Can we check if it is a noop from MCID?
-  if (TII->isNoopInstr(*Builder)) {
-    Builder->eraseFromParent();
-    return nullptr;
-  }
 
   bool CSRGenerated = false;
 
@@ -358,33 +364,34 @@ bool crash_analyzer::Decompiler::DecodeIntrsToMIR(
         MI = addInstr(MF, MBB, Inst, &Loc, CrashStartAddr == Addr.Address,
                       DefinedRegs, FuncStartSymbols, Target);
 
-      if (MI) {
-        if (MI->getFlag(MachineInstr::CrashStart))
-          CrashStartSet = true;
-        // There could be multiple branches targeting the same
-        // MBB.
-        while (BranchesToUpdate.count(Addr.Address)) {
-          auto BranchIt = BranchesToUpdate.find(Addr.Address);
-          MachineInstr *BranchInstr = BranchIt->second;
-          // In the first shot it was an imm representing the address.
-          // Now we set the real MBB as an operand.
-          // FIXME: Should call RemoveOperand(0) and then set it to
-          // the MBB.
-          BranchInstr->getOperand(0) = MachineOperand::CreateMBB(MBB);
-          if (!BranchInstr->getParent()->isSuccessor(MBB))
-            BranchInstr->getParent()->addSuccessor(MBB);
-          BranchesToUpdate.erase(BranchIt);
-        }
+      assert (MI && format_str ("Failed to add the instruction at address: 0x%x",
+				Addr.Address));
 
-        // If the last decompiled instruction is a Call, check if it is the
-        // crash-start for this function.
-        if (k + 1 == numInstr && !CrashStartSet && MI->isCall()) {
-          auto NoopInst = addNoop(MF, MBB, &Loc);
-          if (NoopInst && CrashStartAddr == Addr.Address + InstSize) {
-            NoopInst->setFlag(MachineInstr::CrashStart);
-            CrashStartSet = true;
-          }
-        }
+      if (MI->getFlag(MachineInstr::CrashStart))
+	CrashStartSet = true;
+      // There could be multiple branches targeting the same
+      // MBB.
+      while (BranchesToUpdate.count(Addr.Address)) {
+	auto BranchIt = BranchesToUpdate.find(Addr.Address);
+	MachineInstr *BranchInstr = BranchIt->second;
+	// In the first shot it was an imm representing the address.
+	// Now we set the real MBB as an operand.
+	// FIXME: Should call RemoveOperand(0) and then set it to
+	// the MBB.
+	BranchInstr->getOperand(0) = MachineOperand::CreateMBB(MBB);
+	if (!BranchInstr->getParent()->isSuccessor(MBB))
+	  BranchInstr->getParent()->addSuccessor(MBB);
+	BranchesToUpdate.erase(BranchIt);
+      }
+
+      // If the last decompiled instruction is a Call, check if it is the
+      // crash-start for this function.
+      if (k + 1 == numInstr && !CrashStartSet && MI->isCall()) {
+	auto NoopInst = addNoop(MF, MBB, &Loc);
+	if (NoopInst && CrashStartAddr == Addr.Address + InstSize) {
+	  NoopInst->setFlag(MachineInstr::CrashStart);
+	  CrashStartSet = true;
+	}
       }
     }
 
