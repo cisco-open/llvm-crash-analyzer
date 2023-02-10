@@ -556,6 +556,62 @@ void crash_analyzer::TaintAnalysis::insertTaint(
   printTaintList(TL);
 }
 
+// Check if Ti represents a global variable and convert Ti into expected form.
+// Expected form is $noreg plus offset, which is the global variable symbol
+// address.
+bool crash_analyzer::TaintAnalysis::handleGlobalVar(TaintInfo &Ti) {
+
+  if (!Dec)
+    return false;
+
+  auto LLDBModule = Dec->getSBModule();
+  if (!LLDBModule)
+    return false;
+
+  if (!Ti.Op)
+    return false;
+
+  Optional<int64_t> ImmVal = llvm::None;
+  // Get symbol address from Ti ({reg:$noreg; off:ADDR}).
+  if (Ti.Op->isReg() && Ti.Op->getReg() == 0 && Ti.Offset)
+    ImmVal = *Ti.Offset;
+
+  // Get symbol address from Ti ({imm:ADDR}).
+  if (Ti.Op->isImm())
+    ImmVal = Ti.Op->getImm();
+
+  if (!ImmVal)
+    return false;
+
+  if (*ImmVal < 0)
+    return false;
+
+  uint64_t VarAddr = static_cast<uint64_t>(*ImmVal);
+
+  // Search symbols for global var with the matching address.
+  int NumSym = static_cast<int>(LLDBModule->GetNumSymbols());
+  for (int i = 0; i < NumSym; i++) {
+    auto SBSym = LLDBModule->GetSymbolAtIndex(i);
+    auto SymAddr = SBSym.GetStartAddress().GetLoadAddress(*Dec->getTarget());
+    // Check symbol address and if it is a global variable.
+    if (SymAddr == VarAddr &&
+        Dec->getTarget()->FindFirstGlobalVariable(SBSym.GetName())) {
+      LLVM_DEBUG(dbgs() << "Handle global variable \"" << SBSym.GetName()
+                        << "\"\n");
+      // Convert Ti from {imm:ADDR} to {reg:$noreg; off:ADDR}.
+      if (Ti.Op->isImm()) {
+        Ti.Offset = VarAddr;
+        MachineOperand *MO2 = new MachineOperand(*Ti.Op);
+        MO2->ChangeToRegister(0, false);
+        Ti.Op = MO2;
+        LLVM_DEBUG(dbgs() << "Update Taint Info to " << Ti << "\n");
+      }
+      return true;
+    }
+  }
+  return false;
+}
+
 void crash_analyzer::TaintAnalysis::startTaint(
     DestSourcePair &DS, SmallVectorImpl<TaintInfo> &TL, const MachineInstr &MI,
     TaintDataFlowGraph &TaintDFG, RegisterEquivalence &REAnalysis) {
@@ -687,6 +743,8 @@ bool llvm::crash_analyzer::TaintAnalysis::propagateTaint(
   if (SrcTi.Offset)
     calculateMemAddr(SrcTi);
 
+  bool SrcGlobalVar = handleGlobalVar(SrcTi);
+
   Src2Ti.Op = DS.Source2;
   Src2Ti.Offset = DS.Src2Offset;
   if (Src2Ti.Offset)
@@ -750,6 +808,10 @@ bool llvm::crash_analyzer::TaintAnalysis::propagateTaint(
     SrcTi = ZeroTi;
     ConstantFound = true;
   }
+  // Immediate operand, which is a symbol address for the global variable,
+  // should not be treated as a constant.
+  if (SrcGlobalVar)
+    ConstantFound = false;
 
   // FIXME: Since now we have corefile content we can check if this constant
   // is the same from the crash point, and by doing that we avoid FALSE

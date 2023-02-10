@@ -92,6 +92,7 @@ public:
   void resetTaintList(SmallVectorImpl<TaintInfo> &TL);
   void mergeTaintList(SmallVectorImpl<TaintInfo> &Dest_TL,
                       SmallVectorImpl<TaintInfo> &Src_TL);
+  bool handleGlobalVar(TaintInfo &Ti);
   bool propagateTaint(DestSourcePair &DS, SmallVectorImpl<TaintInfo> &TL,
                       const MachineInstr &MI, TaintDataFlowGraph &TaintDFG,
                       RegisterEquivalence &REAnalysis,

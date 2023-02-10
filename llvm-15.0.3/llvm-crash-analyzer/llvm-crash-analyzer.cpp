@@ -215,6 +215,12 @@ int main(int argc, char **argv) {
   crash_analyzer::TaintAnalysis TA(TaintDotFileName, MirDotFileName,
                                    PrintPotentialCrashCauseLocation);
   Dec->setTarget(&coreFile.getTarget());
+
+  // Set SBModule for Decompiler, so we can access the symbol table.
+  auto FileSpec = lldb::SBFileSpec(InputFilename.c_str());
+  auto LLDBModule = coreFile.getTarget().FindModule(FileSpec);
+  Dec->setSBModule(new lldb::SBModule(LLDBModule));
+
   TA.setDecompiler(Dec);
   TA.runOnBlameModule(BlameTrace);
 

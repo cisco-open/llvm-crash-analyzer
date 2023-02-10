@@ -1,0 +1,33 @@
+##include <stdio.h>
+## typedef struct node {
+##   int *fn;
+## } T;
+##
+## T p;
+## T q2;
+## void h(int *r) {
+##   *r = 0; // crash
+## }
+##
+## void g (T*q) {
+##   int *t = q->fn;
+##   h(t);
+## }
+##
+## void f() {
+##   p.fn = NULL; // blame point - line 18
+##   q2.fn = NULL;
+##   g(&p);
+## }
+##
+## int main() {
+##   f();
+##   return 0;
+## }
+
+
+# RUN: %llvm-crash-analyzer --core-file=%S/Inputs/core.global-var-immediate \
+# RUN: %S/Inputs/global-var-immediate.out --print-potential-crash-cause-loc < %s 2>&1 | FileCheck %s
+
+# CHECK: Blame Function is f
+# CHECK-NOT: From File {{.*}}/m.c:18:8
