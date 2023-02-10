@@ -56,18 +56,6 @@ static cl::opt<bool> ShowDisassembly("show-disassemble", cl::Hidden,
 
 LLVMContext crash_analyzer::Decompiler::Ctx;
 
-const char *format_str (const char *msg, uint64_t n) {
-  static char buf[256];
-  if (strlen (msg) > 230) {
-    int i;
-    for (i=0; i<100; i++) buf[i] = msg[i];
-    buf[i] = 0;
-  } else {
-    sprintf (buf, msg, n);
-  }
-  return buf;
-}
-
 crash_analyzer::Decompiler::Decompiler() {
   DisassemblerLLVMC::Initialize();
 }
@@ -364,8 +352,7 @@ bool crash_analyzer::Decompiler::DecodeIntrsToMIR(
         MI = addInstr(MF, MBB, Inst, &Loc, CrashStartAddr == Addr.Address,
                       DefinedRegs, FuncStartSymbols, Target);
 
-      assert (MI && format_str ("Failed to add the instruction at address: 0x%x",
-				Addr.Address));
+      assert (MI && "Failed to add the instruction ...");
 
       if (MI->getFlag(MachineInstr::CrashStart))
 	CrashStartSet = true;
