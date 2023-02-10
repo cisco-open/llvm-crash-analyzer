@@ -1,0 +1,62 @@
+## From the following source code: (clang -g -O0)
+## #include <stdio.h>
+## int main() {
+##   int x = 5;
+##   int *p = &x;
+##   int **pp = &p;
+##   p = 1;
+##   printf("2 + x is %d\n",**pp + 2);
+##   return 0;
+## }
+
+# RUN: %llvm-crash-analyzer --print-potential-crash-cause-loc \
+# RUN: %S/Inputs/taint-prop-lea.out --core-file=%S/Inputs/core.taint-prop-lea \
+# RUN: --debug-only=taint-dfg < %s 2>&1 | FileCheck %s
+
+# CHECK: === Taint Data Flow Graph ===
+## Initial taint has zero dereference level.
+# CHECK: !1{1; $esi = crash-start MOV32rm $rax, 1, $noreg, 0, $noreg; MEM: 1; DEREF-LVL: 0}
+
+## Load instruction changes dereference level by -1.
+# CHECK:   !1{1; $esi = crash-start MOV32rm $rax, 1, $noreg, 0, $noreg; MEM: 1; DEREF-LVL: 0}
+# CHECK-NEXT: ***> !2{1; $rax = MOV64rm $rax, 1, $noreg, 0, $noreg; MEM: 140732201699632; DEREF-LVL: -1}
+
+## LEA instruction does not change dereference level.
+# CHECK: !5{1; MOV64mr $rbp, 1, $noreg, -24, $noreg, $rax; REG: $rax; DEREF-LVL: -1}
+# CHECK-NEXT: !5{1; MOV64mr $rbp, 1, $noreg, -24, $noreg, $rax; REG: $rax; DEREF-LVL: -1}
+# CHECK-NEXT:  ---> !6{1; $rax = LEA64r $rbp, 1, $noreg, -16, $noreg; MEM: 140732201699632; DEREF-LVL: -1}
+
+## Store instruction changes dereference level by +1.
+# CHECK: !6{1; $rax = LEA64r $rbp, 1, $noreg, -16, $noreg; MEM: 140732201699632; DEREF-LVL: -1}
+# CHECK-NEXT:  ---> !7{1; MOV64mr $rbp, 1, $noreg, -16, $noreg, $rax; REG: $rax; DEREF-LVL: 0}
+
+## Confirm that blame node has zero dereference level from the initial taint.
+# CHECK: Blame Nodes:
+# CHECK-NEXT: !4{1; $eax = MOV32ri 1; CONSTANT: 1; DEREF-LVL: 0}
+# CHECK-NEXT: Blame line: 7
+
+# CHECK: Blame Function is main
+# CHECK-NEXT: From File {{.*}}/m.c:7:5
+
+## Use options to explicitly set Taint Info to start Analysis.
+# RUN: %llvm-crash-analyzer --print-potential-crash-cause-loc \
+# RUN: -start-crash-order=1 -start-taint-reg=rbp -start-taint-offset=-16 -start-taint-deref-lvl=-1 \
+# RUN: %S/Inputs/taint-prop-lea.out --core-file=%S/Inputs/core.taint-prop-lea \
+# RUN: --debug-only=taint-dfg < %s 2>&1 | FileCheck %s --check-prefix=EXPLICIT
+
+# EXPLICIT: === Taint Data Flow Graph ===
+# EXPLICIT: {crash-node}
+# EXPLICIT-NEXT:   ***> !1{1; MOV64mr $rbp, 1, $noreg, -16, $noreg, $rax; MEM: 140732201699632; DEREF-LVL: -1}
+# EXPLICIT-NEXT:!1{1; MOV64mr $rbp, 1, $noreg, -16, $noreg, $rax; MEM: 140732201699632; DEREF-LVL: -1}
+# EXPLICIT-NEXT:  ---> !2{1; MOV64mr $rbp, 1, $noreg, -16, $noreg, $rax; REG: $rax; DEREF-LVL: 0}
+# EXPLICIT-NEXT:!2{1; MOV64mr $rbp, 1, $noreg, -16, $noreg, $rax; REG: $rax; DEREF-LVL: 0}
+# EXPLICIT-NEXT:  ***> !3{1; $eax = MOV32ri 1; CONSTANT: 1; DEREF-LVL: 0}
+
+## Confirm that blame node has zero dereference level from the initial taint.
+# EXPLICIT: Blame Nodes:
+# EXPLICIT-NEXT: !3{1; $eax = MOV32ri 1; CONSTANT: 1; DEREF-LVL: 0}
+# EXPLICIT-NEXT: Blame line: 7
+
+# EXPLICIT: Blame Function is main
+# EXPLICIT-NEXT: From File {{.*}}/m.c:7:5
+

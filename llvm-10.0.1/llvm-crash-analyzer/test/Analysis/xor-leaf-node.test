@@ -20,11 +20,11 @@
 # RUN:   %S/Inputs/xor-leaf-node.out --debug-only=taint-dfg < %s 2>&1 | FileCheck %s
 
 # CHECK: === Taint Data Flow Graph ===
-# CHECK: !3{1; MOV64mr $rsp, 1, $noreg, -8, $noreg, $rdi; REG: $rdi}
-# CHECK-NEXT: !3{1; MOV64mr $rsp, 1, $noreg, -8, $noreg, $rdi; REG: $rdi}
-# CHECK-NOT:  ***> !4{2; $edi = XOR32rr undef $edi(tied-def 0), undef $edi, implicit-def $eflags; CONSTANT: $edi}
-# CHECK-NOT:!4{2; $edi = XOR32rr undef $edi(tied-def 0), undef $edi, implicit-def $eflags; CONSTANT: $edi}
-# CHECK-NOT:  ---> !5{2; $edi = XOR32rr undef $edi(tied-def 0), undef $edi, implicit-def $eflags; REG: $edi}
-# CHECK-NEXT: ***> !4{2; $edi = XOR32rr undef $edi(tied-def 0), undef $edi, implicit-def $eflags; CONSTANT: 0}
+# CHECK: !3{1; MOV64mr $rsp, 1, $noreg, -8, $noreg, $rdi; REG: $rdi; DEREF-LVL: 0}
+# CHECK-NEXT: !3{1; MOV64mr $rsp, 1, $noreg, -8, $noreg, $rdi; REG: $rdi; DEREF-LVL: 0}
+# CHECK-NOT:  ***> !4{2; $edi = XOR32rr undef $edi(tied-def 0), undef $edi, implicit-def $eflags; CONSTANT: $edi
+# CHECK-NOT:!4{2; $edi = XOR32rr undef $edi(tied-def 0), undef $edi, implicit-def $eflags; CONSTANT: $edi
+# CHECK-NOT:  ---> !5{2; $edi = XOR32rr undef $edi(tied-def 0), undef $edi, implicit-def $eflags; REG: $edi
+# CHECK-NEXT: ***> !4{2; $edi = XOR32rr undef $edi(tied-def 0), undef $edi, implicit-def $eflags; CONSTANT: 0; DEREF-LVL: 0}
 # Empty TaintList should not result in nodes from non-entry function attached to the crash-node.
 # CHECK-NOT:{crash-node}
