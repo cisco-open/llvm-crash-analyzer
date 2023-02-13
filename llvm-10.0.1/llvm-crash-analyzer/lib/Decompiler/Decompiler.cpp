@@ -119,12 +119,6 @@ MachineInstr *crash_analyzer::Decompiler::addInstr(
 
   auto TII = MF->getSubtarget().getInstrInfo();
   auto TRI = MF->getSubtarget().getRegisterInfo();
-  // No need for the NOOPs within MIR representation.
-  // TODO: Optimize this. Can we check if it is a noop from MCID?
-  if (TII->isNoopInstr(*Builder)) {
-    Builder->eraseFromParent();
-    return nullptr;
-  }
 
   bool CSRGenerated = false;
 
@@ -358,33 +352,33 @@ bool crash_analyzer::Decompiler::DecodeIntrsToMIR(
         MI = addInstr(MF, MBB, Inst, &Loc, CrashStartAddr == Addr.Address,
                       DefinedRegs, FuncStartSymbols, Target);
 
-      if (MI) {
-        if (MI->getFlag(MachineInstr::CrashStart))
-          CrashStartSet = true;
-        // There could be multiple branches targeting the same
-        // MBB.
-        while (BranchesToUpdate.count(Addr.Address)) {
-          auto BranchIt = BranchesToUpdate.find(Addr.Address);
-          MachineInstr *BranchInstr = BranchIt->second;
-          // In the first shot it was an imm representing the address.
-          // Now we set the real MBB as an operand.
-          // FIXME: Should call RemoveOperand(0) and then set it to
-          // the MBB.
-          BranchInstr->getOperand(0) = MachineOperand::CreateMBB(MBB);
-          if (!BranchInstr->getParent()->isSuccessor(MBB))
-            BranchInstr->getParent()->addSuccessor(MBB);
-          BranchesToUpdate.erase(BranchIt);
-        }
+      assert (MI && "Failed to add the instruction ...");
 
-        // If the last decompiled instruction is a Call, check if it is the
-        // crash-start for this function.
-        if (k + 1 == numInstr && !CrashStartSet && MI->isCall()) {
-          auto NoopInst = addNoop(MF, MBB, &Loc);
-          if (NoopInst && CrashStartAddr == Addr.Address + InstSize) {
-            NoopInst->setFlag(MachineInstr::CrashStart);
-            CrashStartSet = true;
-          }
-        }
+      if (MI->getFlag(MachineInstr::CrashStart))
+	CrashStartSet = true;
+      // There could be multiple branches targeting the same
+      // MBB.
+      while (BranchesToUpdate.count(Addr.Address)) {
+	auto BranchIt = BranchesToUpdate.find(Addr.Address);
+	MachineInstr *BranchInstr = BranchIt->second;
+	// In the first shot it was an imm representing the address.
+	// Now we set the real MBB as an operand.
+	// FIXME: Should call RemoveOperand(0) and then set it to
+	// the MBB.
+	BranchInstr->getOperand(0) = MachineOperand::CreateMBB(MBB);
+	if (!BranchInstr->getParent()->isSuccessor(MBB))
+	  BranchInstr->getParent()->addSuccessor(MBB);
+	BranchesToUpdate.erase(BranchIt);
+      }
+
+      // If the last decompiled instruction is a Call, check if it is the
+      // crash-start for this function.
+      if (k + 1 == numInstr && !CrashStartSet && MI->isCall()) {
+	auto NoopInst = addNoop(MF, MBB, &Loc);
+	if (NoopInst && CrashStartAddr == Addr.Address + InstSize) {
+	  NoopInst->setFlag(MachineInstr::CrashStart);
+	  CrashStartSet = true;
+	}
       }
     }
 
@@ -449,23 +443,23 @@ llvm::Error crash_analyzer::Decompiler::run(
 
   // BlameTrace has the same order of functions as FunctionsFromCoreFile.
   for (auto &BF : BlameTrace) {
-    auto Frame = *FrameInfo.find(BF.Name);
-    if (Frame == *FrameInfo.end())
+    auto Frame = FrameInfo.find(BF.Name);
+    if (Frame == FrameInfo.end())
       continue;
     // Skip artificial frames.
-    if (Frame.second.IsArtificial())
+    if (Frame->second.IsArtificial())
       continue;
 
     lldb::SBInstructionList Instructions;
     lldb::SBAddress FuncStart, FuncEnd;
     bool HaveDebugInfo = false;
 
-    auto Func = Frame.second.GetFunction();
+    auto Func = Frame->second.GetFunction();
     if (!Func) {
       WithColor::warning()
           << "No debugging info found for a function from backtrace. "
           << "Please provide debugging info for the exe and all libraries.\n";
-      auto Symbol = Frame.second.GetSymbol();
+      auto Symbol = Frame->second.GetSymbol();
       if (!Symbol) {
         WithColor::warning()
             << "No symbols found for a function "
@@ -485,15 +479,15 @@ llvm::Error crash_analyzer::Decompiler::run(
 
     std::string FileDirInfo, FileNameInfo, AbsFileName;
     if (HaveDebugInfo) {
-      FileDirInfo = Frame.second.GetCompileUnit().GetFileSpec().GetDirectory();
-      FileNameInfo = Frame.second.GetCompileUnit().GetFileSpec().GetFilename();
+      FileDirInfo = Frame->second.GetCompileUnit().GetFileSpec().GetDirectory();
+      FileNameInfo = Frame->second.GetCompileUnit().GetFileSpec().GetFilename();
       AbsFileName =
           (Twine(FileDirInfo) + Twine("/") + Twine(FileNameInfo)).str();
     }
 
     if (ShowDisassembly) {
       outs() << "\nDissasemble of the functions from backtrace:\n";
-      outs() << Frame.second.Disassemble();
+      outs() << Frame->second.Disassemble();
     }
 
     // Create MFs.
@@ -503,7 +497,7 @@ llvm::Error crash_analyzer::Decompiler::run(
     std::string InstrAddr;
     uint64_t AddrValue = 0;
 
-    StringRef FunctionName = Frame.first;
+    StringRef FunctionName = Frame->first;
 
     MF = &createMF(FunctionName);
     MBB = MF->CreateMachineBasicBlock();
@@ -525,7 +519,7 @@ llvm::Error crash_analyzer::Decompiler::run(
     // TODO: We assume that inlined functions is in the same compilation unit as
     // the function where it got inlined, but there is Cross-CU inlining by using
     // LTO, but it will be handled as future work.
-    if (Frame.second.IsInlined()) {
+    if (Frame->second.IsInlined()) {
       auto TII = MF->getSubtarget().getInstrInfo();
       MCInst NopInst;
       TII->getNoop(NopInst);
@@ -535,7 +529,7 @@ llvm::Error crash_analyzer::Decompiler::run(
 
       // Map the fn from backtrace to the MF.
       // Crash order starts from 1.
-      MF->setCrashOrder(Frame.second.GetFrameID()+1);
+      MF->setCrashOrder(Frame->second.GetFrameID()+1);
       BF.MF = MF;
 
       continue;
@@ -562,7 +556,7 @@ llvm::Error crash_analyzer::Decompiler::run(
     MF->addCrashRegInfo(RegInfo);
 
     if (!DecodeIntrsToMIR(TheTriple, Instructions, FuncStart, FuncEnd, Target, HaveDebugInfo,
-                     MF, MBB, Frame.first, DISP, SPs, Ctx, AddrValue,
+                     MF, MBB, Frame->first, DISP, SPs, Ctx, AddrValue,
                      FuncStartSymbols))
       return make_error<StringError>("unable to decompile an instruction",
                                      inconvertibleErrorCode());
@@ -574,7 +568,7 @@ llvm::Error crash_analyzer::Decompiler::run(
 
     // Map the fn from backtrace to the MF.
     // Crash order starts from 1.
-    MF->setCrashOrder(Frame.second.GetFrameID()+1);
+    MF->setCrashOrder(Frame->second.GetFrameID()+1);
     BF.MF = MF;
 
     // Remove the function from working set.
