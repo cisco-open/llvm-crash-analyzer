@@ -27,8 +27,8 @@
 ## Verify print of Node which represents Memory Location,
 ## but without Concrete Memory Address.
 # RUN: %llvm-crash-analyzer-ta %s --debug-only=taint-dfg 2>&1 | FileCheck %s --check-prefix=CHECK-DFG
-# CHECK-DFG: ***> !2{1; $rax = MOV64rm $rax, 1, $noreg, 8, $noreg; MEM: $rax + 8}
-# CHECK-DFG-NOT: ***> !2{1; $rax = MOV64rm $rax, 1, $noreg, 8, $noreg; REG: $rax}
+# CHECK-DFG: ***> !2{1; $rax = MOV64rm $rax, 1, $noreg, 8, $noreg; MEM: $rax + 8; DEREF-LVL: -1}
+# CHECK-DFG-NOT: ***> !2{1; $rax = MOV64rm $rax, 1, $noreg, 8, $noreg; REG: $rax
 --- |
   ; ModuleID = 'bin/struct1-0'
   source_filename = "bin/struct1-0"

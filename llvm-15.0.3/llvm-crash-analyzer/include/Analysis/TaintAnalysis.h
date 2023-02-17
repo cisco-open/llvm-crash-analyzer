@@ -54,6 +54,9 @@ struct TaintInfo {
   uint64_t GetTaintMemAddr() const { return ConcreteMemoryAddress; }
   std::tuple<unsigned, int, int> getTuple() const;
 
+  int DerefLevel = 0;
+  void propagateDerefLevel(const MachineInstr& MI);
+
   friend bool operator==(const TaintInfo &T1, const TaintInfo &T2);
   friend bool operator!=(const TaintInfo &T1, const TaintInfo &T2);
   friend bool operator<(const TaintInfo &T1, const TaintInfo &T2);
@@ -107,6 +110,8 @@ public:
                         RegisterEquivalence &REAnalysis);
   void removeFromTaintList(TaintInfo &Op, SmallVectorImpl<TaintInfo> &TL);
   bool addToTaintList(TaintInfo &Ti, SmallVectorImpl<TaintInfo> &TL);
+  void updateTaintDerefLevel(TaintInfo &Ti, SmallVectorImpl<TaintInfo> &TL,
+                             const MachineInstr &MI);
   void printTaintList(SmallVectorImpl<TaintInfo> &TL);
   void printTaintList2(SmallVectorImpl<TaintInfo> &TL);
   void printDestSrcInfo(DestSourcePair &DS, const MachineInstr &MI);

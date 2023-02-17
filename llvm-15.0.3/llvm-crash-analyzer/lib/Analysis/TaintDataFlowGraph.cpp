@@ -181,8 +181,10 @@ bool TaintDataFlowGraph::printBlameFunction(
   LLVM_DEBUG(llvm::dbgs() << "Blame Nodes:\n";
              auto &BlameNodes = blameNodes[MaxLevel];
 
-             for (auto &a
-                  : BlameNodes) {
+             for (auto &a : BlameNodes) {
+               // Only consider Node if it's DerefLevel is zero.
+               if (a->TaintOp.DerefLevel != 0)
+                 continue;
                a->print();
                if (a->MI->getDebugLoc().get())
                  llvm::dbgs()
@@ -202,6 +204,9 @@ bool TaintDataFlowGraph::printBlameFunction(
   unsigned BlameColumn = 0;
 
   for (auto &a : BlameNodes) {
+    // Only consider Node if it's DerefLevel is zero.
+    if (a->TaintOp.DerefLevel != 0)
+      continue;
     if (BlameFn == "") {
       // Use the fn name from Debug Location, if any, since the instruction
       // may be inlined from another MF.
