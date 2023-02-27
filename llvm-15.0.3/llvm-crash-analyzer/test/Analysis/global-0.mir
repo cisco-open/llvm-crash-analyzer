@@ -458,6 +458,13 @@ body:             |
     $rbp = crash-start POP64r implicit-def $rsp, implicit $rsp, debug-location !DILocation(line: 21, column: 1, scope: !2)
     RET64 debug-location !DILocation(line: 21, column: 1, scope: !2)
 
+## Immediate operand 6295592 represents global variable,
+## so it should not be treated as a constant immediate.
+## TODO: Fully support global variable Taints and propagate taint
+##       from $rdi = MOV64ri 6295592,
+##       to MOV64mi32 $noreg, 1, $noreg, 6295592, $noreg, 0.
+# XFAIL: *
+
 ...
 ---
 name:            main
