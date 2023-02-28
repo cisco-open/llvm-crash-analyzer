@@ -39,7 +39,7 @@ protected:
   std::unordered_map<unsigned, RegAliasTuple> RegMap;
 
   // Save PC value for each instruction.
-  std::unordered_map<const MachineInstr*, uint64_t> InstAddrs;
+  std::unordered_map<const MachineInstr*, std::pair<uint64_t,uint64_t>> InstAddrs;
 
   // Singleton class for the CATargetInfo instance.
   template <typename T> class Singleton {
@@ -67,12 +67,17 @@ public:
 
   // Get InstAddr from the InstAddrs map for the MI.
   uint64_t getInstAddr(const MachineInstr* MI) {
-    return InstAddrs[MI];
+    return InstAddrs[MI].first;
+  }
+
+  // Get InstAddr from the InstAddrs map for the MI.
+  uint64_t getInstSize(const MachineInstr* MI) {
+    return InstAddrs[MI].second;
   }
 
   // Set InstAddr in the InstAddrs map for the MI.
-  void setInstAddr(const MachineInstr* MI, uint64_t InstAddr) {
-    InstAddrs[MI] = InstAddr;
+  void setInstAddr(const MachineInstr* MI, uint64_t InstAddr, uint64_t InstSize = 0) {
+    InstAddrs[MI] = {InstAddr, InstSize};
   }
 
   // Return true if the register is used for function return value.
