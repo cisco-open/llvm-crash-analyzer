@@ -1009,6 +1009,8 @@ bool crash_analyzer::TaintAnalysis::runOnBlameMF(
             if (MIIt == MBB->rend())
               return Result;
           }
+          // Update PC for CALL instruction.
+          ReverseExecutionRecord.updatePC(*MIIt);
           // Skip processing the call instruction
           ++MIIt;
           if (MIIt == MBB->rend())
@@ -1021,6 +1023,8 @@ bool crash_analyzer::TaintAnalysis::runOnBlameMF(
         // TODO: Handling of function parameters that are tainted
         // within the function.
         if (MI2.isCall() && levelOfCalledFn < FrameLevelDepthToGo) {
+          // Update PC register value for MI2.
+          ReverseExecutionRecord.updatePC(MI2);
           mergeTaintList(TL_Mbb, TaintList);
           const MachineOperand &CalleeOp = MI2.getOperand(0);
           // TODO: handle indirect calls.
@@ -1067,6 +1071,8 @@ bool crash_analyzer::TaintAnalysis::runOnBlameMF(
           }
         }
         auto DestSrc = TII->getDestAndSrc(MI2);
+        // Update PC register value for MI2.
+        ReverseExecutionRecord.updatePC(MI2);
         if (!DestSrc) {
           LLVM_DEBUG(llvm::dbgs()
                          << "Crash instruction doesn't have blame operands\n";
@@ -1092,9 +1098,10 @@ bool crash_analyzer::TaintAnalysis::runOnBlameMF(
       if (!CrashSequenceStarted)
         continue;
 
-      // Update the register values, so we have right regiter values state.
-      if (ReverseExecutionRecord.getIsCREEnabled())
-        ReverseExecutionRecord.execute(MI);
+      // Update the register values (including PC reg), so we have right
+      // register values state.
+      ReverseExecutionRecord.updatePC(MI);
+      ReverseExecutionRecord.execute(MI);
 
       // Process call instruction that is not in backtrace
       // Analyze the call only if return value is tainted.

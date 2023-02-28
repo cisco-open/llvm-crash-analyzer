@@ -52,6 +52,7 @@ public:
   // FIXME: This is used for debugging purposes only -- DELETEME.
   void dump2();
   void updateCurrRegVal(std::string Reg, std::string Val);
+  void updatePC(const MachineInstr &MI);
   std::string getCurretValueInReg(const std::string &Reg);
 
   CATargetInfo *getCATargetInfo() { return CATI; }

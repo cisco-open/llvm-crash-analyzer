@@ -130,9 +130,50 @@ template <typename T> std::string intToHex(T num, unsigned regValSize) {
   return stream.str();
 }
 
+void ConcreteReverseExec::updatePC(const MachineInstr &MI) {
+  // If the option is enabled, we skip the CRE of the MIs.
+  if (DisableCRE || !getIsCREEnabled())
+    return;
+  // Initial PC value for the frame, points to the crash-start instruction.
+  // We start updating PC for instructions preceding to the crash-start.
+  if (MI.getFlag(MachineInstr::CrashStart))
+    return;
+
+  auto CATI = getCATargetInfo();
+  if (!CATI->getPC())
+    return;
+  std::string RegName = *CATI->getPC();
+
+  auto regVal = getCurretValueInReg(RegName);
+  if (regVal == "")
+    return;
+
+  uint64_t Val = 0;
+  // Get MIs PC value saved during decompilation.
+  Val = CATI->getInstAddr(&MI);
+
+  // We should update all reg aliases as well.
+  // TODO: Improve this.
+  auto regInfoId = CATI->getID(RegName);
+  if (!regInfoId) {
+    updateCurrRegVal(RegName, "");
+    return;
+  }
+  auto RegsTuple = CATI->getRegMap(*regInfoId);
+  // regVal.size() - 2 for 0x chars.
+  std::string newValue = intToHex(Val, regVal.size() - 2);
+  // update reg aliases as well.
+  // e.g. if $eax is modified, update both $rax and $ax as well.
+  updateCurrRegVal(std::get<0>(RegsTuple), newValue);
+  updateCurrRegVal(std::get<1>(RegsTuple), newValue);
+  updateCurrRegVal(std::get<2>(RegsTuple), newValue);
+  updateCurrRegVal(std::get<3>(RegsTuple), newValue);
+  dump();
+}
+
 void ConcreteReverseExec::execute(const MachineInstr &MI) {
   // If the option is enabled, we skip the CRE of the MIs.
-  if (DisableCRE)
+  if (DisableCRE || !getIsCREEnabled())
     return;
 
   // If this instruction modifies any of the registers,
@@ -141,6 +182,8 @@ void ConcreteReverseExec::execute(const MachineInstr &MI) {
   // is the latest def actually by going forward).
   auto TRI = MI.getParent()->getParent()->getSubtarget().getRegisterInfo();
   auto TII = MI.getParent()->getParent()->getSubtarget().getInstrInfo();
+  auto CATI = getCATargetInfo();
+
   // This will be used to avoid implicit operands that can be in the instruction
   // multiple times.
   std::multiset<Register> RegisterWorkList;
@@ -185,7 +228,6 @@ void ConcreteReverseExec::execute(const MachineInstr &MI) {
         Val -= RegImm->Imm;
         // We should update all reg aliases as well.
         // TODO: Improve this.
-        auto CATI = getCATargetInfo();
         auto regInfoId = CATI->getID(RegName);
         if (!regInfoId) {
           updateCurrRegVal(RegName, "");

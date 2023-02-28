@@ -135,6 +135,17 @@ bool X86CATargetInfo::isPCRegister(std::string RegName) const {
   return false;
 }
 
+Optional<std::string> X86CATargetInfo::getPC() const {
+  switch (TT->getArch()) {
+  case Triple::x86_64:
+    return static_cast<std::string>("rip");
+  case Triple::x86:
+    return static_cast<std::string>("eip");
+  default:
+    return llvm::None;
+  }
+}
+
 bool X86CATargetInfo::isSPRegister(std::string RegName) const {
   if (RegName == "rsp" || RegName == "esp" || RegName == "sp" ||
       RegName == "spl")

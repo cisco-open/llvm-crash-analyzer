@@ -1,0 +1,30 @@
+## extern int* p;
+##
+## void set() {
+##   p++;
+##   *p = 0; // crash
+## }
+## int main() {
+##   p = 11; // blame point
+##   set();
+##   return 0;
+## }
+## Global variable "p" defined in separate shared library.
+## int p = 33;
+
+## Compiled using folowing steps:
+## $ clang -g -O0 -fPIC -c glob.c -o glob.o
+## $ clang glob.o -shared -o libglob.so
+## $ clang -g -fPIC -L. -lglob main.c -o main
+
+## Confirm, for PC relative addressing mode, the same global variable address (GOT entry) is calculated at
+## different program points.
+# RUN: %llvm-crash-analyzer --core-file=%S/Inputs/core.rip-value-update \
+# RUN:   %S/Inputs/rip-value-update.out -debug-only=taint-analysis < %s 2>&1 | FileCheck %s
+# CHECK: Add to TL: {reg:$rip; off:2099629} (mem addr: 6295513)
+
+# RUN: %llvm-crash-analyzer --core-file=%S/Inputs/core.rip-value-update \
+# RUN:   %S/Inputs/rip-value-update.out -debug-only=taint-analysis \
+# RUN:   -start-crash-order=2 -start-taint-reg=rax < %s 2>&1 | FileCheck %s --check-prefix=CHECK2
+
+# CHECK2: Add to TL: {reg:$rip; off:2099594} (mem addr: 6295513)
