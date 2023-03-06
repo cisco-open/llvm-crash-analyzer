@@ -1017,14 +1017,14 @@ bool crash_analyzer::TaintAnalysis::runOnBlameMF(
             return Result;
         }
         auto &MI2 = *MIIt;
+        // Update PC register value for MI2.
+        ReverseExecutionRecord.updatePC(MI2);
         // Process the call instruction that is not in the backtrace
         // Analyze the call only if return value is tainted.
         // For now we are interested in depth of 10 functions (call->call->..).
         // TODO: Handling of function parameters that are tainted
         // within the function.
         if (MI2.isCall() && levelOfCalledFn < FrameLevelDepthToGo) {
-          // Update PC register value for MI2.
-          ReverseExecutionRecord.updatePC(MI2);
           mergeTaintList(TL_Mbb, TaintList);
           const MachineOperand &CalleeOp = MI2.getOperand(0);
           // TODO: handle indirect calls.
@@ -1071,8 +1071,6 @@ bool crash_analyzer::TaintAnalysis::runOnBlameMF(
           }
         }
         auto DestSrc = TII->getDestAndSrc(MI2);
-        // Update PC register value for MI2.
-        ReverseExecutionRecord.updatePC(MI2);
         if (!DestSrc) {
           LLVM_DEBUG(llvm::dbgs()
                          << "Crash instruction doesn't have blame operands\n";

@@ -53,12 +53,14 @@ public:
   void dump2();
   void updateCurrRegVal(std::string Reg, std::string Val);
   void updatePC(const MachineInstr &MI);
+  void writeUIntRegVal(std::string Reg, uint64_t Val, unsigned regValSize = 16);
+  void invalidateRegVal(std::string Reg);
   std::string getCurretValueInReg(const std::string &Reg);
 
   CATargetInfo *getCATargetInfo() { return CATI; }
 
   const MachineFunction *getMF() { return mf; }
-  bool getIsCREEnabled() const { return CREEnabled; }
+  bool getIsCREEnabled() const;
 
   // Reverse execution of the MI by updating the currentRegisterValues.
   void execute(const MachineInstr &MI);

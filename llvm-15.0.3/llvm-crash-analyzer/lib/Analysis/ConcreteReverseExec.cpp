@@ -43,6 +43,12 @@ void ConcreteReverseExec::dump2() {
   }
 }
 
+bool ConcreteReverseExec::getIsCREEnabled() const {
+  if (DisableCRE)
+    return false;
+  return CREEnabled;
+}
+
 // TODO: Optimize this.
 void ConcreteReverseExec::updateCurrRegVal(std::string Reg, std::string Val) {
   for (auto &R : currentRegisterValues) {
@@ -130,28 +136,8 @@ template <typename T> std::string intToHex(T num, unsigned regValSize) {
   return stream.str();
 }
 
-void ConcreteReverseExec::updatePC(const MachineInstr &MI) {
-  // If the option is enabled, we skip the CRE of the MIs.
-  if (DisableCRE || !getIsCREEnabled())
-    return;
-  // Initial PC value for the frame, points to the crash-start instruction.
-  // We start updating PC for instructions preceding to the crash-start.
-  if (MI.getFlag(MachineInstr::CrashStart))
-    return;
-
-  auto CATI = getCATargetInfo();
-  if (!CATI->getPC())
-    return;
-  std::string RegName = *CATI->getPC();
-
-  auto regVal = getCurretValueInReg(RegName);
-  if (regVal == "")
-    return;
-
-  uint64_t Val = 0;
-  // Get MIs PC value saved during decompilation.
-  Val = CATI->getInstAddr(&MI);
-
+void ConcreteReverseExec::writeUIntRegVal(std::string RegName, uint64_t Val,
+                                          unsigned regValSize) {
   // We should update all reg aliases as well.
   // TODO: Improve this.
   auto regInfoId = CATI->getID(RegName);
@@ -160,20 +146,55 @@ void ConcreteReverseExec::updatePC(const MachineInstr &MI) {
     return;
   }
   auto RegsTuple = CATI->getRegMap(*regInfoId);
-  // regVal.size() - 2 for 0x chars.
-  std::string newValue = intToHex(Val, regVal.size() - 2);
+  // Create hex value with 16 chars.
+  std::string newValue = intToHex(Val, regValSize);
   // update reg aliases as well.
   // e.g. if $eax is modified, update both $rax and $ax as well.
   updateCurrRegVal(std::get<0>(RegsTuple), newValue);
   updateCurrRegVal(std::get<1>(RegsTuple), newValue);
   updateCurrRegVal(std::get<2>(RegsTuple), newValue);
   updateCurrRegVal(std::get<3>(RegsTuple), newValue);
+}
+
+void ConcreteReverseExec::invalidateRegVal(std::string RegName) {
+  // We should update all reg aliases as well.
+  auto regInfoId = CATI->getID(RegName);
+  if (!regInfoId) {
+    updateCurrRegVal(RegName, "");
+    return;
+  }
+  auto RegsTuple = CATI->getRegMap(*regInfoId);
+  updateCurrRegVal(std::get<0>(RegsTuple), "");
+  updateCurrRegVal(std::get<1>(RegsTuple), "");
+  updateCurrRegVal(std::get<2>(RegsTuple), "");
+  updateCurrRegVal(std::get<3>(RegsTuple), "");
+}
+
+void ConcreteReverseExec::updatePC(const MachineInstr &MI) {
+  // If the option is enabled, we skip the CRE of the MIs.
+  if (!getIsCREEnabled())
+    return;
+  // Initial PC value for the frame, points to the crash-start instruction.
+  // We start updating PC for instructions preceding to the crash-start.
+  if (MI.getFlag(MachineInstr::CrashStart))
+    return;
+
+  if (!CATI->getPC())
+    return;
+  std::string RegName = *CATI->getPC();
+
+  uint64_t Val = 0;
+  // Get MIs PC value saved during decompilation.
+  Val = CATI->getInstAddr(&MI);
+
+  // Write current value of the register in the map.
+  writeUIntRegVal(RegName, Val);
   dump();
 }
 
 void ConcreteReverseExec::execute(const MachineInstr &MI) {
   // If the option is enabled, we skip the CRE of the MIs.
-  if (DisableCRE || !getIsCREEnabled())
+  if (!getIsCREEnabled())
     return;
 
   // If this instruction modifies any of the registers,
@@ -182,7 +203,6 @@ void ConcreteReverseExec::execute(const MachineInstr &MI) {
   // is the latest def actually by going forward).
   auto TRI = MI.getParent()->getParent()->getSubtarget().getRegisterInfo();
   auto TII = MI.getParent()->getParent()->getSubtarget().getInstrInfo();
-  auto CATI = getCATargetInfo();
 
   // This will be used to avoid implicit operands that can be in the instruction
   // multiple times.
@@ -226,22 +246,8 @@ void ConcreteReverseExec::execute(const MachineInstr &MI) {
         // We do the oposite operation, since we are
         // intereting the instruction going backward.
         Val -= RegImm->Imm;
-        // We should update all reg aliases as well.
-        // TODO: Improve this.
-        auto regInfoId = CATI->getID(RegName);
-        if (!regInfoId) {
-          updateCurrRegVal(RegName, "");
-          continue;
-        }
-        auto RegsTuple = CATI->getRegMap(*regInfoId);
-        // regVal.size() - 2 for 0x chars.
-        std::string newValue = intToHex(Val, regVal.size() - 2);
-        // update reg aliases as well.
-        // e.g. if $eax is modified, update both $rax and $ax as well.
-        updateCurrRegVal(std::get<0>(RegsTuple), newValue);
-        updateCurrRegVal(std::get<1>(RegsTuple), newValue);
-        updateCurrRegVal(std::get<2>(RegsTuple), newValue);
-        updateCurrRegVal(std::get<3>(RegsTuple), newValue);
+        // Write current value of the register in the map.
+        writeUIntRegVal(RegName, Val, regVal.size() - 2);
         dump();
         continue;
       }
@@ -256,21 +262,9 @@ void ConcreteReverseExec::execute(const MachineInstr &MI) {
        std::stringstream SS;
        SS << std::hex << regVal;
        SS >> Val;
-       auto regAliasesInfo = getRegAliasesInfo();
-       auto regInfoId = regAliasesInfo.getID(RegName);
-       if (!regInfoId) {
-         updateCurrRegVal(RegName, "");
-         continue;
-       }
-       auto RegsTuple = regAliasesInfo.getRegMap(*regInfoId);
-       //regVal.size() - 2 for 0x chars.
-       std::string newValue = intToHex(Val, regVal.size() - 2);
-       // update reg aliases as well.
-       // e.g. if $eax is modified, update both $rax and $ax as well.
-       updateCurrRegVal(std::get<0>(RegsTuple), newValue);
-       updateCurrRegVal(std::get<1>(RegsTuple), newValue);
-       updateCurrRegVal(std::get<2>(RegsTuple), newValue);
-       updateCurrRegVal(std::get<3>(RegsTuple), newValue);
+       // Write current value of the register in the map.
+       writeUIntRegVal(RegName, Val, regVal.size() - 2);
+
        dump();
        return;
      }*/
@@ -278,18 +272,8 @@ void ConcreteReverseExec::execute(const MachineInstr &MI) {
       // The MI is not supported, so consider it as not available.
       LLVM_DEBUG(llvm::dbgs() << "Concrete Rev Exec not supported for \n";
                  MI.dump(););
-      auto CATI = getCATargetInfo();
-      auto regInfoId = CATI->getID(RegName);
-      if (!regInfoId) {
-        updateCurrRegVal(RegName, "");
-        dump();
-        continue;
-      }
-      auto RegsTuple = CATI->getRegMap(*regInfoId);
-      updateCurrRegVal(std::get<0>(RegsTuple), "");
-      updateCurrRegVal(std::get<1>(RegsTuple), "");
-      updateCurrRegVal(std::get<2>(RegsTuple), "");
-      updateCurrRegVal(std::get<3>(RegsTuple), "");
+      // Invalidate register value, since it is not available.
+      invalidateRegVal(RegName);
       dump();
     }
   }
