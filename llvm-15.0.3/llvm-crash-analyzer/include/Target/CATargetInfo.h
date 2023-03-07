@@ -38,6 +38,9 @@ protected:
   // e.g. rax, eax, ax will hold a same id.
   std::unordered_map<unsigned, RegAliasTuple> RegMap;
 
+  // Save PC value for each instruction.
+  std::unordered_map<const MachineInstr*, uint64_t> InstAddrs;
+
   // Singleton class for the CATargetInfo instance.
   template <typename T> class Singleton {
   private:
@@ -50,7 +53,7 @@ protected:
 
 public:
   CATargetInfo() {}
-  virtual ~CATargetInfo() { RegMap.clear(); }
+  virtual ~CATargetInfo() { RegMap.clear(); InstAddrs.clear(); }
 
   // Get register index in the RegMap.
   virtual Optional<unsigned> getID(std::string RegName) const = 0;
@@ -62,11 +65,24 @@ public:
     return const_cast<RegAliasTuple &>(RegMap.at(Id));
   }
 
+  // Get InstAddr from the InstAddrs map for the MI.
+  uint64_t getInstAddr(const MachineInstr* MI) {
+    return InstAddrs[MI];
+  }
+
+  // Set InstAddr in the InstAddrs map for the MI.
+  void setInstAddr(const MachineInstr* MI, uint64_t InstAddr) {
+    InstAddrs[MI] = InstAddr;
+  }
+
   // Return true if the register is used for function return value.
   virtual bool isRetValRegister(std::string RegName) const = 0;
 
   // Return true if the register is Program Counter Register.
   virtual bool isPCRegister(std::string RegName) const = 0;
+
+  // Return name of the Program Counter Register.
+  virtual Optional<std::string> getPC() const = 0;
 
   // Return true if the register is Stack Pointer Register.
   virtual bool isSPRegister(std::string RegName) const = 0;
@@ -98,6 +114,8 @@ public:
   bool isRetValRegister(std::string RegName) const override;
 
   bool isPCRegister(std::string RegName) const override;
+
+  Optional<std::string> getPC() const override;
 
   bool isSPRegister(std::string RegName) const override;
 

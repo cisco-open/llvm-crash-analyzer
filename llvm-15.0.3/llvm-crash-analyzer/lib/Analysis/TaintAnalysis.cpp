@@ -1009,12 +1009,16 @@ bool crash_analyzer::TaintAnalysis::runOnBlameMF(
             if (MIIt == MBB->rend())
               return Result;
           }
+          // Update PC for CALL instruction.
+          ReverseExecutionRecord.updatePC(*MIIt);
           // Skip processing the call instruction
           ++MIIt;
           if (MIIt == MBB->rend())
             return Result;
         }
         auto &MI2 = *MIIt;
+        // Update PC register value for MI2.
+        ReverseExecutionRecord.updatePC(MI2);
         // Process the call instruction that is not in the backtrace
         // Analyze the call only if return value is tainted.
         // For now we are interested in depth of 10 functions (call->call->..).
@@ -1092,9 +1096,10 @@ bool crash_analyzer::TaintAnalysis::runOnBlameMF(
       if (!CrashSequenceStarted)
         continue;
 
-      // Update the register values, so we have right regiter values state.
-      if (ReverseExecutionRecord.getIsCREEnabled())
-        ReverseExecutionRecord.execute(MI);
+      // Update the register values (including PC reg), so we have right
+      // register values state.
+      ReverseExecutionRecord.updatePC(MI);
+      ReverseExecutionRecord.execute(MI);
 
       // Process call instruction that is not in backtrace
       // Analyze the call only if return value is tainted.

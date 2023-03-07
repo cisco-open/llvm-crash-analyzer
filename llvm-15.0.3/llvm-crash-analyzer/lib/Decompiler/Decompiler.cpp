@@ -274,6 +274,7 @@ bool crash_analyzer::Decompiler::DecodeIntrsToMIR(
   Disassembler_sp->DecodeInstructions(FuncLoadAddr, Extractor, 0,
                                       Instructions.GetSize(), false, false);
 
+  auto CATI = getCATargetInfoInstance();
   bool CrashStartSet = false;
   lldb_private::InstructionList &InstructionList =
       Disassembler_sp->GetInstructionList();
@@ -352,6 +353,12 @@ bool crash_analyzer::Decompiler::DecodeIntrsToMIR(
                       DefinedRegs, FuncStartSymbols, Target);
 
       assert (MI && "Failed to add the instruction ...");
+
+      // We maintain mapping between MI and its PC address, since TII for
+      // x86 doesn't support MI size getter. For x86, instructions with the
+      // same Opcode could have different sizes.
+      // TODO: Add support in X86InstrInfo to make this more efficient.
+      CATI->setInstAddr(MI, Addr.Address);
 
       if (MI->getFlag(MachineInstr::CrashStart))
 	CrashStartSet = true;
