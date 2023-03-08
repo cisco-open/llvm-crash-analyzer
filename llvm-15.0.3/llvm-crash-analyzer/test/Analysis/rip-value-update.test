@@ -21,10 +21,10 @@
 ## different program points.
 # RUN: %llvm-crash-analyzer --core-file=%S/Inputs/core.rip-value-update \
 # RUN:   %S/Inputs/rip-value-update.out -debug-only=taint-analysis < %s 2>&1 | FileCheck %s
-# CHECK: Add to TL: {reg:$rip; off:2099629} (mem addr: 6295513)
+# CHECK: Add to TL: {reg:$rip; off:2099629} (mem addr: 6295520)
 
 # RUN: %llvm-crash-analyzer --core-file=%S/Inputs/core.rip-value-update \
 # RUN:   %S/Inputs/rip-value-update.out -debug-only=taint-analysis \
 # RUN:   -start-crash-order=2 -start-taint-reg=rax < %s 2>&1 | FileCheck %s --check-prefix=CHECK2
 
-# CHECK2: Add to TL: {reg:$rip; off:2099594} (mem addr: 6295513)
+# CHECK2: Add to TL: {reg:$rip; off:2099594} (mem addr: 6295520)

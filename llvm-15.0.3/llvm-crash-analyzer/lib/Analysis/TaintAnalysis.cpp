@@ -230,7 +230,8 @@ void crash_analyzer::TaintAnalysis::calculateMemAddr(TaintInfo &Ti) {
   // For registers other than RSP and RBP, without ConcreteRevExec,
   // we cannot be sure if the reg value has changed from the point
   // of the crash.
-  const MachineFunction *MF = Ti.Op->getParent()->getMF();
+  auto MI = Ti.Op->getParent();
+  const MachineFunction *MF = MI->getMF();
   auto TRI = MF->getSubtarget().getRegisterInfo();
   std::string RegName = TRI->getRegAsmName(Ti.Op->getReg()).lower();
 
@@ -250,11 +251,16 @@ void crash_analyzer::TaintAnalysis::calculateMemAddr(TaintInfo &Ti) {
   // Calculate real address by reading the context of regInfo MF attr
   // (read from corefile).
   std::string RegValue = CurrentCRE->getCurretValueInReg(RegName);
+  auto CATI = getCATargetInfoInstance();
   if (RegValue == "") {
+    if (!MI) {
+      Ti.IsConcreteMemory = false;
+      return;
+    }
     // Try to see if there is an equal register that could be used here.
-    auto MII = MachineBasicBlock::iterator(
-        const_cast<MachineInstr *>(Ti.Op->getParent()));
-    if (MII != Ti.Op->getParent()->getParent()->begin()) {
+    auto MII =
+        MachineBasicBlock::iterator(const_cast<MachineInstr *>(MI));
+    if (MII != MI->getParent()->begin()) {
       if (!REA) {
         Ti.IsConcreteMemory = false;
         return;
@@ -279,6 +285,9 @@ void crash_analyzer::TaintAnalysis::calculateMemAddr(TaintInfo &Ti) {
         uint64_t AddrValue = 0;
         std::istringstream converter(rValue);
         converter >> std::hex >> AddrValue;
+        // If the base register is PC, use address (PC value) of the next MI.
+        if (CATI->isPCRegister(RegName))
+          AddrValue = CATI->getInstAddr(MI) + CATI->getInstSize(MI);
         uint64_t Val = AddrValue;
         // If eqR is register location just add the offset to it, if it is a
         // dereferenced memory location, read the value from memory and add
@@ -305,6 +314,14 @@ void crash_analyzer::TaintAnalysis::calculateMemAddr(TaintInfo &Ti) {
   std::stringstream SS;
   SS << std::hex << RegValue;
   SS >> RealAddr;
+  // If the base register is PC, use address (PC value) of the next MI.
+  if (CATI->isPCRegister(RegName)) {
+    if (!MI) {
+      Ti.IsConcreteMemory = false;
+      return;
+    }
+    RealAddr = CATI->getInstAddr(MI) + CATI->getInstSize(MI);
+  }
 
   // Apply the offset.
   RealAddr += *Ti.Offset;
