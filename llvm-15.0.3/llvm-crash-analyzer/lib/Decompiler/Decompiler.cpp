@@ -352,39 +352,40 @@ bool crash_analyzer::Decompiler::DecodeIntrsToMIR(
         MI = addInstr(MF, MBB, Inst, &Loc, CrashStartAddr == Addr.Address,
                       DefinedRegs, FuncStartSymbols, Target);
 
-      assert (MI && "Failed to add the instruction ...");
+      assert(MI && "Failed to add the instruction ...");
 
       // We maintain mapping between MI and its PC address, since TII for
       // x86 doesn't support MI size getter. For x86, instructions with the
       // same Opcode could have different sizes.
       // TODO: Add support in X86InstrInfo to make this more efficient.
-      CATI->setInstAddr(MI, Addr.Address);
+      if (!CrashStartSet)
+        CATI->setInstAddr(MI, Addr.Address, InstSize);
 
       if (MI->getFlag(MachineInstr::CrashStart))
-	CrashStartSet = true;
+        CrashStartSet = true;
       // There could be multiple branches targeting the same
       // MBB.
       while (BranchesToUpdate.count(Addr.Address)) {
-	auto BranchIt = BranchesToUpdate.find(Addr.Address);
-	MachineInstr *BranchInstr = BranchIt->second;
-	// In the first shot it was an imm representing the address.
-	// Now we set the real MBB as an operand.
-	// FIXME: Should call RemoveOperand(0) and then set it to
-	// the MBB.
-	BranchInstr->getOperand(0) = MachineOperand::CreateMBB(MBB);
-	if (!BranchInstr->getParent()->isSuccessor(MBB))
-	  BranchInstr->getParent()->addSuccessor(MBB);
-	BranchesToUpdate.erase(BranchIt);
+        auto BranchIt = BranchesToUpdate.find(Addr.Address);
+        MachineInstr *BranchInstr = BranchIt->second;
+        // In the first shot it was an imm representing the address.
+        // Now we set the real MBB as an operand.
+        // FIXME: Should call RemoveOperand(0) and then set it to
+        // the MBB.
+        BranchInstr->getOperand(0) = MachineOperand::CreateMBB(MBB);
+        if (!BranchInstr->getParent()->isSuccessor(MBB))
+          BranchInstr->getParent()->addSuccessor(MBB);
+        BranchesToUpdate.erase(BranchIt);
       }
 
       // If the last decompiled instruction is a Call, check if it is the
       // crash-start for this function.
       if (k + 1 == numInstr && !CrashStartSet && MI->isCall()) {
-	auto NoopInst = addNoop(MF, MBB, &Loc);
-	if (NoopInst && CrashStartAddr == Addr.Address + InstSize) {
-	  NoopInst->setFlag(MachineInstr::CrashStart);
-	  CrashStartSet = true;
-	}
+        auto NoopInst = addNoop(MF, MBB, &Loc);
+        if (NoopInst && CrashStartAddr == Addr.Address + InstSize) {
+          NoopInst->setFlag(MachineInstr::CrashStart);
+          CrashStartSet = true;
+        }
       }
     }
 
