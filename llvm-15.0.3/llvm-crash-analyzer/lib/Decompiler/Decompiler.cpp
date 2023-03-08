@@ -358,7 +358,8 @@ bool crash_analyzer::Decompiler::DecodeIntrsToMIR(
       // x86 doesn't support MI size getter. For x86, instructions with the
       // same Opcode could have different sizes.
       // TODO: Add support in X86InstrInfo to make this more efficient.
-      CATI->setInstAddr(MI, Addr.Address, InstSize);
+      if (!CrashStartSet)
+        CATI->setInstAddr(MI, Addr.Address, InstSize);
 
       if (MI->getFlag(MachineInstr::CrashStart))
 	CrashStartSet = true;
