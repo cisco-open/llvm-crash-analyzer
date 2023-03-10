@@ -30,4 +30,4 @@
 # RUN: %S/Inputs/global-var-immediate.out --print-potential-crash-cause-loc < %s 2>&1 | FileCheck %s
 
 # CHECK: Blame Function is f
-# CHECK-NOT: From File {{.*}}/m.c:18:8
+# CHECK-NEXT: From File {{.*}}/glob.c:18:8
