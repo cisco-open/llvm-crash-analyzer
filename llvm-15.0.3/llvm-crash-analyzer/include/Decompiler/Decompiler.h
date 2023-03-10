@@ -80,7 +80,6 @@ class Decompiler {
   SmallVector<long, 8> FunctionsThatAreNotInBT;
 
   lldb::SBTarget *DecTarget = nullptr;
-  lldb::SBModule *DecModule = nullptr;
 
   // Store debug info compile units for coresponding files.
   std::unordered_map<std::string, std::pair<DIFile *, DICompileUnit *>> CUs;
@@ -148,9 +147,6 @@ public:
 
   void setTarget(lldb::SBTarget *T) { DecTarget = T; }
   lldb::SBTarget *getTarget() { return DecTarget; }
-
-  void setSBModule(lldb::SBModule *M) { DecModule = M; }
-  lldb::SBModule *getSBModule() { return DecModule; }
 
   class Module &getModule() {
     return *Module.get();

@@ -57,6 +57,8 @@ struct TaintInfo {
   int DerefLevel = 0;
   void propagateDerefLevel(const MachineInstr& MI);
 
+  bool IsGlobal = false;
+
   friend bool operator==(const TaintInfo &T1, const TaintInfo &T2);
   friend bool operator!=(const TaintInfo &T1, const TaintInfo &T2);
   friend bool operator<(const TaintInfo &T1, const TaintInfo &T2);
