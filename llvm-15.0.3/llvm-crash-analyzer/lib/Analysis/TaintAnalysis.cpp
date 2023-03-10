@@ -258,8 +258,7 @@ void crash_analyzer::TaintAnalysis::calculateMemAddr(TaintInfo &Ti) {
       return;
     }
     // Try to see if there is an equal register that could be used here.
-    auto MII =
-        MachineBasicBlock::iterator(const_cast<MachineInstr *>(MI));
+    auto MII = MachineBasicBlock::iterator(const_cast<MachineInstr *>(MI));
     if (MII != MI->getParent()->begin()) {
       if (!REA) {
         Ti.IsConcreteMemory = false;
@@ -276,19 +275,22 @@ void crash_analyzer::TaintAnalysis::calculateMemAddr(TaintInfo &Ti) {
       }
 
       for (auto &eqR : EqRegs) {
-        std::string rName = TRI->getRegAsmName(eqR.RegNum).lower();
-        std::string rValue = CurrentCRE->getCurretValueInReg(rName);
-        if (rValue == "")
-          continue;
-
-        lldb::SBError err;
         uint64_t AddrValue = 0;
-        std::istringstream converter(rValue);
-        converter >> std::hex >> AddrValue;
-        // If the base register is PC, use address (PC value) of the next MI.
-        if (CATI->isPCRegister(RegName))
-          AddrValue = CATI->getInstAddr(MI) + CATI->getInstSize(MI);
-        uint64_t Val = AddrValue;
+        uint64_t Val = 0;
+        // Read (base) register value, if it is not $noreg.
+        if (eqR.RegNum != 0) {
+          std::string rName = TRI->getRegAsmName(eqR.RegNum).lower();
+          std::string rValue = CurrentCRE->getCurretValueInReg(rName);
+          if (rValue == "")
+            continue;
+
+          std::istringstream converter(rValue);
+          converter >> std::hex >> AddrValue;
+          // If the base register is PC, use address (PC value) of the next MI.
+          if (CATI->isPCRegister(RegName))
+            AddrValue = CATI->getInstAddr(MI) + CATI->getInstSize(MI);
+          Val = AddrValue;
+        }
         // If eqR is register location just add the offset to it, if it is a
         // dereferenced memory location, read the value from memory and add
         // the offset.
@@ -296,6 +298,7 @@ void crash_analyzer::TaintAnalysis::calculateMemAddr(TaintInfo &Ti) {
           AddrValue += eqR.Offset;
           if (!Dec || !Dec->getTarget())
             break;
+          lldb::SBError err;
           Val = Dec->getTarget()->GetProcess().ReadUnsignedFromMemory(AddrValue,
                                                                       8, err);
         }

@@ -204,6 +204,14 @@ bool RegisterEquivalence::applyLoad(MachineInstr &MI) {
   if (srcDest->SrcOffset)
     SrcOffset = *srcDest->SrcOffset;
 
+  // Transform deref->$rip+(off) to deref->$noreg+(rip+off).
+  auto CATI = getCATargetInfoInstance();
+  std::string RegName = TRI->getRegAsmName(SrcReg).lower();
+  if (CATI->isPCRegister(RegName)) {
+    SrcReg = 0;
+    SrcOffset += CATI->getInstAddr(&MI) + CATI->getInstSize(&MI);
+  }
+
   RegisterOffsetPair Src{SrcReg, SrcOffset};
   Src.IsDeref = true;
   RegisterOffsetPair Dest{DestReg};
@@ -239,6 +247,14 @@ bool RegisterEquivalence::applyStore(MachineInstr &MI) {
   // Take the offset into account.
   if (srcDest->DestOffset)
     DstOffset = *srcDest->DestOffset;
+
+  // Transform deref->$rip+(off) to deref->$noreg+(rip+off).
+  auto CATI = getCATargetInfoInstance();
+  std::string RegName = TRI->getRegAsmName(DestReg).lower();
+  if (CATI->isPCRegister(RegName)) {
+    DestReg = 0;
+    DstOffset += CATI->getInstAddr(&MI) + CATI->getInstSize(&MI);
+  }
 
   RegisterOffsetPair Dest{DestReg, DstOffset};
   Dest.IsDeref = true;
