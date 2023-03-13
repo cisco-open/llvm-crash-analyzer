@@ -66,12 +66,16 @@ public:
   }
 
   // Get InstAddr from the InstAddrs map for the MI.
-  uint64_t getInstAddr(const MachineInstr* MI) {
+  Optional<uint64_t> getInstAddr(const MachineInstr* MI) {
+    if (InstAddrs.count(MI) == 0)
+      return None;
     return InstAddrs[MI].first;
   }
 
   // Get InstAddr from the InstAddrs map for the MI.
-  uint64_t getInstSize(const MachineInstr* MI) {
+  Optional<uint64_t> getInstSize(const MachineInstr* MI) {
+    if (InstAddrs.count(MI) == 0)
+      return None;
     return InstAddrs[MI].second;
   }
 

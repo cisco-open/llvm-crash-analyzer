@@ -287,8 +287,11 @@ void crash_analyzer::TaintAnalysis::calculateMemAddr(TaintInfo &Ti) {
           std::istringstream converter(rValue);
           converter >> std::hex >> AddrValue;
           // If the base register is PC, use address (PC value) of the next MI.
-          if (CATI->isPCRegister(RegName))
-            AddrValue = CATI->getInstAddr(MI) + CATI->getInstSize(MI);
+          if (CATI->isPCRegister(RegName)) {
+            if (!CATI->getInstAddr(MI))
+              continue;
+            AddrValue = *CATI->getInstAddr(MI) + *CATI->getInstSize(MI);
+          }
           Val = AddrValue;
         }
         // If eqR is register location just add the offset to it, if it is a
@@ -319,11 +322,11 @@ void crash_analyzer::TaintAnalysis::calculateMemAddr(TaintInfo &Ti) {
   SS >> RealAddr;
   // If the base register is PC, use address (PC value) of the next MI.
   if (CATI->isPCRegister(RegName)) {
-    if (!MI) {
+    if (!MI || !CATI->getInstAddr(MI)) {
       Ti.IsConcreteMemory = false;
       return;
     }
-    RealAddr = CATI->getInstAddr(MI) + CATI->getInstSize(MI);
+    RealAddr = *CATI->getInstAddr(MI) + *CATI->getInstSize(MI);
   }
 
   // Apply the offset.
