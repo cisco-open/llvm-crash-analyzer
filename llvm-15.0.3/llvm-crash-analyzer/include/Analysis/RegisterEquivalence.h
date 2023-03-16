@@ -10,6 +10,7 @@
 #define REGISTER_EQ_H
 
 #include "Analysis/TaintAnalysis.h"
+#include "Target/CATargetInfo.h"
 #include "llvm/ADT/DenseSet.h"
 #include "llvm/CodeGen/MachineBasicBlock.h"
 #include "llvm/CodeGen/MachineFunction.h"

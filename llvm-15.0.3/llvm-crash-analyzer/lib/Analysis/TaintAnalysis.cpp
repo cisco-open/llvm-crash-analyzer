@@ -258,8 +258,7 @@ void crash_analyzer::TaintAnalysis::calculateMemAddr(TaintInfo &Ti) {
       return;
     }
     // Try to see if there is an equal register that could be used here.
-    auto MII =
-        MachineBasicBlock::iterator(const_cast<MachineInstr *>(MI));
+    auto MII = MachineBasicBlock::iterator(const_cast<MachineInstr *>(MI));
     if (MII != MI->getParent()->begin()) {
       if (!REA) {
         Ti.IsConcreteMemory = false;
@@ -276,19 +275,25 @@ void crash_analyzer::TaintAnalysis::calculateMemAddr(TaintInfo &Ti) {
       }
 
       for (auto &eqR : EqRegs) {
-        std::string rName = TRI->getRegAsmName(eqR.RegNum).lower();
-        std::string rValue = CurrentCRE->getCurretValueInReg(rName);
-        if (rValue == "")
-          continue;
-
-        lldb::SBError err;
         uint64_t AddrValue = 0;
-        std::istringstream converter(rValue);
-        converter >> std::hex >> AddrValue;
-        // If the base register is PC, use address (PC value) of the next MI.
-        if (CATI->isPCRegister(RegName))
-          AddrValue = CATI->getInstAddr(MI) + CATI->getInstSize(MI);
-        uint64_t Val = AddrValue;
+        uint64_t Val = 0;
+        // Read (base) register value, if it is not $noreg.
+        if (eqR.RegNum != 0) {
+          std::string rName = TRI->getRegAsmName(eqR.RegNum).lower();
+          std::string rValue = CurrentCRE->getCurretValueInReg(rName);
+          if (rValue == "")
+            continue;
+
+          std::istringstream converter(rValue);
+          converter >> std::hex >> AddrValue;
+          // If the base register is PC, use address (PC value) of the next MI.
+          if (CATI->isPCRegister(RegName)) {
+            if (!CATI->getInstAddr(MI))
+              continue;
+            AddrValue = *CATI->getInstAddr(MI) + *CATI->getInstSize(MI);
+          }
+          Val = AddrValue;
+        }
         // If eqR is register location just add the offset to it, if it is a
         // dereferenced memory location, read the value from memory and add
         // the offset.
@@ -296,6 +301,7 @@ void crash_analyzer::TaintAnalysis::calculateMemAddr(TaintInfo &Ti) {
           AddrValue += eqR.Offset;
           if (!Dec || !Dec->getTarget())
             break;
+          lldb::SBError err;
           Val = Dec->getTarget()->GetProcess().ReadUnsignedFromMemory(AddrValue,
                                                                       8, err);
         }
@@ -316,11 +322,11 @@ void crash_analyzer::TaintAnalysis::calculateMemAddr(TaintInfo &Ti) {
   SS >> RealAddr;
   // If the base register is PC, use address (PC value) of the next MI.
   if (CATI->isPCRegister(RegName)) {
-    if (!MI) {
+    if (!MI || !CATI->getInstAddr(MI)) {
       Ti.IsConcreteMemory = false;
       return;
     }
-    RealAddr = CATI->getInstAddr(MI) + CATI->getInstSize(MI);
+    RealAddr = *CATI->getInstAddr(MI) + *CATI->getInstSize(MI);
   }
 
   // Apply the offset.
@@ -415,7 +421,7 @@ bool crash_analyzer::TaintAnalysis::shouldAnalyzeCall(
     if (CATI->isRetValRegister(RegName))
       return true;
     // If a global variable is tainted also return true.
-    // (If operand is noreg and non-zero offset).
+    // FIXME: Should we check for IsGlobal flag.
     if (!Op->getReg() && itr->Offset)
       return true;
   }
@@ -612,14 +618,10 @@ void crash_analyzer::TaintAnalysis::insertTaint(
 
 // Check if Ti represents a global variable and convert Ti into expected form.
 // Expected form is $noreg plus offset, which is the global variable symbol
-// address.
+// address or the Global Offset Table entry.
 bool crash_analyzer::TaintAnalysis::handleGlobalVar(TaintInfo &Ti) {
 
-  if (!Dec)
-    return false;
-
-  auto LLDBModule = Dec->getSBModule();
-  if (!LLDBModule)
+  if (!Dec || !Dec->getTarget())
     return false;
 
   if (!Ti.Op)
@@ -629,6 +631,19 @@ bool crash_analyzer::TaintAnalysis::handleGlobalVar(TaintInfo &Ti) {
   // Get symbol address from Ti ({reg:$noreg; off:ADDR}).
   if (Ti.Op->isReg() && Ti.Op->getReg() == 0 && Ti.Offset)
     ImmVal = *Ti.Offset;
+
+  bool Indirect = false;
+  if (Ti.Op->isReg()) {
+    auto CATI = getCATargetInfoInstance();
+    const MachineFunction *MF = Ti.Op->getParent()->getMF();
+    auto TRI = MF->getSubtarget().getRegisterInfo();
+    std::string RegName = TRI->getRegAsmName(Ti.Op->getReg()).lower();
+    // Get Global Offset Table entry address for Ti ({reg:$rip; off:GOT_ADDR}).
+    if (CATI->isPCRegister(RegName) && Ti.Offset && Ti.IsTaintMemAddr()) {
+      ImmVal = Ti.ConcreteMemoryAddress;
+      Indirect = true;
+    }
+  }
 
   // Get symbol address from Ti ({imm:ADDR}).
   if (Ti.Op->isImm())
@@ -641,28 +656,45 @@ bool crash_analyzer::TaintAnalysis::handleGlobalVar(TaintInfo &Ti) {
     return false;
 
   uint64_t VarAddr = static_cast<uint64_t>(*ImmVal);
+  // Read global symbol address from Global Offset Table.
+  if (Indirect) {
+    lldb::SBError err;
+    VarAddr = Dec->getTarget()->GetProcess().ReadUnsignedFromMemory(
+        static_cast<uint64_t>(VarAddr), 8, err);
+  }
 
-  // Search symbols for global var with the matching address.
-  int NumSym = static_cast<int>(LLDBModule->GetNumSymbols());
-  for (int i = 0; i < NumSym; i++) {
-    auto SBSym = LLDBModule->GetSymbolAtIndex(i);
-    auto SymAddr = SBSym.GetStartAddress().GetLoadAddress(*Dec->getTarget());
-    // Check symbol address and if it is a global variable.
-    if (SymAddr == VarAddr &&
-        Dec->getTarget()->FindFirstGlobalVariable(SBSym.GetName())) {
-      LLVM_DEBUG(dbgs() << "Handle global variable \"" << SBSym.GetName()
-                        << "\"\n");
-      // Convert Ti from {imm:ADDR} to {reg:$noreg; off:ADDR}.
-      if (Ti.Op->isImm()) {
-        Ti.Offset = VarAddr;
-        MachineOperand *MO2 = new MachineOperand(*Ti.Op);
-        MO2->ChangeToRegister(0, false);
-        Ti.Op = MO2;
-        LLVM_DEBUG(dbgs() << "Update Taint Info to " << Ti << "\n");
+  auto SBTarget = Dec->getTarget();
+  // Construct SBAddress for simbol from GOT.
+  lldb::SBAddress SBAddr;
+  SBAddr.SetLoadAddress((lldb::addr_t)VarAddr, *SBTarget);
+
+  // Search symbols in each module for global var with the matching address.
+  for (uint32_t Mods = 0; Mods < SBTarget->GetNumModules(); ++Mods) {
+    auto SBModule = SBTarget->GetModuleAtIndex(Mods);
+    if (SBModule.GetNumCompileUnits() != 1)
+      continue;
+    int NumSym = static_cast<int>(SBModule.GetNumSymbols());
+    for (int i = 0; i < NumSym; i++) {
+      auto SBSym = SBModule.GetSymbolAtIndex(i);
+      auto SymAddr = SBSym.GetStartAddress().GetLoadAddress(*SBTarget);
+      // Check if it is external symbol with the matching load address.
+      if (SBSym.IsExternal() && SymAddr == SBAddr.GetLoadAddress(*SBTarget)) {
+        // Convert Ti from {imm:ADDR} to {reg:$noreg; off:ADDR}
+        // and ({reg:$rip; off:GOT_ADDR}) to {reg:$noreg; off:GOT_ADDR}
+        if (Ti.Op->isImm() || Indirect) {
+          Ti.Offset = static_cast<uint64_t>(*ImmVal);
+          MachineOperand *MO2 = new MachineOperand(*Ti.Op);
+          MO2->ChangeToRegister(0, false);
+          Ti.Op = MO2;
+          calculateMemAddr(Ti);
+          LLVM_DEBUG(dbgs() << "Update Global Var Taint Info to " << Ti << "\n");
+        }
+        Ti.IsGlobal = true;
+        return true;
       }
-      return true;
     }
   }
+
   return false;
 }
 
@@ -678,6 +710,7 @@ void crash_analyzer::TaintAnalysis::startTaint(
   SrcTi.Offset = DS.SrcOffset;
   if (SrcTi.Offset)
     calculateMemAddr(SrcTi);
+  handleGlobalVar(SrcTi);
 
   SrcScaleReg.Op = DS.SrcScaledIndex;
 
@@ -685,6 +718,7 @@ void crash_analyzer::TaintAnalysis::startTaint(
   DestTi.Offset = DS.DestOffset;
   if (DestTi.Offset)
     calculateMemAddr(DestTi);
+  handleGlobalVar(DestTi);
 
   Src2Ti.Op = DS.Source2;
   Src2Ti.Offset = DS.Src2Offset;
@@ -797,7 +831,7 @@ bool llvm::crash_analyzer::TaintAnalysis::propagateTaint(
   if (SrcTi.Offset)
     calculateMemAddr(SrcTi);
 
-  bool SrcGlobalVar = handleGlobalVar(SrcTi);
+  bool SrcGlobalVar = handleGlobalVar(SrcTi) && DS.Source->isImm();
 
   Src2Ti.Op = DS.Source2;
   Src2Ti.Offset = DS.Src2Offset;
@@ -808,6 +842,7 @@ bool llvm::crash_analyzer::TaintAnalysis::propagateTaint(
   DestTi.Offset = DS.DestOffset;
   if (DestTi.Offset)
     calculateMemAddr(DestTi);
+  handleGlobalVar(DestTi);
 
   if (!DestTi.Op)
     return true;
@@ -862,6 +897,7 @@ bool llvm::crash_analyzer::TaintAnalysis::propagateTaint(
     SrcTi = ZeroTi;
     ConstantFound = true;
   }
+
   // Immediate operand, which is a symbol address for the global variable,
   // should not be treated as a constant.
   if (SrcGlobalVar)

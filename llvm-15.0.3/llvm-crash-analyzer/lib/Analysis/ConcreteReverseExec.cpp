@@ -183,9 +183,13 @@ void ConcreteReverseExec::updatePC(const MachineInstr &MI) {
     return;
   std::string RegName = *CATI->getPC();
 
+  if (!CATI->getInstAddr(&MI)) {
+    invalidateRegVal(RegName);
+    return;
+  }
   uint64_t Val = 0;
   // Get MIs PC value saved during decompilation.
-  Val = CATI->getInstAddr(&MI);
+  Val = *CATI->getInstAddr(&MI);
 
   // Write current value of the register in the map.
   writeUIntRegVal(RegName, Val);

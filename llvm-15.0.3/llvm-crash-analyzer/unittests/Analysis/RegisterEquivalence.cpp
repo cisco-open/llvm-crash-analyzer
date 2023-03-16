@@ -32,7 +32,6 @@
 using namespace llvm;
 
 namespace {
-//#include "MFCommon.inc"
 
 std::unique_ptr<LLVMTargetMachine> createTargetMachine() {
   auto TT(Triple::normalize("x86_64-unknown-unknown"));
@@ -151,6 +150,7 @@ body:             |
     MOV64mi32 $rax, 1, $noreg, 0, $noreg, 0, debug-location !DILocation(line: 4, column: 4, scope: !5)
     $eax = MOV32ri 111111, debug-location !DILocation(line: 4, column: 4, scope: !5)
     $rax = MOV64rm $rax, 1, $noreg, -8, $noreg, debug-location !DILocation(line: 4, column: 4, scope: !5)
+    $rbx = MOV64rm $rip, 1, $noreg, 2099639, $noreg, debug-location !DILocation(line: 4, column: 8, scope: !5)
     $rbp = POP64r implicit-def $rsp, implicit $rsp, debug-location !DILocation(line: 5, column: 1, scope: !5)
     crash-start RET64 debug-location !DILocation(line: 5, column: 1, scope: !5)
 
@@ -169,6 +169,7 @@ body:             |
   ASSERT_TRUE(MF);
 
   auto TII = MF->getSubtarget().getInstrInfo();
+  auto TRI = MF->getSubtarget().getRegisterInfo();
 
   RegisterEquivalence REAnalysis;
   REAnalysis.init(const_cast<MachineFunction &>(*MF));
@@ -183,6 +184,16 @@ body:             |
         unsigned Reg1 = MI.getOperand(0).getReg();
         unsigned Reg2 = MI.getOperand(1).getReg();
         int64_t Offset = MI.getOperand(4).getImm();
+        std::string BaseRegName = TRI->getRegAsmName(Reg2).lower();
+        // For $rbx = MOV64rm $rip, 1, $noreg, 2099639,
+        // deref->$rip+(2099639) is transformed to
+        // deref->$noreg+($rip_val+2099639) if $rip value and instruction
+        // size is available (saved during decompilation).
+        if (BaseRegName == "rip") {
+          ASSERT_TRUE(
+              REAnalysis.isEquivalent(MI, {Reg1}, {Reg2, Offset, true}));
+          continue;
+        }
         // If Source BaseReg is same as DestReg, equivalance is not valid.
         ASSERT_TRUE((Reg1 == Reg2) !=
                     REAnalysis.isEquivalent(MI, {Reg1}, {Reg2, Offset, true}));
