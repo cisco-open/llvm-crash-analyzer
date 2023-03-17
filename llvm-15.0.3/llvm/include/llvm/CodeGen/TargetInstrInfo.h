@@ -106,7 +106,11 @@ struct DestSourcePair {
   DestSourcePair(const MachineOperand &Dest, MachineOperand &DestScale,
                  MachineOperand &DestInd, const MachineOperand &Src)
       : Destination(&Dest), Source(&Src), DestScale(&DestScale),
-        DestIndexReg(&DestInd) {}
+        DestIndexReg(&DestInd) {
+    // Invalidate index-reg if it is $noreg.
+    if (DestIndexReg && DestIndexReg->isReg() && DestIndexReg->isReg() == 0)
+      DestIndexReg = nullptr;
+  }
 
   // Set All Fields in the structure.
   DestSourcePair(const MachineOperand *Dest, const MachineOperand *Src,
@@ -118,14 +122,24 @@ struct DestSourcePair {
       : Destination(Dest), Source(Src), DestOffset(DestOff), SrcOffset(SrcOff),
         Source2(Src2), Src2Offset(Src2Off), DestScale(DestScale),
         DestIndexReg(DstIndex), SrcScale(SrcScale), SrcIndexReg(SrcIndex),
-        SizeFactor(Size) {}
+        SizeFactor(Size) {
+    // Invalidate index-reg if it is $noreg.
+    if (SrcIndexReg && SrcIndexReg->isReg() && SrcIndexReg->isReg() == 0)
+      SrcIndexReg = nullptr;
+    if (DestIndexReg && DestIndexReg->isReg() && DestIndexReg->isReg() == 0)
+      DestIndexReg = nullptr;
+  }
 
   DestSourcePair(const MachineOperand *Dest, const MachineOperand *Src,
                  Optional<int64_t> DestOff, Optional<int64_t> SrcOff,
                  Optional<int64_t> ImmVal, MachineOperand *DestScale = nullptr,
                  MachineOperand *DstIndex = nullptr)
       : Destination(Dest), Source(Src), DestOffset(DestOff), SrcOffset(SrcOff),
-        ImmValue(ImmVal), DestScale(DestScale), DestIndexReg(DstIndex) {}
+        ImmValue(ImmVal), DestScale(DestScale), DestIndexReg(DstIndex) {
+    // Invalidate index-reg if it is $noreg.
+    if (DestIndexReg && DestIndexReg->isReg() && DestIndexReg->isReg() == 0)
+      DestIndexReg = nullptr;
+  }
 };
 
 /// Used to describe a register and immediate addition.

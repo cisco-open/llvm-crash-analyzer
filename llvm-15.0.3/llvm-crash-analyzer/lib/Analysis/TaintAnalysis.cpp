@@ -1223,7 +1223,7 @@ bool crash_analyzer::TaintAnalysis::runOnBlameMF(
         }
       }
 
-      if (MI.isBranch())
+      if (MI.isBranch() || MI.isReturn())
         continue;
 
       // We reached the end of the frame.
