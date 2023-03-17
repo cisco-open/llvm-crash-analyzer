@@ -698,112 +698,135 @@ bool crash_analyzer::TaintAnalysis::handleGlobalVar(TaintInfo &Ti) {
   return false;
 }
 
+void crash_analyzer::TaintAnalysis::addNewTaint(
+    TaintInfo &Ti, SmallVectorImpl<TaintInfo> &TL, const MachineInstr &MI,
+    TaintDataFlowGraph &TaintDFG, std::shared_ptr<Node> crashNode) {
+  if (!Ti.Op)
+    return;
+  const auto &MF = MI.getParent()->getParent();
+
+  if (addToTaintList(Ti, TL)) {
+    Node *sNode = new Node(MF->getCrashOrder(), &MI, Ti, false);
+    std::shared_ptr<Node> startTaintNode(sNode);
+    TaintDFG.addEdge(crashNode, startTaintNode, EdgeType::Dereference);
+    TaintDFG.updateLastTaintedNode(Ti, startTaintNode);
+  }
+}
+
 void crash_analyzer::TaintAnalysis::startTaint(
     DestSourcePair &DS, SmallVectorImpl<TaintInfo> &TL, const MachineInstr &MI,
     TaintDataFlowGraph &TaintDFG, RegisterEquivalence &REAnalysis) {
-  TaintInfo SrcTi, DestTi, Src2Ti, SrcScaleReg;
 
   // Don't startTaint if target taint is explicitly specified.
   if (StartCrashOrder)
     return;
-  SrcTi.Op = DS.Source;
-  SrcTi.Offset = DS.SrcOffset;
-  if (SrcTi.Offset)
-    calculateMemAddr(SrcTi);
-  handleGlobalVar(SrcTi);
-
-  SrcScaleReg.Op = DS.SrcScaledIndex;
-
-  DestTi.Op = DS.Destination;
-  DestTi.Offset = DS.DestOffset;
-  if (DestTi.Offset)
-    calculateMemAddr(DestTi);
-  handleGlobalVar(DestTi);
-
-  Src2Ti.Op = DS.Source2;
-  Src2Ti.Offset = DS.Src2Offset;
-  if (Src2Ti.Offset)
-    calculateMemAddr(Src2Ti);
 
   // This condition is true only for frame #0 in back trace
   // Otherwise, it indicates that we did not find a taint
   // operand to begin with.
   if (TaintList.empty()) {
+    // Currently we support building TaintInfo that represents only
+    // memory locations expressed as one register plus one offset.
+    // Scaled-index memory addresses cannot be expressed, but its
+    // base registers can be Tainted.
+    // Create TaintInfo only if it should be added to the TL.
+    TaintInfo DestTi, DestBaseTi;
+    TaintInfo DestIndexTi;
+
+    // Create initial "crash" node.
     Node *cNode = new Node(0, nullptr, DestTi, true);
     std::shared_ptr<Node> crashNode(cNode);
-    const auto &MF = MI.getParent()->getParent();
-    // We want to taint destination only if it is a mem operand
-    if (DestTi.Op && DestTi.Offset && DestTi.Op->isReg()) {
-      if (addToTaintList(DestTi, TL)) {
-        Node *sNode = new Node(MF->getCrashOrder(), &MI, DestTi, false);
-        std::shared_ptr<Node> startTaintNode(sNode);
-        TaintDFG.addEdge(crashNode, startTaintNode, EdgeType::Dereference);
-        TaintDFG.updateLastTaintedNode(DestTi, startTaintNode);
+
+    // Construct TaintInfo for destination operand, only if it is a memory
+    // location. (ex. MOVrm rcx, 1, rax, 4, $noreg, 65)
+    if (DS.DestOffset) {
+      // Create base_reg+off Taint Info (ex. {reg:$rcx; off:4})
+      // Only {reg + off} address can be calculated currently.
+      if (!DS.DestIndexReg) {
+        DestTi.Op = DS.Destination;
+        DestTi.Offset = DS.DestOffset;
+        calculateMemAddr(DestTi);
+        handleGlobalVar(DestTi);
+        addNewTaint(DestTi, TL, MI, TaintDFG, crashNode);
+      }
+
+      // Create base reg Taint Info (ex. {reg:$rcx;})
+      DestBaseTi.Op = DS.Destination;
+      DestBaseTi.Offset = llvm::None;
+      DestBaseTi.IsConcreteMemory = false;
+      DestBaseTi.ConcreteMemoryAddress = 0;
+      addNewTaint(DestBaseTi, TL, MI, TaintDFG, crashNode);
+
+      // Create index reg Taint Info (ex. {reg:$rax;})
+      if (DS.DestIndexReg) {
+        DestIndexTi.Op = DS.DestIndexReg;
+        DestIndexTi.IsConcreteMemory = false;
+        DestIndexTi.ConcreteMemoryAddress = 0;
+        addNewTaint(DestIndexTi, TL, MI, TaintDFG, crashNode);
       }
     }
 
-    // If Dest was memory operand, we should taint the base reg as well.
-    // In the example MEM[$base-reg + offset] = $src-reg, there is a big
-    // chance that invalid value of $base-reg is the reason why we have
-    // invalid Dest memory address ($base-reg + offset).
-    if (DestTi.Op && DestTi.Op->isReg() && DestTi.Offset) {
-      TaintInfo JustRegFromDstOp = DestTi;
-      JustRegFromDstOp.Offset = llvm::None;
-      JustRegFromDstOp.IsConcreteMemory = false;
-      JustRegFromDstOp.ConcreteMemoryAddress = 0;
-      if (addToTaintList(JustRegFromDstOp, TL)) {
-        Node *sNode =
-            new Node(MF->getCrashOrder(), &MI, JustRegFromDstOp, false);
-        std::shared_ptr<Node> startTaintNode(sNode);
-        TaintDFG.addEdge(crashNode, startTaintNode, EdgeType::Dereference);
-        TaintDFG.updateLastTaintedNode(JustRegFromDstOp, startTaintNode);
+    TaintInfo SrcTi, SrcBaseTi;
+    TaintInfo SrcIndexTi;
+    // Process Taints from source operand (memory).
+    // (ex. ebx = MOVrm rcx, 1, rax, 4)
+    if (DS.SrcOffset) {
+      // Create base_reg+off Taint Info (ex. {reg:$rcx; off:4})
+      // Only {reg + off} address can be calculated currently.
+      if (!DS.SrcIndexReg) {
+        SrcTi.Op = DS.Source;
+        SrcTi.Offset = DS.SrcOffset;
+        calculateMemAddr(SrcTi);
+        handleGlobalVar(SrcTi);
+        addNewTaint(SrcTi, TL, MI, TaintDFG, crashNode);
+      }
+
+      // Create base reg Taint Info (ex. {reg:$rcx;})
+      SrcBaseTi.Op = DS.Source;
+      SrcBaseTi.Offset = llvm::None;
+      SrcBaseTi.IsConcreteMemory = false;
+      SrcBaseTi.ConcreteMemoryAddress = 0;
+      addNewTaint(SrcBaseTi, TL, MI, TaintDFG, crashNode);
+
+      // Create index reg Taint Info (ex. {reg:$rax;})
+      if (DS.SrcIndexReg) {
+        SrcIndexTi.Op = DS.SrcIndexReg;
+        SrcIndexTi.IsConcreteMemory = false;
+        SrcIndexTi.ConcreteMemoryAddress = 0;
+        addNewTaint(SrcIndexTi, TL, MI, TaintDFG, crashNode);
       }
     }
 
-    // FIXME: This should be checking if src is a mem op somehow,
-    // by checking if src2 is an index register.
-    if (SrcTi.Op && SrcTi.Op->isReg()) {
-      if (addToTaintList(SrcTi, TL)) {
-        Node *sNode2 = new Node(MF->getCrashOrder(), &MI, SrcTi, false);
-        std::shared_ptr<Node> startTaintNode(sNode2);
-        TaintDFG.addEdge(crashNode, startTaintNode, EdgeType::Dereference);
-        TaintDFG.updateLastTaintedNode(SrcTi, startTaintNode);
+    TaintInfo Src2Ti, Src2BaseTi;
+    // Process Taints from 2nd source operand (memory).
+    // (ex. CMP32rm $ebx, $rcx, 1, $rax, 4, $noreg)
+    if (DS.Src2Offset) {
+      // Create base_reg+off Taint Info (ex. {reg:$rcx; off:4})
+      // Only {reg + off} address can be calculated currently.
+      if (!DS.SrcIndexReg) {
+        Src2Ti.Op = DS.Source2;
+        Src2Ti.Offset = DS.Src2Offset;
+        calculateMemAddr(Src2Ti);
+        handleGlobalVar(Src2Ti);
+        addNewTaint(Src2Ti, TL, MI, TaintDFG, crashNode);
+      }
+
+      // Create base reg Taint Info (ex. {reg:$rcx;})
+      Src2BaseTi.Op = DS.Source2;
+      Src2BaseTi.Offset = llvm::None;
+      Src2BaseTi.IsConcreteMemory = false;
+      Src2BaseTi.ConcreteMemoryAddress = 0;
+      addNewTaint(Src2BaseTi, TL, MI, TaintDFG, crashNode);
+
+      // Create index reg Taint Info (ex. {reg:$rax;})
+      if (DS.SrcIndexReg) {
+        SrcIndexTi.Op = DS.SrcIndexReg;
+        SrcIndexTi.IsConcreteMemory = false;
+        SrcIndexTi.ConcreteMemoryAddress = 0;
+        addNewTaint(SrcIndexTi, TL, MI, TaintDFG, crashNode);
       }
     }
 
-    // If this was memory operand, we should taint the base reg as well.
-    if (SrcTi.Op && SrcTi.Op->isReg() && SrcTi.Offset) {
-      TaintInfo JustRegFromSrcOp = SrcTi;
-      JustRegFromSrcOp.Offset = llvm::None;
-      JustRegFromSrcOp.IsConcreteMemory = false;
-      JustRegFromSrcOp.ConcreteMemoryAddress = 0;
-      if (addToTaintList(JustRegFromSrcOp, TL)) {
-        Node *sNode2 =
-            new Node(MF->getCrashOrder(), &MI, JustRegFromSrcOp, false);
-        std::shared_ptr<Node> startTaintNode(sNode2);
-        TaintDFG.addEdge(crashNode, startTaintNode, EdgeType::Dereference);
-        TaintDFG.updateLastTaintedNode(JustRegFromSrcOp, startTaintNode);
-      }
-    }
-
-    // Taint src scale index reg.
-    if (SrcScaleReg.Op && SrcScaleReg.Op->isReg()) {
-      if (addToTaintList(SrcScaleReg, TL)) {
-        Node *sNode2 = new Node(MF->getCrashOrder(), &MI, SrcScaleReg, false);
-        std::shared_ptr<Node> startTaintNode(sNode2);
-        TaintDFG.addEdge(crashNode, startTaintNode, EdgeType::Dereference);
-        TaintDFG.updateLastTaintedNode(SrcScaleReg, startTaintNode);
-      }
-    }
-
-    if (Src2Ti.Op && Src2Ti.Op->isReg()) {
-      if (addToTaintList(Src2Ti, TL)) {
-        Node *sNode3 = new Node(MF->getCrashOrder(), &MI, Src2Ti, false);
-        std::shared_ptr<Node> startTaintNode(sNode3);
-        TaintDFG.addEdge(crashNode, startTaintNode, EdgeType::Dereference);
-        TaintDFG.updateLastTaintedNode(Src2Ti, startTaintNode);
-      }
-    }
   } else {
     // frame #1 onwards
     mergeTaintList(TL, TaintList);

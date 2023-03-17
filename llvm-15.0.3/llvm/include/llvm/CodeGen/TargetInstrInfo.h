@@ -79,15 +79,15 @@ struct DestSourcePair {
   // Value in immediate instructions
   Optional<int64_t> ImmValue;
 
-  // Used for scaled addressing mode.
+  // Used for scaled-index addressing mode.
   // e.g.:
   //   movb $0x41,(%rax,%rcx,1) == rax + rcx * 1 = $0x41
-  MachineOperand *DestScaledIndex = nullptr;
-  MachineOperand *DestOffsetReg = nullptr;
+  MachineOperand *DestScale = nullptr;
+  MachineOperand *DestIndexReg = nullptr;
 
   // mov (%rax,%rcx,4),%esi  ==> esi = rax + rcx * 4
-  MachineOperand *SrcScaledIndex = nullptr;
-  MachineOperand *SrcOffsetReg = nullptr;
+  MachineOperand *SrcScale = nullptr;
+  MachineOperand *SrcIndexReg = nullptr;
 
   // Size Factor used in Array Access
   int64_t SizeFactor = 0;
@@ -103,31 +103,29 @@ struct DestSourcePair {
                  int64_t Offset)
       : Destination(&Dest), Source(&Src), SrcOffset(Offset) {}
 
-  DestSourcePair(const MachineOperand &Dest, MachineOperand &DestOff,
-                 MachineOperand &ScaledIndex, const MachineOperand &Src)
-      : Destination(&Dest), Source(&Src), DestScaledIndex(&ScaledIndex),
-        DestOffsetReg(&DestOff) {}
+  DestSourcePair(const MachineOperand &Dest, MachineOperand &DestScale,
+                 MachineOperand &DestInd, const MachineOperand &Src)
+      : Destination(&Dest), Source(&Src), DestScale(&DestScale),
+        DestIndexReg(&DestInd) {}
 
   // Set All Fields in the structure.
   DestSourcePair(const MachineOperand *Dest, const MachineOperand *Src,
                  Optional<int64_t> DestOff, Optional<int64_t> SrcOff,
                  const MachineOperand *Src2, Optional<int64_t> Src2Off,
-                 MachineOperand *DestScaledIndex, MachineOperand *DstOffset,
-                 int64_t Size, MachineOperand *SrcScaledIndex = nullptr,
-                 MachineOperand *SrcOffsetReg = nullptr)
+                 MachineOperand *DestScale, MachineOperand *DstIndex,
+                 int64_t Size, MachineOperand *SrcScale = nullptr,
+                 MachineOperand *SrcIndex = nullptr)
       : Destination(Dest), Source(Src), DestOffset(DestOff), SrcOffset(SrcOff),
-        Source2(Src2), Src2Offset(Src2Off), DestScaledIndex(DestScaledIndex),
-        DestOffsetReg(DstOffset), SrcScaledIndex(SrcScaledIndex),
-        SrcOffsetReg(SrcOffsetReg), SizeFactor(Size) {}
+        Source2(Src2), Src2Offset(Src2Off), DestScale(DestScale),
+        DestIndexReg(DstIndex), SrcScale(SrcScale), SrcIndexReg(SrcIndex),
+        SizeFactor(Size) {}
 
   DestSourcePair(const MachineOperand *Dest, const MachineOperand *Src,
                  Optional<int64_t> DestOff, Optional<int64_t> SrcOff,
-                 Optional<int64_t> ImmVal,
-                 MachineOperand *DestScaledIndex = nullptr,
-                 MachineOperand *DstOffset = nullptr)
+                 Optional<int64_t> ImmVal, MachineOperand *DestScale = nullptr,
+                 MachineOperand *DstIndex = nullptr)
       : Destination(Dest), Source(Src), DestOffset(DestOff), SrcOffset(SrcOff),
-        ImmValue(ImmVal), DestScaledIndex(DestScaledIndex),
-        DestOffsetReg(DstOffset) {}
+        ImmValue(ImmVal), DestScale(DestScale), DestIndexReg(DstIndex) {}
 };
 
 /// Used to describe a register and immediate addition.
