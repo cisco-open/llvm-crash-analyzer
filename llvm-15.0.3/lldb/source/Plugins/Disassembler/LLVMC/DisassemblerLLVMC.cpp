@@ -1619,6 +1619,7 @@ size_t DisassemblerLLVMC::DecodeInstructions(const Address &base_addr,
   const size_t data_byte_size = data.GetByteSize();
   uint32_t instructions_parsed = 0;
   Address inst_addr(base_addr);
+  Address unknown_instr_addr;
 
   while (data_cursor < data_byte_size &&
          instructions_parsed < num_instructions) {
@@ -1636,8 +1637,33 @@ size_t DisassemblerLLVMC::DecodeInstructions(const Address &base_addr,
 
     uint32_t inst_size = inst_sp->Decode(*this, data, data_cursor);
 
-    if (inst_size == 0)
+    if (inst_size == 0) {
+      if ( !unknown_instr_addr.IsValid () )
+        unknown_instr_addr.SetOffset (inst_addr.GetOffset ());
+
+      /* There maybe cases (like paddings or dead code) that we have
+         invalid instructions. For those cases, keep going one byte
+         at a time hoping to find the next good instruction */
+      /* FIXME:
+         Currently X86GenericDisassembler:getInstruction(...) returns
+         assumes a bad instruction to be size 2 eventually we have to
+         get this number from that place but currently, there are
+         too many layers in between so I haveto hard-code it here :( ) */
+      const uint32_t bad_instruction_length = 2;
+      if (data_cursor + bad_instruction_length < data_byte_size) {
+        inst_size = bad_instruction_length;
+        data_cursor += inst_size;
+        inst_addr.Slide(inst_size);
+        continue;
+      }
       break;
+    }
+
+    if (unknown_instr_addr.IsValid ()) {
+      llvm::outs() << "Note: Found invalid instruction(s) at address: 0x"
+                   << llvm::format_hex (unknown_instr_addr.GetOffset(), 8) << "\n";
+      unknown_instr_addr.Clear ();
+    }
 
     m_instruction_list.Append(inst_sp);
     data_cursor += inst_size;
