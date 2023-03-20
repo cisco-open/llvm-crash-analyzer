@@ -175,13 +175,21 @@ bool llvm::crash_analyzer::CoreFile::read(StringRef SolibSearchPath) {
       WithColor::error() << "invalid frame found within core-file\n";
       return false;
     }
+    StringRef fnName = Frame.GetFunctionName();
+
+    // Functions similar to __libc_start_main and _start or 
+    // _be_unix_suspend from Polaris that start the execution
+    // indicate that we have reached the end of our backtrace
+    // so stop here . Since main still has to be processed, 
+    // we check it at the end of this loop. (see the end of this loop for main function)
+    if (fnName == "__be_unix_suspend")
+      break;
 
     LLVM_DEBUG(dbgs() << "#" << i << " " << Frame.GetPC() << " "
                       << Frame.GetFunctionName();
                if (Frame.IsInlined()) dbgs() << "[inlined]"
                                              << "\n";
                else dbgs() << "\n";);
-    StringRef fnName = Frame.GetFunctionName();
 
     // Get registers state at the point of the crash.
     auto Regs = Frame.GetRegisters();
@@ -200,15 +208,10 @@ bool llvm::crash_analyzer::CoreFile::read(StringRef SolibSearchPath) {
     FunctionsFromBacktrace.push_back(fnName);
     rememberSBFrame(fnName, Frame);
 
-    // No need to track __libc_start_main and _start from libc.
-    // FIXME:
-    //   1) POLARIS has its own version of main(), and the start
-    //      function name is different from main(), so this might
-    //      not be the right way. We should check if the next frame
-    //      is __libc_start_main() and then stop there.
-    //   2) I am seeing that bellow __be_unix_suspend() in the POLARIS
-    //      corefiles, there is no symbols and frames reported in decoder.
-    if (fnName == "main" || fnName == "__be_unix_suspend")
+    // We know that main is the last frame to be analyzed ...
+    // At this point we have processed main, so we know that
+    // we must stop ...
+    if (fnName == "main")
       break;
   }
 
