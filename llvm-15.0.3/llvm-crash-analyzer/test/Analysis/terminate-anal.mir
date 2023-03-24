@@ -3,7 +3,7 @@
 # RUN: FileCheck %s < %t.log
 
 # CHECK: warning: This tool is deprecated until we decide how to use corefile content here.
-# CHECK:  CMP32ri8 $ecx, 63, implicit-def $eflags
+# CHECK:  CMP16ri8 $cx, 63, implicit-def $eflags
 # CHECK: error: MIR not handled; Unable to propagate taint analysis
 
 --- |
@@ -139,10 +139,10 @@ body:             |
 
     PUSH64r $rbp, implicit-def $rsp, implicit $rsp
     $rbp = MOV64rr $rsp
-    $eax = XOR32rr undef $eax, undef $eax, implicit-def $eflags
+    $ax = XOR16rr undef $ax, undef $ax, implicit-def $eflags
     MOV32mi $rbp, 1, $noreg, -4, $noreg, 0
-    CMP32ri8 $ecx, 63, implicit-def $eflags ;; error
-    CMP32ri8 $eax, 63, implicit-def $eflags ;; no error
+    CMP16ri8 $cx, 63, implicit-def $eflags ;; error
+    CMP16ri8 $ax, 63, implicit-def $eflags ;; no error
     $edx = crash-start MOV32rm $rcx, 1, $noreg, 0, $noreg
     $edx = ADD32ri8 $edx, 2, implicit-def $eflags
     MOV32mr $rbp, 1, $noreg, -20, $noreg, $edx

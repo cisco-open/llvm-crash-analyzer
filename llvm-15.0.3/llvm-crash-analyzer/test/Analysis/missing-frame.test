@@ -38,8 +38,7 @@
 # RUN: %S/Inputs/missing-frame.out --print-potential-crash-cause-loc < %s 2>&1 | FileCheck %s
 
 # CHECK: Blame Function is main
-# CHECK: Blame Function is main
-# CHECK-NOT: From File {{.*}}/m.c:9:8
+# CHECK-NEXT: From File {{.*}}/m.c:10
 
 ## Use -start-taint-reg=rdx and -start-crash-order=2 to specify crash-analyzer that
 ## it should start Taint Analysis from frame with crash-order 2 and to look

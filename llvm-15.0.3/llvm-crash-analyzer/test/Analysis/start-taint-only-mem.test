@@ -1,0 +1,24 @@
+## This is reproducer (compiled with `clang -g -O0`):
+## void fun(int* ptr, int a)
+## {
+##    *ptr = a;
+## }
+## int main(){
+##   int *p = 0;
+##   fun(p,4);
+##   return 0;
+## }
+
+# RUN: %llvm-crash-analyzer --print-potential-crash-cause-loc --debug-only=taint-dfg \
+# RUN: --core-file=%S/Inputs/core.start-taint-only-mem %S/Inputs/start-taint-only-mem.out < %s 2>&1 | FileCheck %s
+
+## Confirm that, for crash-start instruction, only memory operand (rax + 0) is tainted.
+## If simple register operand ($ecx) is tainted, that misleads the analysis.
+# CHECK: === Taint Data Flow Graph ===
+# CHECK: {crash-node}
+# CHECK-NEXT:  ***> !1{1; crash-start MOV32mr $rax, 1, $noreg, 0, $noreg, $ecx; MEM: 0; DEREF-LVL: 0}
+# CHECK-NOT: ***> !2{1; crash-start MOV32mr $rax, 1, $noreg, 0, $noreg, $ecx; REG: $ecx; DEREF-LVL: 0}
+# CHECK-NEXT: !1{1; crash-start MOV32mr $rax, 1, $noreg, 0, $noreg, $ecx; MEM: 0; DEREF-LVL: 0}
+
+# CHECK: Blame Function is main
+# CHECK-NEXT: From File {{.*}}/m.c:7:8

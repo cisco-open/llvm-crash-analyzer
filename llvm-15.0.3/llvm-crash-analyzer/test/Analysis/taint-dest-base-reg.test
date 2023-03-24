@@ -44,14 +44,14 @@
 # CHECK-DEBUG-NEXT: Add to TL: {reg:$rcx; off:4} (mem addr: 4)
 ## Confirm that we taint base-reg $rcx besides memory location $rcx + 4.
 # CHECK-DEBUG-NEXT: Add to TL: {reg:$rcx}
-# CHECK-DEBUG-NEXT: Add to TL: {reg:$eax}
+## Confirm that simple register operand is not tainted.
+# CHECK-DEBUG-NOT: Add to TL: {reg:$eax}
 # CHECK-DEBUG-EMPTY:
 
 ## Print Taint List.
 # CHECK-DEBUG-NEXT: -----Taint List Begin------
 # CHECK-DEBUG-NEXT: {reg:$rcx; off:4} (mem addr: 4)
 # CHECK-DEBUG-NEXT: {reg:$rcx}
-# CHECK-DEBUG-NEXT: {reg:$eax}
 # CHECK-DEBUG-NEXT: ------Taint List End----
 
 # CHECK-DEBUG:  $rcx = MOV64rm $rbp, 1, $noreg, -8, $noreg, debug-location !DILocation(line: 13, column: 4, scope: !2); /nobackup/ntesic/PAC/tests/dest-base-reg/for_lit/m.c:13:4
@@ -69,7 +69,6 @@
 ## Print updated Taint List.
 # CHECK-DEBUG-NEXT: -----Taint List Begin------
 # CHECK-DEBUG-NEXT: {reg:$rcx; off:4} (mem addr: 4)
-# CHECK-DEBUG-NEXT: {reg:$eax}
 # CHECK-DEBUG-NEXT: {reg:$rbp; off:-8} (mem addr: 140734701020776)
 # CHECK-DEBUG-NEXT: ------Taint List End----
 
@@ -84,10 +83,17 @@
 # CHECK-TAINT-DFG: digraph TaintDataFlowGraph {
 # CHECK-TAINT-DFG-NEXT: crashNode  -> "[[TEST_FILE:[^:]*]]:13:18" [color="red"];
 # CHECK-TAINT-DFG-NEXT: crashNode  -> "[[TEST_FILE]]:13:18" [color="red"];
-# CHECK-TAINT-DFG-NEXT: crashNode  -> "[[TEST_FILE]]:13:18" [color="red"];
 # CHECK-TAINT-DFG-NEXT: "[[TEST_FILE]]:13:18"  -> "[[TEST_FILE]]:13:4";
-# CHECK-TAINT-DFG-NEXT: "[[TEST_FILE]]:13:18"  -> "[[TEST_FILE]]:13:20";
 # CHECK-TAINT-DFG-NEXT: "[[TEST_FILE]]:13:4"  -> "[[TEST_FILE]]:11:0";
-# CHECK-TAINT-DFG-NEXT: "[[TEST_FILE]]:13:20"  -> "[[TEST_FILE]]:12:8" [color="red"];
 # CHECK-TAINT-DFG-NEXT: "[[TEST_FILE]]:11:0"  -> "[[TEST_FILE]]:19:3";
 # CHECK-TAINT-DFG-NEXT: "[[TEST_FILE]]:19:3"  -> "[[TEST_FILE]]:18:13" [color="red"];
+
+## Test printed DFG format (MIR representation).
+# RUN: cat %t1.dot | FileCheck --check-prefix=CHECK-DFG %s
+# CHECK-DFG: digraph TaintDataFlowGraph {
+# CHECK-DFG-NEXT: crashNode  ->  "{1; 1; crash-start MOV32mr $rcx, 1, $noreg, 4, $noreg, $eax;  MEM: 4}" [color="red"];
+# CHECK-DFG-NEXT: crashNode  ->  "{1; 2; crash-start MOV32mr $rcx, 1, $noreg, 4, $noreg, $eax;  REG: $rcx}" [color="red"];
+# CHECK-DFG-NEXT: "{1; 2; crash-start MOV32mr $rcx, 1, $noreg, 4, $noreg, $eax;  REG: $rcx}"  ->  "{1; 3; $rcx = MOV64rm $rbp, 1, $noreg, -8, $noreg;  MEM: 140734701020776}";
+# CHECK-DFG-NEXT: "{1; 3; $rcx = MOV64rm $rbp, 1, $noreg, -8, $noreg;  MEM: 140734701020776}"  ->  "{1; 4; MOV64mr $rbp, 1, $noreg, -8, $noreg, $rdi;  REG: $rdi}";
+# CHECK-DFG-NEXT: "{1; 4; MOV64mr $rbp, 1, $noreg, -8, $noreg, $rdi;  REG: $rdi}"  ->  "{2; 5; $rdi = LEA64r $rbp, 1, $noreg, -16, $noreg;  MEM: 140734701020800}";
+# CHECK-DFG-NEXT: "{2; 5; $rdi = LEA64r $rbp, 1, $noreg, -16, $noreg;  MEM: 140734701020800}"  ->  "{2; 6; MOV64mi32 $rbp, 1, $noreg, -16, $noreg, 0;  CONSTANT: 0}" [color="red"];

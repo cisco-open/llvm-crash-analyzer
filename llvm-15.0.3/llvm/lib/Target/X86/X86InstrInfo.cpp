@@ -765,15 +765,17 @@ X86InstrInfo::getDestAndSrc(const MachineInstr &MI) const {
       return DestSourcePair{BaseOp, &MI.getOperand(5), Offset, None, ImmVal};
 
     // This should be scaled indexing addressing mode.
+    // Dest: DestReg + (DestScale * DestIndexReg) + DestOff.
     const MachineOperand *Src = &(MI.getOperand(5));
     const MachineOperand *Dst = &(MI.getOperand(0));
-    MachineOperand *DstScaledIndex =
+    MachineOperand *DstScale =
         const_cast<MachineOperand *>(&(MI.getOperand(1)));
-    MachineOperand *DstOffset =
+    MachineOperand *DstIndexReg =
         const_cast<MachineOperand *>(&(MI.getOperand(2)));
-    // TODO: Is ImmVal needed for Scaled Index mode ?
-    return DestSourcePair{
-        Dst, Src, 0, None, nullptr, None, DstScaledIndex, DstOffset, 0};
+    // TODO: Is ImmVal needed for Scaled Index mode ? - NO
+    // Keep default (zero) DestOff to mark it a memory location.
+    return DestSourcePair{Dst,  Src,      0,           None, nullptr,
+                          None, DstScale, DstIndexReg, 0};
   }
   case X86::MOV8rm:
   case X86::MOV32rm:
@@ -813,17 +815,19 @@ X86InstrInfo::getDestAndSrc(const MachineInstr &MI) const {
     const MachineOperand *Dest = &(MI.getOperand(0));
     if (getMemOperandWithOffset(MI, BaseOp, Offset, OffsetIsScalable, TRI))
       return DestSourcePair{*Dest, *BaseOp, Offset};
-    ;
 
     // This should be scaled indexing addressing mode.
     // $esi = crash-start MOV32rm $rax, 4, $rcx, 0, $noreg
+    // Source: SrcReg + (SrcScale * SrcIndexReg) + SrcOff.
     const MachineOperand *Src = &(MI.getOperand(1));
     const MachineOperand *Dst = &(MI.getOperand(0));
-    MachineOperand *SrcScaledIndex =
+    MachineOperand *SrcScale =
+        const_cast<MachineOperand *>(&(MI.getOperand(2)));
+    MachineOperand *SrcIndexReg =
         const_cast<MachineOperand *>(&(MI.getOperand(3)));
-
-    return DestSourcePair{Dst,  Src,     None,    None, nullptr,
-                          None, nullptr, nullptr, 0,    SrcScaledIndex};
+    // Keep default SrcOff to mark it a memory location.
+    return DestSourcePair{Dst,     Src,     None, 0,        nullptr,    None,
+                          nullptr, nullptr, 0,    SrcScale, SrcIndexReg};
   }
   case X86::MOV8mr:
   case X86::MOV16mr:
@@ -846,7 +850,9 @@ X86InstrInfo::getDestAndSrc(const MachineInstr &MI) const {
     if (!getMemOperandWithOffset(MI, BaseOp, Offset, OffsetIsScalable, TRI))
       return None;
     return DestSourcePair{*BaseOp, Offset, *Src};
+    // FIXME: Can Dest be scaled-index address in this case?
   }
+  case X86::ADD32i32:
   case X86::ADD64i32: {
     const MachineOperand *Dest = &(MI.getOperand(1));
     const MachineOperand *Src = &(MI.getOperand(3));
@@ -863,13 +869,33 @@ X86InstrInfo::getDestAndSrc(const MachineInstr &MI) const {
     return DestSourcePair{Dest, Src, None, None, Src2, None, nullptr, 0, 0};
   }
   case X86::LEA64r:
-  case X86::LEA32r:
-  case X86::LEA64_32r: {
+  case X86::LEA32r: {
     const MachineOperand *Dest = &(MI.getOperand(0));
     if (!getMemOperandWithOffset(MI, BaseOp, Offset, OffsetIsScalable, TRI))
       return None;
     return DestSourcePair{*Dest, *BaseOp, Offset};
   }
+  case X86::LEA64_32r: {
+    const MachineOperand *Dest = &(MI.getOperand(0));
+    if (getMemOperandWithOffset(MI, BaseOp, Offset, OffsetIsScalable, TRI))
+      return DestSourcePair{*Dest, *BaseOp, Offset};
+
+    // This should be scaled indexing addressing mode.
+    // $eax = LEA64_32r $rax, 1, $rcx, 0, $noreg
+    // Source: SrcReg + (SrcScale * SrcIndexReg) + SrcOff.
+    const MachineOperand *Src = &(MI.getOperand(1));
+    MachineOperand *SrcScale =
+        const_cast<MachineOperand *>(&(MI.getOperand(2)));
+    MachineOperand *SrcIndexReg =
+        const_cast<MachineOperand *>(&(MI.getOperand(3)));
+    MachineOperand *SrcOffset =
+        const_cast<MachineOperand *>(&(MI.getOperand(4)));
+    Offset = SrcOffset->isImm() ? SrcOffset->getImm() : Offset;
+    // Keep default SrcOff to mark it a memory location.
+    return DestSourcePair{Dest,     Src,     None, Offset, nullptr, None,
+                          nullptr, nullptr, 0,    SrcScale, SrcIndexReg};
+  }
+
   case X86::MOV8ri:
   case X86::MOV16ri:
   case X86::MOV32ri:
@@ -896,24 +922,26 @@ X86InstrInfo::getDestAndSrc(const MachineInstr &MI) const {
   case X86::UCOMISDrr: {
     const MachineOperand *Src = &(MI.getOperand(0));
     const MachineOperand *Source2 = &(MI.getOperand(1));
-    return DestSourcePair{nullptr, Src,     None, None, Source2,
-                          None,    nullptr, 0,    0};
+    return DestSourcePair{nullptr, Src,     None,    None, Source2,
+                          None,    nullptr, nullptr, 0};
   }
   case X86::CMP32rm:
   case X86::CMP64rm: {
     const MachineOperand *Src = &(MI.getOperand(0));
     if (!getMemOperandWithOffset(MI, BaseOp, Offset, OffsetIsScalable, TRI))
       return None;
-    return DestSourcePair{nullptr, Src,     None, None, BaseOp,
-                          Offset,  nullptr, 0,    0};
+    return DestSourcePair{nullptr, Src,     None,    None, BaseOp,
+                          Offset,  nullptr, nullptr, 0};
   }
   case X86::CMP8mi:
-  case X86::CMP32mi8: {
+  case X86::CMP32mi8:
+  case X86::CMP32mi:
+  case X86::CMP64mi8: {
     const MachineOperand *Src2 = &(MI.getOperand(5));
     if (!getMemOperandWithOffset(MI, BaseOp, Offset, OffsetIsScalable, TRI))
       return None;
-    return DestSourcePair{nullptr, BaseOp,  None, Offset, Src2,
-                          None,    nullptr, 0,    0};
+    return DestSourcePair{nullptr, BaseOp,  None,    Offset, Src2,
+                          None,    nullptr, nullptr, 0};
   }
   case X86::CMOV16rm:
   case X86::CMOV32rm:
@@ -922,8 +950,8 @@ X86InstrInfo::getDestAndSrc(const MachineInstr &MI) const {
   case X86::CMOV32rr:
   case X86::CMOV64rr: {
     /* FIXME: */
-    return DestSourcePair{nullptr, nullptr, None, None, nullptr,
-                          None,    nullptr, 0,    0};
+    return DestSourcePair{nullptr, nullptr, None,    None, nullptr,
+                          None,    nullptr, nullptr, 0};
   }
   case X86::AND8rr:
   case X86::AND16rr:
@@ -1019,10 +1047,17 @@ X86InstrInfo::getDestAndSrc(const MachineInstr &MI) const {
   case X86::TEST8rr:
   case X86::TEST16rr:
   case X86::TEST32rr:
-  case X86::TEST64rr: {
+  case X86::TEST64rr:
+  // CMP32ri8 $edi, 5, implicit-def $eflags
+  case X86::CMP32ri:
+  case X86::CMP32ri8:
+  case X86::CMP64ri32:
+  case X86::CMP64ri8:
+  // BT32rr $eax, $edi, implicit-def $eflags
+  case X86::BT32rr:
+  case X86::BT64rr: {
     return DestSourcePair{nullptr, &MI.getOperand(0), None,
                           None,    &MI.getOperand(1), None,
-
                           nullptr, nullptr,           0};
   }
   case X86::TEST16i16:
@@ -1046,29 +1081,21 @@ X86InstrInfo::getDestAndSrc(const MachineInstr &MI) const {
   case X86::CMP16rr_REV:
   case X86::CMP32i32:
   case X86::CMP32mr:
-  case X86::CMP32ri:
-  case X86::CMP32ri8:
   case X86::CMP32rr:
   case X86::CMP32rr_REV:
   case X86::CMP64i32:
   case X86::CMP64mr:
-  case X86::CMP64ri32:
-  case X86::CMP64ri8:
   case X86::CMP64rr:
   case X86::CMP64rr_REV:
-  case X86::CMP64mi8:
   case X86::CMP8i8:
   case X86::CMP8mr:
   case X86::CMP8ri:
   case X86::CMP8ri8:
   case X86::CMP8rm:
   case X86::CMP8rr:
-  case X86::CMP32mi:
   case X86::CMP16mi8:
   case X86::CMP8rr_REV:
-  case X86::BT64ri8:
-  case X86::BT32rr:
-  case X86::BT64rr: {
+  case X86::BT64ri8: {
     return None;
   }
   case X86::NOT8r:
@@ -1130,8 +1157,8 @@ X86InstrInfo::getDestAndSrc(const MachineInstr &MI) const {
   case X86::PUSH64r: {
     /* FIXME: This needs to be handled appropriately. Setting destination
        as empty enables the propagation of taint analysis. */
-    return DestSourcePair{nullptr, nullptr, None, None, nullptr,
-                          None,    nullptr, 0,    0};
+    return DestSourcePair{nullptr, nullptr, None,    None, nullptr,
+                          None,    nullptr, nullptr, 0};
   }
   }
 

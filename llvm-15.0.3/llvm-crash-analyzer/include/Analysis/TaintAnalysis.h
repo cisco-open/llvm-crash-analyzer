@@ -43,7 +43,7 @@ enum TaintInfoType { ImmediateVal, RegisterLoc, MemoryLoc };
 //   1) Register as offset
 //   2) Scaled Index addressing mode
 struct TaintInfo {
-  const MachineOperand *Op;
+  const MachineOperand *Op = nullptr;
 
   // For mem operands, we rather choose to taint
   // real/concrete addresses (by calculating base_reg + off).
@@ -105,6 +105,9 @@ public:
   void startTaint(DestSourcePair &DS, SmallVectorImpl<TaintInfo> &TL,
                   const MachineInstr &MI, TaintDataFlowGraph &TaintDFG,
                   RegisterEquivalence &REAnalysis);
+  void addNewTaint(TaintInfo &Ti, SmallVectorImpl<TaintInfo> &TL,
+                   const MachineInstr &MI, TaintDataFlowGraph &TaintDFG,
+                   std::shared_ptr<Node> crashNode);
   void insertTaint(DestSourcePair &DS, SmallVectorImpl<TaintInfo> &TL,
                    const MachineInstr &MI, TaintDataFlowGraph &TaintDFG,
                    RegisterEquivalence &REAnalysis);
