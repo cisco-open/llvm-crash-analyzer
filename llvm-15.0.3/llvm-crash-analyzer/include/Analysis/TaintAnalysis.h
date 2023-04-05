@@ -82,6 +82,8 @@ private:
   ConcreteReverseExec *CRE = nullptr;
   RegisterEquivalence *REA = nullptr;
 
+  // Used for functions out of the backtrace.
+  SmallVector<TaintInfo, 8> TL_Of_Call;
 public:
   TaintAnalysis(StringRef TaintDotFileName, StringRef MirDotFileName,
                 bool PrintPotentialCrashCauseLocation);
@@ -105,6 +107,15 @@ public:
   void startTaint(DestSourcePair &DS, SmallVectorImpl<TaintInfo> &TL,
                   const MachineInstr &MI, TaintDataFlowGraph &TaintDFG,
                   RegisterEquivalence &REAnalysis);
+  bool forwardMFAnalysis(BlameModule &BM, const MachineFunction &MF,
+                         TaintDataFlowGraph &TaintDFG,
+                         unsigned levelOfCalledFn = 0,
+                         SmallVector<TaintInfo, 8> *TL_Of_Caller = nullptr,
+                         const MachineInstr *CallMI = nullptr);
+  bool propagateTaintFwd(DestSourcePair &DS, SmallVectorImpl<TaintInfo> &TL,
+                         const MachineInstr &MI, TaintDataFlowGraph &TaintDFG,
+                         RegisterEquivalence &REAnalysis,
+                         const MachineInstr *CallMI = nullptr);
   void addNewTaint(TaintInfo &Ti, SmallVectorImpl<TaintInfo> &TL,
                    const MachineInstr &MI, TaintDataFlowGraph &TaintDFG,
                    std::shared_ptr<Node> crashNode);
