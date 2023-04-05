@@ -31,7 +31,7 @@ void TaintDataFlowGraph::addEdge(std::shared_ptr<Node> src,
   adjacencies[src.get()].push_back({dest.get(), e_type});
 }
 
-void TaintDataFlowGraph::updateLastTaintedNode(TaintInfo Op,
+void TaintDataFlowGraph::updateLastTaintedNode(const MachineOperand *Op,
                                                std::shared_ptr<Node> N) {
   lastTaintedNode[Op] = N;
 }
@@ -134,6 +134,9 @@ void TaintDataFlowGraph::findBlameFunction(Node *v) {
               if (a->MI->getParent() == adjNode->MI->getParent() &&
                   !a->CallMI && !adjNode->CallMI) {
                 if (MDT->dominates(adjNode->MI, a->MI)) {
+                  // Do not erase potential blame nodes.
+                  if (a->TaintOp.DerefLevel == 0 && a->IsContant)
+                    break;
                   BlameNodes.erase(BlameNodes.begin() + i);
                   break;
                 }
@@ -141,6 +144,9 @@ void TaintDataFlowGraph::findBlameFunction(Node *v) {
                 MDT = dominators[a->CallMI->getMF()];
                 if (a->CallMI->getParent() == adjNode->MI->getParent()) {
                   if (MDT->dominates(adjNode->MI, a->CallMI)) {
+                    // Do not erase potential blame nodes.
+                    if (a->TaintOp.DerefLevel == 0 && a->IsContant)
+                      break;
                     BlameNodes.erase(BlameNodes.begin() + i);
                     break;
                   }
@@ -149,6 +155,9 @@ void TaintDataFlowGraph::findBlameFunction(Node *v) {
                 MDT = dominators[adjNode->CallMI->getMF()];
                 if (a->MI->getParent() == adjNode->CallMI->getParent()) {
                   if (MDT->dominates(adjNode->CallMI, a->MI)) {
+                    // Do not erase potential blame nodes.
+                    if (a->TaintOp.DerefLevel == 0 && a->IsContant)
+                      break;
                     BlameNodes.erase(BlameNodes.begin() + i);
                     break;
                   }
@@ -159,6 +168,9 @@ void TaintDataFlowGraph::findBlameFunction(Node *v) {
                     a->CallMI->getParent() == adjNode->CallMI->getParent()) {
                   MDT = dominators[adjNode->CallMI->getMF()];
                   if (MDT->dominates(adjNode->CallMI, a->CallMI)) {
+                    // Do not erase potential blame nodes.
+                    if (a->TaintOp.DerefLevel == 0 && a->IsContant)
+                      break;
                     BlameNodes.erase(BlameNodes.begin() + i);
                     break;
                   }
@@ -196,12 +208,26 @@ bool TaintDataFlowGraph::printBlameFunction(
 
   StringRef BlameFn = "";
   const MachineFunction *MF = nullptr;
-  auto &BlameNodes = blameNodes[MaxLevel];
+  auto &SortBlameNodes = blameNodes[MaxLevel];
   llvm::SmallVector<StringRef, 8> BlameFns;
   llvm::SmallVector<MachineFunction *, 8> MFs;
 
   unsigned BlameLine = 0;
   unsigned BlameColumn = 0;
+  // Sort blame Nodes by depth - descending.
+  std::sort(SortBlameNodes.begin(), SortBlameNodes.end(),
+            [](Node *n1, Node *n2) { return n1->Depth > n2->Depth; });
+  unsigned DepthLevel = 0;
+  llvm::SmallVector<Node *, 8> BlameNodes;
+  // Filter leaf nodes - consider zero DerefLevel and max depth.
+  for (auto &n : SortBlameNodes) {
+    if (n->TaintOp.DerefLevel != 0)
+      continue;
+    if (n->Depth < DepthLevel)
+      break;
+    DepthLevel = n->Depth;
+    BlameNodes.push_back(n);
+  }
 
   for (auto &a : BlameNodes) {
     // Only consider Node if it's DerefLevel is zero.

@@ -609,8 +609,10 @@ void crash_analyzer::TaintAnalysis::insertTaint(
     StartCrashOrder = 0;
     Node *sNode = new Node(MF->getCrashOrder(), &MI, DestTi, false);
     std::shared_ptr<Node> startTaintNode(sNode);
+    // Set new node depth (crashNode has zero depth).
+    startTaintNode->Depth = crashNode->Depth + 1;
     TaintDFG.addEdge(crashNode, startTaintNode, EdgeType::Dereference);
-    TaintDFG.updateLastTaintedNode(DestTi, startTaintNode);
+    TaintDFG.updateLastTaintedNode(DestTi.Op, startTaintNode);
   }
 
   printTaintList(TL);
@@ -708,8 +710,10 @@ void crash_analyzer::TaintAnalysis::addNewTaint(
   if (addToTaintList(Ti, TL)) {
     Node *sNode = new Node(MF->getCrashOrder(), &MI, Ti, false);
     std::shared_ptr<Node> startTaintNode(sNode);
+    // Set new node depth (crashNode has zero depth).
+    startTaintNode->Depth = crashNode->Depth + 1;
     TaintDFG.addEdge(crashNode, startTaintNode, EdgeType::Dereference);
-    TaintDFG.updateLastTaintedNode(Ti, startTaintNode);
+    TaintDFG.updateLastTaintedNode(Ti.Op, startTaintNode);
   }
 }
 
@@ -941,10 +945,12 @@ bool llvm::crash_analyzer::TaintAnalysis::propagateTaint(
     if (CallMI)
       constantNode->CallMI = CallMI;
     std::shared_ptr<Node> constNode(constantNode);
-    auto &LastTaintedNodeForTheOp = TaintDFG.lastTaintedNode[Taint];
+    auto &LastTaintedNodeForTheOp = TaintDFG.lastTaintedNode[Taint.Op];
     TaintDFG.addEdge(LastTaintedNodeForTheOp, constNode, EdgeType::Dereference);
     // FIXME: The LastTaintedNode won't be used any more, no need for this line?
-    TaintDFG.updateLastTaintedNode(SrcTi, constNode);
+    TaintDFG.updateLastTaintedNode(SrcTi.Op, constNode);
+    // Set new node depth.
+    constNode->Depth = LastTaintedNodeForTheOp->Depth + 1;
 
     // We have reached a terminating condition where
     // dest is tainted and src is a constant operand.
@@ -959,9 +965,9 @@ bool llvm::crash_analyzer::TaintAnalysis::propagateTaint(
     // TODO: Check if this should be a deref edge:
     //       if we propagate taint from a mem addr (e.g. rbx + 10)
     //       to its base reg (e.g. rbx).
-    assert(TaintDFG.lastTaintedNode.count(Taint) &&
+    assert(TaintDFG.lastTaintedNode.count(Taint.Op) &&
            "Taint Op must be reached already");
-    auto &LastTaintedNodeForTheOp = TaintDFG.lastTaintedNode[Taint];
+    auto &LastTaintedNodeForTheOp = TaintDFG.lastTaintedNode[Taint.Op];
 
     if (LastTaintedNodeForTheOp->TaintOp.Op->isReg() &&
         LastTaintedNodeForTheOp->TaintOp.Offset &&
@@ -972,7 +978,9 @@ bool llvm::crash_analyzer::TaintAnalysis::propagateTaint(
                        EdgeType::Dereference);
     else
       TaintDFG.addEdge(LastTaintedNodeForTheOp, newTaintNode);
-    TaintDFG.updateLastTaintedNode(SrcTi, newTaintNode);
+    TaintDFG.updateLastTaintedNode(SrcTi.Op, newTaintNode);
+    // Set new node depth.
+    newTaintNode->Depth = LastTaintedNodeForTheOp->Depth + 1;
 
     if (!BaseTaintFlag)
       removeFromTaintList(Taint, TL);
