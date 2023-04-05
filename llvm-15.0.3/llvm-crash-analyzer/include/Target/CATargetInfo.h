@@ -18,6 +18,8 @@
 #include "llvm/CodeGen/MachineBasicBlock.h"
 #include "llvm/CodeGen/MachineFunction.h"
 #include "llvm/CodeGen/MachineInstr.h"
+#include "llvm/CodeGen/TargetInstrInfo.h"
+#include "llvm/MC/MCRegisterInfo.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/Host.h"
 
@@ -39,7 +41,8 @@ protected:
   std::unordered_map<unsigned, RegAliasTuple> RegMap;
 
   // Save PC value for each instruction.
-  std::unordered_map<const MachineInstr*, std::pair<uint64_t,uint64_t>> InstAddrs;
+  std::unordered_map<const MachineInstr *, std::pair<uint64_t, uint64_t>>
+      InstAddrs;
 
   // Singleton class for the CATargetInfo instance.
   template <typename T> class Singleton {
@@ -53,10 +56,17 @@ protected:
 
 public:
   CATargetInfo() {}
-  virtual ~CATargetInfo() { RegMap.clear(); InstAddrs.clear(); }
+  virtual ~CATargetInfo() {
+    RegMap.clear();
+    InstAddrs.clear();
+  }
 
   // Get register index in the RegMap.
   virtual Optional<unsigned> getID(std::string RegName) const = 0;
+
+  // Get register unsigned (MCRegister) from the RegMap.
+  virtual Optional<unsigned> getRegister(std::string RegName,
+                                         const MachineInstr *MI) const = 0;
 
   virtual unsigned getRegSize(std::string RegName) const = 0;
 
@@ -65,22 +75,28 @@ public:
     return const_cast<RegAliasTuple &>(RegMap.at(Id));
   }
 
+  // Get RegAliasTuple from the RegMap with selected Id.
+  std::unordered_map<unsigned, RegAliasTuple> getWholeRegMap() const {
+    return RegMap;
+  }
+
   // Get InstAddr from the InstAddrs map for the MI.
-  Optional<uint64_t> getInstAddr(const MachineInstr* MI) {
+  Optional<uint64_t> getInstAddr(const MachineInstr *MI) {
     if (InstAddrs.count(MI) == 0)
       return None;
     return InstAddrs[MI].first;
   }
 
   // Get InstAddr from the InstAddrs map for the MI.
-  Optional<uint64_t> getInstSize(const MachineInstr* MI) {
+  Optional<uint64_t> getInstSize(const MachineInstr *MI) {
     if (InstAddrs.count(MI) == 0)
       return None;
     return InstAddrs[MI].second;
   }
 
   // Set InstAddr in the InstAddrs map for the MI.
-  void setInstAddr(const MachineInstr* MI, uint64_t InstAddr, uint64_t InstSize = 0) {
+  void setInstAddr(const MachineInstr *MI, uint64_t InstAddr,
+                   uint64_t InstSize = 0) {
     InstAddrs[MI] = {InstAddr, InstSize};
   }
 
@@ -98,6 +114,9 @@ public:
 
   // Return true if the register is Base Pointer Register.
   virtual bool isBPRegister(std::string RegName) const = 0;
+
+  // Return true if the register can be used to forward parameters.
+  virtual bool isParamFwdRegister(std::string RegName) const = 0;
 
   // Set target Triple of the CATargetInfo instance.
   static void initializeCATargetInfo(Triple *Triple) {
@@ -118,6 +137,9 @@ public:
 
   Optional<unsigned> getID(std::string RegName) const override;
 
+  Optional<unsigned> getRegister(std::string RegName,
+                                 const MachineInstr *MI) const override;
+
   unsigned getRegSize(std::string RegName) const override;
 
   bool isRetValRegister(std::string RegName) const override;
@@ -129,6 +151,8 @@ public:
   bool isSPRegister(std::string RegName) const override;
 
   bool isBPRegister(std::string RegName) const override;
+
+  bool isParamFwdRegister(std::string RegName) const override;
 
   // Define static instance getter for each target.
   static X86CATargetInfo *instance() {

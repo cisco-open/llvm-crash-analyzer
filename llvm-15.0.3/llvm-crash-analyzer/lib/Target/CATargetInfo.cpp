@@ -159,3 +159,39 @@ bool X86CATargetInfo::isBPRegister(std::string RegName) const {
     return true;
   return false;
 }
+
+bool X86CATargetInfo::isParamFwdRegister(std::string RegName) const {
+  if (RegName == "rdi" || RegName == "edi" || RegName == "di" ||
+      RegName == "dil")
+    return true;
+  if (RegName == "rsi" || RegName == "esi" || RegName == "si" ||
+      RegName == "sil")
+    return true;
+  if (RegName == "rdx" || RegName == "edx" || RegName == "dx" ||
+      RegName == "dl")
+    return true;
+  if (RegName == "rcx" || RegName == "ecx" || RegName == "cx" ||
+      RegName == "cl")
+    return true;
+  if (RegName == "r8" || RegName == "r8d" || RegName == "r8w" ||
+      RegName == "r8b")
+    return true;
+  if (RegName == "r9" || RegName == "r9d" || RegName == "r9w" ||
+      RegName == "r9b")
+    return true;
+  return false;
+}
+
+Optional<unsigned> X86CATargetInfo::getRegister(std::string RegName,
+                                                const MachineInstr *MI) const {
+  auto TRI = MI->getMF()->getSubtarget().getRegisterInfo();
+  if (!TRI)
+    return None;
+  unsigned N = 1000;
+  for (unsigned I = 0; I < N; ++I) {
+    std::string CurName = TRI->getRegAsmName(I).lower();
+    if (CurName == RegName)
+      return I;
+  }
+  return None;
+}
