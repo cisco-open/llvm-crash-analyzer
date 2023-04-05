@@ -1310,7 +1310,7 @@ bool crash_analyzer::TaintAnalysis::runOnBlameMF(
     BlameModule &BM, const MachineFunction &MF, TaintDataFlowGraph &TaintDFG,
     bool CalleeNotInBT, unsigned levelOfCalledFn,
     SmallVector<TaintInfo, 8> *TL_Of_Caller, const MachineInstr *CallMI) {
-  LLVM_DEBUG(llvm::dbgs() << "### - backward MF: " << MF.getName() << "\n";);
+  LLVM_DEBUG(llvm::dbgs() << "### MF - backward analysis: " << MF.getName() << "\n";);
 
   // Run the forward analysis to compute register equivalance.
   RegisterEquivalence REAnalysis;
@@ -1365,16 +1365,10 @@ bool crash_analyzer::TaintAnalysis::runOnBlameMF(
 
     for (auto MIIt = MBB->rbegin(); MIIt != MBB->rend(); ++MIIt) {
       auto &MI = *MIIt;
-      if (MI.getFlag(MachineInstr::CrashStart)) {
+      // Consider crash-start instruction when analyzing functions from the
+      // backtrace.
+      if (!CalleeNotInBT && MI.getFlag(MachineInstr::CrashStart)) {
         CrashSequenceStarted = true;
-        // If this was a call to a function that isn't in the bt,
-        // the analysis will start from the last intr (return), so
-        // we need just to consider the taint operands from the MBB
-        // where it got called.
-        if (CalleeNotInBT) {
-          mergeTaintList(TL_Mbb, *TL_Of_Caller);
-          continue;
-        }
 
         // For frames > 0, skip to the first instruction after the call
         // instruction, traversing backwards.
@@ -1473,8 +1467,22 @@ bool crash_analyzer::TaintAnalysis::runOnBlameMF(
         continue;
       }
 
-      if (!CrashSequenceStarted)
-        continue;
+      // Skip until crash-start instruction.
+      if (!CrashSequenceStarted) {
+        // If we analyze call out of the backtrace, even if the function
+        // is already decompiled (is in the backtrace as well), do not
+        // skip.
+        if (!CalleeNotInBT)
+          continue;
+        // For functions out of the BT, start TA from the last instruction.
+        CrashSequenceStarted = true;
+        // If this was a call to a function that isn't in the bt,
+        // the analysis will start from the last intr (return), so
+        // we need just to consider the taint operands from the MBB
+        // where it got called.
+        mergeTaintList(TL_Mbb, *TL_Of_Caller);
+        TL_Of_Caller->clear();
+      }
 
       // Update the register values (including PC reg), so we have right
       // register values state.
@@ -1488,7 +1496,7 @@ bool crash_analyzer::TaintAnalysis::runOnBlameMF(
       if (MI.isCall() && levelOfCalledFn < FrameLevelDepthToGo) {
         //  mergeTaintList(TL_Mbb, TaintList); Is this needed (as above) ?
         const MachineOperand &CalleeOp = MI.getOperand(0);
-        TL_Of_Call.clear(); // check this
+        TL_Of_Call.clear();
         // TODO: handle indirect calls.
         if (!CalleeOp.isGlobal())
           continue;
@@ -1509,6 +1517,25 @@ bool crash_analyzer::TaintAnalysis::runOnBlameMF(
           if (runBwAnalysis)
             runOnBlameMF(BM, *CalledMF, TaintDFG, true, levelOfCalledFn + 1,
                          &TL_Mbb, &MI);
+          CalledMF->setCrashOrder(MF.getCrashOrder() + 1);
+          // If parameter is tainted, run analysis from the function entry point
+          // (forward), to the point where the parameter value is set.
+          if (runFwAnalysis) {
+            printTaintList(TL_Of_Call);
+            forwardMFAnalysis(BM, *CalledMF, TaintDFG, levelOfCalledFn + 1,
+                              &TL_Of_Call, &MI);
+            // If there is a Taint left after the forward analysis, run backward
+            // analysis for the same TaintList. (ex. one parameter sets the
+            // value of another)
+            if (!TL_Of_Call.empty()) {
+              printTaintList(TL_Of_Call);
+              runOnBlameMF(BM, *CalledMF, TaintDFG, true, levelOfCalledFn + 1,
+                           &TL_Of_Call, &MI);
+            }
+            mergeTaintList(TL_Mbb, TL_Of_Call);
+            LLVM_DEBUG(llvm::dbgs() << "### Return to backward analysis: "
+                                    << MF.getName() << "\n";);
+          }
           CalledMF->setCrashOrder(0);
           continue;
         } else {
@@ -1526,10 +1553,15 @@ bool crash_analyzer::TaintAnalysis::runOnBlameMF(
                              levelOfCalledFn + 1, &TL_Mbb, &MI);
 
               MFOnDemand->setCrashOrder(MF.getCrashOrder() + 1);
+              // If parameter is tainted, run analysis from the function entry
+              // point (forward), to the point where the parameter value is set.
               if (runFwAnalysis) {
                 printTaintList(TL_Of_Call);
                 forwardMFAnalysis(BM, *MFOnDemand, TaintDFG,
                                   levelOfCalledFn + 1, &TL_Of_Call, &MI);
+                // If there is a Taint left after the forward analysis, run
+                // backward analysis for the same TaintList. (ex. one parameter
+                // sets the value of another)
                 if (!TL_Of_Call.empty()) {
                   printTaintList(TL_Of_Call);
                   runOnBlameMF(BM, *MFOnDemand, TaintDFG, true,
@@ -1580,7 +1612,7 @@ bool crash_analyzer::TaintAnalysis::runOnBlameMF(
       if (!TaintResult)
         Result = true;
     }
-    // Consider updating TL_Of_Caller to be available in the parent call?
+    // Update TL_Of_Caller to be available in the parent call.
     if (CalleeNotInBT)
       mergeTaintList(*TL_Of_Caller, TL_Mbb);
   }

@@ -11,11 +11,10 @@
 # return 0;
 #}
 
-# XFAIL: *
 # RUN: %llvm-crash-analyzer-ta %s | FileCheck %s
 # CHECK: Blame Function is foo
 
-# Currently, we do not analyze function calls with tainted parameters 
+# Analyze function calls with tainted parameters.
 
 --- |
   ; ModuleID = 'a.out'
