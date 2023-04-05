@@ -404,6 +404,115 @@ void llvm::crash_analyzer::TaintAnalysis::removeFromTaintList(
   llvm_unreachable("Operand not in Taint List");
 }
 
+// Find the instruction, which loaded parameter value in the register location.
+const MachineInstr *crash_analyzer::TaintAnalysis::findParamLoadingInstr(
+    TaintInfo &Ti, const MachineInstr *CallMI) {
+  MachineInstr *MI = nullptr;
+  if (!CallMI)
+    return nullptr;
+  auto *MBB = CallMI->getParent();
+  auto *MF = CallMI->getMF();
+  auto TII = MF->getSubtarget().getInstrInfo();
+  // Skip the call instruction.
+  auto I = std::next(CallMI->getReverseIterator());
+  // Search for an instruction, which loads parameter value in register(Ti) in
+  // the same MBB.
+  for (; I != MBB->rend(); ++I) {
+    // We stop the search at the new call site.
+    if (I->isCall())
+      break;
+    auto DestSrc = TII->getDestAndSrc(*I);
+    if (!DestSrc)
+      continue;
+
+    TaintInfo DestTi;
+    DestTi.Op = DestSrc->Destination;
+    DestTi.Offset = DestSrc->DestOffset;
+    if (DestTi.Offset)
+      calculateMemAddr(DestTi);
+    // Compare loded value (DestTi) to the register.
+    if (DestTi == Ti)
+      return &*I;
+  }
+  return MI;
+}
+
+// Return true, if any parameter forwarding register location is tainted.
+// Add tainted parameters to the TaintList (TL_Of_Caller), which will be used
+// during forward TaintAnalysis of the called function.
+bool crash_analyzer::TaintAnalysis::areParamsTainted(
+    const MachineInstr *CallMI, SmallVectorImpl<TaintInfo> &TL,
+    SmallVectorImpl<TaintInfo> *TL_Of_Caller, TaintDataFlowGraph &TaintDFG,
+    RegisterEquivalence &REAnalysis) {
+  auto CATI = getCATargetInfoInstance();
+  const MachineFunction *MF = CallMI->getMF();
+
+  bool Tainted = false;
+
+  // Search the parameter forwarding registers.
+  // TODO: Add support for parameters forwarded via stack.
+  auto RegMap = CATI->getWholeRegMap();
+  for (auto regTuple : RegMap) {
+    std::string LargestRegName = std::get<0>(regTuple.second);
+    if (!CATI->isParamFwdRegister(LargestRegName))
+      continue;
+    // Get unsigned identifier from Reg name.
+    auto OptReg = CATI->getRegister(LargestRegName, CallMI);
+    unsigned Reg = OptReg ? *OptReg : 0;
+
+    // Create a TaintInfo for param forwarding register.
+    TaintInfo Ti;
+    MachineOperand MOp = MachineOperand::CreateReg(MCRegister(Reg), false);
+    MOp.setParent(const_cast<MachineInstr *>(CallMI));
+    Ti.Op = new MachineOperand(MOp);
+
+    // Check if the register (parameter) is tainted.
+    auto Taint = isTainted(Ti, TL, &REAnalysis, CallMI);
+    if (Taint.Op == nullptr)
+      continue;
+
+    // FIXME: Confirm that the param is a reference?
+    if (Taint.DerefLevel >= 0)
+      continue;
+
+    Tainted = true;
+
+    // FIXME: Should we update deref level for Ti?
+    Ti.DerefLevel = Taint.DerefLevel;
+
+    // Add param forwarding reg to the Caller's TL.
+    if (addToTaintList(Ti, *TL_Of_Caller)) {
+      // For now use CallMI for param forwarding node.
+      auto LoadMI = findParamLoadingInstr(Ti, CallMI);
+      Node *newNode = new Node(MF->getCrashOrder(), LoadMI, Ti, false);
+      if (CallMI)
+        newNode->CallMI = CallMI;
+      std::shared_ptr<Node> newTaintNode(newNode);
+      // TODO: Check if this should be a deref edge:
+      //       if we propagate taint from a mem addr (e.g. rbx + 10)
+      //       to its base reg (e.g. rbx).
+      assert(TaintDFG.lastTaintedNode.count(Taint.Op) &&
+             "Taint Op must be reached already");
+      auto &LastTaintedNodeForTheOp = TaintDFG.lastTaintedNode[Taint.Op];
+      // Set new node depth.
+      newTaintNode->Depth = LastTaintedNodeForTheOp->Depth + 1;
+
+      if (LastTaintedNodeForTheOp->TaintOp.Op->isReg() &&
+          LastTaintedNodeForTheOp->TaintOp.Offset &&
+          newTaintNode->TaintOp.Op->isReg() &&
+          (LastTaintedNodeForTheOp->TaintOp.Op->getReg() ==
+           newTaintNode->TaintOp.Op->getReg()))
+        TaintDFG.addEdge(LastTaintedNodeForTheOp, newTaintNode,
+                         EdgeType::Dereference);
+      else
+        TaintDFG.addEdge(LastTaintedNodeForTheOp, newTaintNode);
+      TaintDFG.updateLastTaintedNode(Ti.Op, newTaintNode);
+    }
+  }
+
+  return Tainted;
+}
+
 // Return true if rax register, that stores the return value
 // of a function call is present in the taint list.
 // Also, if a global variable is tainted, we are interested
@@ -435,7 +544,7 @@ TaintInfo crash_analyzer::TaintAnalysis::isTainted(
   Empty_op.Op = nullptr;
   Empty_op.Offset = 0;
 
-  unsigned OffsetOp = 0;
+  int64_t OffsetOp = 0;
   if (Op.Offset)
     OffsetOp = *Op.Offset;
 
@@ -446,7 +555,7 @@ TaintInfo crash_analyzer::TaintAnalysis::isTainted(
       if (itr->Op->isReg() && Op.Op->isReg() &&
           Op.Op->getReg() != itr->Op->getReg() &&
           MI != &*MI->getParent()->begin()) {
-        unsigned OffsetCurrOp = 0;
+        int64_t OffsetCurrOp = 0;
         if (itr->Offset)
           OffsetCurrOp = *itr->Offset;
         if (REAnalysis->isEquivalent(

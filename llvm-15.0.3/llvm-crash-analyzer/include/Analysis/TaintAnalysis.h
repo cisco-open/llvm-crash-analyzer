@@ -121,6 +121,13 @@ public:
   void printTaintList2(SmallVectorImpl<TaintInfo> &TL);
   void printDestSrcInfo(DestSourcePair &DS, const MachineInstr &MI);
   bool shouldAnalyzeCall(SmallVectorImpl<TaintInfo> &TL);
+  bool areParamsTainted(const MachineInstr *CallMI,
+                        SmallVectorImpl<TaintInfo> &TL,
+                        SmallVectorImpl<TaintInfo> *TL_Of_Caller,
+                        TaintDataFlowGraph &TaintDFG,
+                        RegisterEquivalence &REAnalysis);
+  const MachineInstr *findParamLoadingInstr(TaintInfo &Ti,
+                                            const MachineInstr *CallMI);
   TaintInfo isTainted(TaintInfo &Op, SmallVectorImpl<TaintInfo> &TL,
                       RegisterEquivalence *REAnalysis = nullptr,
                       const MachineInstr *MI = nullptr);

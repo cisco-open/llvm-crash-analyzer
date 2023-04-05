@@ -90,6 +90,7 @@ public:
   bool applyRegisterCopy(MachineInstr &MI);
   bool applyLoad(MachineInstr &MI);
   bool applyStore(MachineInstr &MI);
+  bool applyArithInstr(MachineInstr &MI);
   bool applyCall(MachineInstr &MI);
   bool applyRegDef(MachineInstr &MI);
 
