@@ -131,12 +131,12 @@ void TaintDataFlowGraph::findBlameFunction(Node *v) {
             auto &BlameNodes = blameNodes[MaxLevel];
             for (unsigned i = 0; i < BlameNodes.size(); i++) {
               auto &a = BlameNodes[i];
+              // Do not erase potential blame nodes.
+              if (a->TaintOp.DerefLevel == 0 && a->IsContant)
+                break;
               if (a->MI->getParent() == adjNode->MI->getParent() &&
                   !a->CallMI && !adjNode->CallMI) {
                 if (MDT->dominates(adjNode->MI, a->MI)) {
-                  // Do not erase potential blame nodes.
-                  if (a->TaintOp.DerefLevel == 0 && a->IsContant)
-                    break;
                   BlameNodes.erase(BlameNodes.begin() + i);
                   break;
                 }
@@ -144,9 +144,6 @@ void TaintDataFlowGraph::findBlameFunction(Node *v) {
                 MDT = dominators[a->CallMI->getMF()];
                 if (a->CallMI->getParent() == adjNode->MI->getParent()) {
                   if (MDT->dominates(adjNode->MI, a->CallMI)) {
-                    // Do not erase potential blame nodes.
-                    if (a->TaintOp.DerefLevel == 0 && a->IsContant)
-                      break;
                     BlameNodes.erase(BlameNodes.begin() + i);
                     break;
                   }
@@ -155,9 +152,6 @@ void TaintDataFlowGraph::findBlameFunction(Node *v) {
                 MDT = dominators[adjNode->CallMI->getMF()];
                 if (a->MI->getParent() == adjNode->CallMI->getParent()) {
                   if (MDT->dominates(adjNode->CallMI, a->MI)) {
-                    // Do not erase potential blame nodes.
-                    if (a->TaintOp.DerefLevel == 0 && a->IsContant)
-                      break;
                     BlameNodes.erase(BlameNodes.begin() + i);
                     break;
                   }
@@ -168,9 +162,6 @@ void TaintDataFlowGraph::findBlameFunction(Node *v) {
                     a->CallMI->getParent() == adjNode->CallMI->getParent()) {
                   MDT = dominators[adjNode->CallMI->getMF()];
                   if (MDT->dominates(adjNode->CallMI, a->CallMI)) {
-                    // Do not erase potential blame nodes.
-                    if (a->TaintOp.DerefLevel == 0 && a->IsContant)
-                      break;
                     BlameNodes.erase(BlameNodes.begin() + i);
                     break;
                   }

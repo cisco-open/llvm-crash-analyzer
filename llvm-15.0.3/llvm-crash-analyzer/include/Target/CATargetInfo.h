@@ -75,8 +75,8 @@ public:
     return const_cast<RegAliasTuple &>(RegMap.at(Id));
   }
 
-  // Get RegAliasTuple from the RegMap with selected Id.
-  std::unordered_map<unsigned, RegAliasTuple> getWholeRegMap() const {
+  // Get whole RegMap.
+  const std::unordered_map<unsigned, RegAliasTuple> &getWholeRegMap() const {
     return RegMap;
   }
 
