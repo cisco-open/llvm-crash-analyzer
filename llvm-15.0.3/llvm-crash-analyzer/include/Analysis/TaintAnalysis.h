@@ -139,6 +139,17 @@ public:
                         RegisterEquivalence &REAnalysis);
   const MachineInstr *findParamLoadingInstr(TaintInfo &Ti,
                                             const MachineInstr *CallMI);
+  void transformBPtoSPTaints(const MachineFunction &MF,
+                             TaintDataFlowGraph &TaintDFG,
+                             SmallVectorImpl<TaintInfo> &TL);
+  void transformSPtoBPTaints(const MachineFunction &MF,
+                             TaintDataFlowGraph &TaintDFG,
+                             SmallVectorImpl<TaintInfo> &TL);
+  bool isStackSlotTainted(const MachineInstr *CallMI,
+                          SmallVectorImpl<TaintInfo> &TL,
+                          SmallVectorImpl<TaintInfo> *TL_Of_Caller,
+                          TaintDataFlowGraph &TaintDFG,
+                          RegisterEquivalence *REAnalysis);
   TaintInfo isTainted(TaintInfo &Op, SmallVectorImpl<TaintInfo> &TL,
                       RegisterEquivalence *REAnalysis = nullptr,
                       const MachineInstr *MI = nullptr);

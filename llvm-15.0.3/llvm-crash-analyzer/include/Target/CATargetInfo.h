@@ -109,8 +109,17 @@ public:
   // Return name of the Program Counter Register.
   virtual Optional<std::string> getPC() const = 0;
 
+  // Return name of the Base Pointer Register.
+  virtual Optional<std::string> getBP() const = 0;
+
+  // Return name of the Stack Pointer Register.
+  virtual Optional<std::string> getSP() const = 0;
+
   // Return true if the register is Stack Pointer Register.
   virtual bool isSPRegister(std::string RegName) const = 0;
+
+  // Return SP adjustment to BP in the callee.
+  virtual int64_t getSPAdjust() const = 0;
 
   // Return true if the register is Base Pointer Register.
   virtual bool isBPRegister(std::string RegName) const = 0;
@@ -148,7 +157,14 @@ public:
 
   Optional<std::string> getPC() const override;
 
+  Optional<std::string> getBP() const override;
+
+  Optional<std::string> getSP() const override;
+
   bool isSPRegister(std::string RegName) const override;
+
+  // Return SP adjustment to BP in the callee.
+  int64_t getSPAdjust() const override;
 
   bool isBPRegister(std::string RegName) const override;
 

@@ -146,11 +146,44 @@ Optional<std::string> X86CATargetInfo::getPC() const {
   }
 }
 
+Optional<std::string> X86CATargetInfo::getBP() const {
+  switch (TT->getArch()) {
+  case Triple::x86_64:
+    return static_cast<std::string>("rbp");
+  case Triple::x86:
+    return static_cast<std::string>("ebp");
+  default:
+    return llvm::None;
+  }
+}
+
+Optional<std::string> X86CATargetInfo::getSP() const {
+  switch (TT->getArch()) {
+  case Triple::x86_64:
+    return static_cast<std::string>("rsp");
+  case Triple::x86:
+    return static_cast<std::string>("esp");
+  default:
+    return llvm::None;
+  }
+}
+
 bool X86CATargetInfo::isSPRegister(std::string RegName) const {
   if (RegName == "rsp" || RegName == "esp" || RegName == "sp" ||
       RegName == "spl")
     return true;
   return false;
+}
+
+int64_t X86CATargetInfo::getSPAdjust() const {
+  switch (TT->getArch()) {
+  case Triple::x86_64:
+    return 16;
+  case Triple::x86:
+    return 8;
+  default:
+    return 0;
+  }
 }
 
 bool X86CATargetInfo::isBPRegister(std::string RegName) const {

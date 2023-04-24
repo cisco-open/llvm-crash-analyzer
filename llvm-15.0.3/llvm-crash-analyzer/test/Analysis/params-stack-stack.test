@@ -1,0 +1,43 @@
+## // clang -g -O0 m.c -o m
+## void crash(int val, int* adr){
+##   *adr = val; // crash
+## }
+##
+## void blame(int** adr, int* k){
+##   *adr = k; // wrong blame - line 7
+## }
+##
+## void fun(int a, int b, int c, int d, int e, int f, int** ptr, int* val)
+## {
+##    blame(ptr, val);
+## }
+##
+## int main(){
+##   int x = 0;
+##   int y = 1;
+##   int z = 2;
+##   int k = 3; // correct blame - line 19
+##   int l = 4;
+##   int m = 5;
+##   int *p = 0; // wrong blame - line 22
+##   fun(x, y, z, k, l, m, &p, k);
+##   crash(1, p);
+##   return 0;
+## }
+
+## In this case, we test TaintAnalysis of functions out of the backtrace, where
+## parameters are tainted (references to the tainted location) and are forwarded
+## via stack.
+
+
+# RUN: %llvm-crash-analyzer --print-potential-crash-cause-loc --debug-only=taint-dfg \
+# RUN: --core-file=%S/Inputs/core.params-stack-stack %S/Inputs/params-stack-stack.out < %s 2>&1 | FileCheck %s
+
+# CHECK: Blame Nodes:
+# CHECK-NEXT: !20{2; MOV32mi $rbp, 1, $noreg, -20, $noreg, 3; CONSTANT: 3; DEREF-LVL: 0}
+# CHECK-NEXT: Blame line: 19
+# CHECK-NEXT: !19{2; MOV64mi32 $rbp, 1, $noreg, -40, $noreg, 0; CONSTANT: 0; DEREF-LVL: 0}
+# CHECK-NEXT: Blame line: 22
+
+# CHECK: Blame Function is main
+# CHECK-NEXT: From File {{.*}}/m.c:19:7
