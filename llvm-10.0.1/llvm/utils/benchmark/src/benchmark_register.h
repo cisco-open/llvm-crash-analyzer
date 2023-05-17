@@ -5,6 +5,9 @@
 
 #include "check.h"
 
+//Added
+#include <limits>
+
 template <typename T>
 void AddRange(std::vector<T>* dst, T lo, T hi, int mult) {
   CHECK_GE(lo, 0);
