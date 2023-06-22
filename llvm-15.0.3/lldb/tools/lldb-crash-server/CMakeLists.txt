@@ -1,6 +1,6 @@
 set(LLVM_TARGET_DEFINITIONS LLGSOptions.td)
 tablegen(LLVM LLGSOptions.inc -gen-opt-parser-defs)
-add_public_tablegen_target(LLGSOptionsTableGen)
+add_public_tablegen_target(LLCSOptionsTableGen)
 set_target_properties(LLGSOptionsTableGen PROPERTIES FOLDER "lldb misc")
 
 set(LLDB_PLUGINS)
@@ -37,7 +37,7 @@ if(APPLE_EMBEDDED)
   endif()
 endif()
 
-add_lldb_tool(lldb-server
+add_lldb_tool(lldb-crash-server
     Acceptor.cpp
     lldb-gdbserver.cpp
     lldb-platform.cpp
@@ -54,15 +54,16 @@ add_lldb_tool(lldb-server
       lldbPluginInstructionMIPS
       lldbPluginInstructionMIPS64
       ${LLDB_SYSTEM_LIBS}
+      liblldb
 
     LINK_COMPONENTS
       Option
       Support
 )
 
-add_dependencies(lldb-server
+add_dependencies(lldb-crash-server
   LLGSOptionsTableGen
   ${tablegen_deps}
 )
-target_include_directories(lldb-server PRIVATE "${LLDB_SOURCE_DIR}/source")
-target_link_libraries(lldb-server PRIVATE ${LLDB_SYSTEM_LIBS})
+target_include_directories(lldb-crash-server PRIVATE "${LLDB_SOURCE_DIR}/source")
+target_link_libraries(lldb-crash-server PRIVATE ${LLDB_SYSTEM_LIBS})

@@ -20,4 +20,5 @@ endif()
 
 if (LLDB_CAN_USE_LLDB_SERVER)
   add_lldb_tool_subdirectory(lldb-server)
+  add_lldb_tool_subdirectory(lldb-crash-server)
 endif()
