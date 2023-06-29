@@ -44,6 +44,8 @@ add_lldb_tool(lldb-crash-server
     lldb-server.cpp
     LLDBServerUtilities.cpp
     SystemInitializerLLGS.cpp
+    CoreGDBRemote.cpp
+    GDBRemoteCommunicationServerCS.cpp
 
     LINK_LIBS
       lldbHost

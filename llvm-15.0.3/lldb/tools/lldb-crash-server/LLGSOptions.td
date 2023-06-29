@@ -44,6 +44,22 @@ def setsid: F<"setsid">, HelpText<"Run lldb-server in a new session.">,
 def: Flag<["-"], "S">, Alias<setsid>,
   Group<grp_general>;
 
+defm core_file: SJ<"core-file", "The core file to analyse.">,
+  MetaVarName<"<path-to-corefile>">,
+  Group<grp_general>;
+
+defm sysroot: SJ<"sysroot", "system root path.">,
+  MetaVarName<"<sysroot>">,
+  Group<grp_general>;
+
+defm module_path: SJ<"module-path", "module path.">,
+  MetaVarName<"<module-path>">,
+  Group<grp_general>;
+
+defm solib_path: SJ<"solib-path", "solib path.">,
+  MetaVarName<"<solib-path>">,
+  Group<grp_general>;
+
 def help: F<"help">, HelpText<"Prints out the usage information for lldb-server.">,
   Group<grp_general>;
 def: Flag<["-"], "h">, Alias<help>,

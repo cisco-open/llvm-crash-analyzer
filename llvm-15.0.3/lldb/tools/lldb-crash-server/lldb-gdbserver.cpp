@@ -36,6 +36,9 @@
 #include "llvm/Support/Errno.h"
 #include "llvm/Support/WithColor.h"
 
+#include "GDBRemoteCommunicationServerCS.h"
+#include "CoreGDBRemote.h"
+
 #if defined(__linux__)
 #include "Plugins/Process/Linux/NativeProcessLinux.h"
 #elif defined(__FreeBSD__)
@@ -59,6 +62,7 @@ using namespace lldb;
 using namespace lldb_private;
 using namespace lldb_private::lldb_server;
 using namespace lldb_private::process_gdb_remote;
+using namespace lldb::crash_analyzer;
 
 namespace {
 #if defined(__linux__)
@@ -135,6 +139,21 @@ void handle_attach(GDBRemoteCommunicationServerLLGS &gdb_server,
     handle_attach_to_pid(gdb_server, static_cast<lldb::pid_t>(pid));
   else
     handle_attach_to_process_name(gdb_server, attach_target);
+}
+
+void handle_core(GDBRemoteCommunicationServerLLCS &gdb_server,
+                   const std::string &core_file,
+		   const std::string &sysroot,
+		   const std::string &module_path,
+                   const std::string solib_path,
+		   llvm::ArrayRef<llvm::StringRef> Arguments) {
+  Status error = gdb_server.ReadCoreFile(core_file, sysroot, module_path,
+		                         solib_path, Arguments);
+  if (error.Fail()) {
+     fprintf(stderr, "Failed to read core file %s - %s\n",
+	     core_file.c_str(), error.AsCString());
+     exit(1);
+  }
 }
 
 void handle_launch(GDBRemoteCommunicationServerLLGS &gdb_server,
@@ -334,6 +353,10 @@ int main_gdbserver(int argc, char *argv[]) {
   std::string attach_target;
   std::string named_pipe_path;
   std::string log_file;
+  std::string core_file;
+  std::string sysroot;
+  std::string module_path;
+  std::string solib_path;
   StringRef
       log_channels; // e.g. "lldb process threads:gdb-remote default:linux all"
   lldb::pipe_t unnamed_pipe = LLDB_INVALID_PIPE;
@@ -395,6 +418,10 @@ int main_gdbserver(int argc, char *argv[]) {
   named_pipe_path = Args.getLastArgValue(OPT_named_pipe).str();
   reverse_connect = Args.hasArg(OPT_reverse_connect);
   attach_target = Args.getLastArgValue(OPT_attach).str();
+  core_file = Args.getLastArgValue(OPT_core_file).str();
+  sysroot = Args.getLastArgValue(OPT_sysroot).str();
+  module_path = Args.getLastArgValue(OPT_module_path).str();
+  solib_path = Args.getLastArgValue(OPT_solib_path).str();
   if (Args.hasArg(OPT_pipe)) {
     uint64_t Arg;
     if (!llvm::to_integer(Args.getLastArgValue(OPT_pipe), Arg)) {
@@ -406,6 +433,14 @@ int main_gdbserver(int argc, char *argv[]) {
   if (Args.hasArg(OPT_fd)) {
     if (!llvm::to_integer(Args.getLastArgValue(OPT_fd), connection_fd)) {
       WithColor::error() << "invalid '--fd' argument\n" << HelpText;
+      return 1;
+    }
+  }
+  if (Args.hasArg(OPT_sysroot) || Args.hasArg(OPT_module_path) ||
+      Args.hasArg(OPT_solib_path)) {
+    if (!Args.hasArg(OPT_core_file)) {
+      WithColor::error() << 
+	       "Invalid use of sysroot/module_path/solib_path.\n" << HelpText;
       return 1;
     }
   }
@@ -429,7 +464,7 @@ int main_gdbserver(int argc, char *argv[]) {
   }
 
   NativeProcessFactory factory;
-  GDBRemoteCommunicationServerLLGS gdb_server(mainloop, factory);
+  GDBRemoteCommunicationServerLLCS gdb_server(mainloop, factory);
 
   llvm::StringRef host_and_port;
   if (!Inputs.empty()) {
@@ -446,6 +481,9 @@ int main_gdbserver(int argc, char *argv[]) {
   // explicitly asked to attach with the --attach={pid|program_name} form.
   if (!attach_target.empty())
     handle_attach(gdb_server, attach_target);
+  else if (!core_file.empty())
+    handle_core(gdb_server, core_file, sysroot, module_path,
+                solib_path, Inputs);
   else if (!Inputs.empty())
     handle_launch(gdb_server, Inputs);
 
