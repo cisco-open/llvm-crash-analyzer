@@ -10,7 +10,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "CoreGDBRemote.h"
+#include "CoreFile.h"
 
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Debug.h"

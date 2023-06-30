@@ -37,7 +37,7 @@
 #include "llvm/Support/WithColor.h"
 
 #include "GDBRemoteCommunicationServerCS.h"
-#include "CoreGDBRemote.h"
+#include "CoreFile.h"
 
 #if defined(__linux__)
 #include "Plugins/Process/Linux/NativeProcessLinux.h"

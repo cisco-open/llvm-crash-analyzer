@@ -9,7 +9,7 @@
 #define LLDB_TOOLS_LLDB_SERVER_GDBREMOTECOMMUNICATIONSERVERCS_H
 
 #include "Plugins/Process/gdb-remote/GDBRemoteCommunicationServerLLGS.h"
-#include "CoreGDBRemote.h"
+#include "CoreFile.h"
 
 namespace lldb_private {
 
