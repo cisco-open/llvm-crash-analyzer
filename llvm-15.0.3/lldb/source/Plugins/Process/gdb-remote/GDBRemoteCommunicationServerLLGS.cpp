@@ -4243,6 +4243,9 @@ std::vector<std::string> GDBRemoteCommunicationServerLLGS::HandleFeatures(
   for (llvm::StringRef x : client_features)
     m_extensions_supported |=
         llvm::StringSwitch<Extension>(x)
+            // GDB client sends multiprocess feature as
+            // "qSupported:multiprocess+".
+            .Case("qSupported:multiprocess+", Extension::multiprocess)
             .Case("multiprocess+", Extension::multiprocess)
             .Case("fork-events+", Extension::fork)
             .Case("vfork-events+", Extension::vfork)
