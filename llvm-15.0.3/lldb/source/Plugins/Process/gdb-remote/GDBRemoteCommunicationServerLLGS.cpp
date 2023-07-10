@@ -2123,6 +2123,11 @@ GDBRemoteCommunicationServerLLGS::Handle_g(StringExtractorGDBRemote &packet) {
   NativeRegisterContext &reg_ctx = thread->GetRegisterContext();
 
   std::vector<uint8_t> regs_buffer;
+  // Calculate next register offset in 'g' packet manually to match GDB.
+  uint64_t next_reg_offset = 0;
+  // Omit unsupported registers, with regnum greater then 23.
+  // Those registers are not used by crash-analyzer at this point.
+  const uint32_t unsupported_regs = 23;
   for (uint32_t reg_num = 0; reg_num < reg_ctx.GetUserRegisterCount();
        ++reg_num) {
     const RegisterInfo *reg_info = reg_ctx.GetRegisterInfoAtIndex(reg_num);
@@ -2143,20 +2148,44 @@ GDBRemoteCommunicationServerLLGS::Handle_g(StringExtractorGDBRemote &packet) {
       return SendErrorResponse(0x15);
     }
 
-    if (reg_info->byte_offset + reg_info->byte_size >= regs_buffer.size())
+    // Write selected number of zero bytes into 'g' packet buffer.
+    auto fillWithZeros = [&](unsigned size) {
       // Resize the buffer to guarantee it can store the register offsetted
       // data.
-      regs_buffer.resize(reg_info->byte_offset + reg_info->byte_size);
+      if (next_reg_offset + size >= regs_buffer.size())
+        regs_buffer.resize(next_reg_offset + size);
 
-    // Copy the register offsetted data to the buffer.
-    memcpy(regs_buffer.data() + reg_info->byte_offset, reg_value.GetBytes(),
+      // Fill byte by byte (size) with zeros.
+      RegisterValue zero_reg_value((uint8_t)0);
+      for (unsigned i = 0; i < size; ++i) {
+        memcpy(regs_buffer.data() + next_reg_offset, zero_reg_value.GetBytes(),
+               1);
+        next_reg_offset += 1;
+      }
+    };
+
+    // Fill remaining 'g' packet bytes with zeros to match 560 bytes expected by
+    // GDB.
+    if (reg_num == unsupported_regs) {
+      unsigned g_packet_size = 560;
+      fillWithZeros(g_packet_size - next_reg_offset);
+      break;
+    }
+
+    // Calculate next register offset as previous plus size.
+    if (next_reg_offset + reg_info->byte_size >= regs_buffer.size())
+      // Resize the buffer to guarantee it can store the register offsetted
+      // data.
+      regs_buffer.resize(next_reg_offset + reg_info->byte_size);
+    memcpy(regs_buffer.data() + next_reg_offset, reg_value.GetBytes(),
            reg_info->byte_size);
+
+    next_reg_offset += reg_info->byte_size;
   }
 
   // Write the response.
   StreamGDBRemote response;
   response.PutBytesAsRawHex8(regs_buffer.data(), regs_buffer.size());
-
   return SendPacketNoLock(response.GetString());
 }
 
@@ -4214,6 +4243,9 @@ std::vector<std::string> GDBRemoteCommunicationServerLLGS::HandleFeatures(
   for (llvm::StringRef x : client_features)
     m_extensions_supported |=
         llvm::StringSwitch<Extension>(x)
+            // GDB client sends multiprocess feature as
+            // "qSupported:multiprocess+".
+            .Case("qSupported:multiprocess+", Extension::multiprocess)
             .Case("multiprocess+", Extension::multiprocess)
             .Case("fork-events+", Extension::fork)
             .Case("vfork-events+", Extension::vfork)
