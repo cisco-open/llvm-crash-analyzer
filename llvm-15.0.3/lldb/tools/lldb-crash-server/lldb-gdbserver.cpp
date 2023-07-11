@@ -481,11 +481,14 @@ int main_gdbserver(int argc, char *argv[]) {
   // explicitly asked to attach with the --attach={pid|program_name} form.
   if (!attach_target.empty())
     handle_attach(gdb_server, attach_target);
-  else if (!core_file.empty())
-    handle_core(gdb_server, core_file, sysroot, module_path,
-                solib_path, Inputs);
   else if (!Inputs.empty())
     handle_launch(gdb_server, Inputs);
+
+  // TODO: If debuggee process is launched, try to set the target execution
+  // context, with the information from the core-file.
+  if (!core_file.empty())
+    handle_core(gdb_server, core_file, sysroot, module_path, solib_path,
+                Inputs);
 
   // Print version info.
   printf("%s-%s\n", LLGS_PROGRAM_NAME, LLGS_VERSION_STR);
