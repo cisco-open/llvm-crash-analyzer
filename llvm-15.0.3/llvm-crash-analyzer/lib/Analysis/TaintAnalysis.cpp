@@ -50,6 +50,13 @@ static cl::opt<unsigned>
                     cl::desc("Set frame to start tracking target taint info."),
                     cl::value_desc("start_crash_order"), cl::init(0));
 
+static cl::opt<std::string>
+    TestChangedAdressValues("test-changed-address-values",
+                            cl::desc("Test taint-analysis with changed values in address."),
+                            cl::value_desc("<changed_adress,changed_value>..."),
+                            cl::init("")
+                            );
+
 using namespace llvm;
 
 #define DEBUG_TYPE "taint-analysis"
@@ -57,6 +64,8 @@ using namespace llvm;
 using TaintInfo = llvm::crash_analyzer::TaintInfo;
 
 unsigned Node::NextID = 0;
+
+std::map<uint64_t, uint64_t> ChangedAdressValues;
 
 // New implementation of operator==.
 bool llvm::crash_analyzer::operator==(const TaintInfo &T1,
@@ -217,11 +226,56 @@ void crash_analyzer::TaintInfo::propagateDerefLevel(const MachineInstr &MI) {
     --DerefLevel;
 }
 
+bool is_number(const std::string& s)
+{
+    return !s.empty() && std::find_if(s.begin(), s.end(), [](unsigned char c) {return !std::isdigit(c);}) == s.end();
+}
+
 crash_analyzer::TaintAnalysis::TaintAnalysis(
     StringRef TaintDotFileName, StringRef MirDotFileName,
     bool PrintPotentialCrashCauseLocation)
     : TaintDotFileName(TaintDotFileName), MirDotFileName(MirDotFileName),
-      PrintPotentialCrashCauseLocation(PrintPotentialCrashCauseLocation) {}
+      PrintPotentialCrashCauseLocation(PrintPotentialCrashCauseLocation) {
+        if(TestChangedAdressValues != "")
+        {
+        //not checking if number is too large
+          int Start = 0;
+          int End = -1;
+
+          do
+          {
+              Start = End + 1;
+              End = TestChangedAdressValues.find(",", Start);
+              if(!is_number(TestChangedAdressValues.substr(Start, End - Start)))
+              {
+                  // std::cout << stringToTokenize.substr(start, end - start) << " is not a number!" << std::endl;
+                  LLVM_DEBUG(dbgs() << TestChangedAdressValues.substr(Start, End - Start) << " adr is not a number!\n");
+                  break;
+              }
+
+              uint64_t Adr = std::stol(TestChangedAdressValues.substr(Start,End - Start));
+              if(End == -1)
+              { 
+                LLVM_DEBUG(dbgs() << "No value for adr " << Adr << "!\n");
+                break;
+              }
+              Start = End + 1;
+              End = TestChangedAdressValues.find(",", Start);
+              if(!is_number(TestChangedAdressValues.substr(Start, End - Start)))
+              {
+                  LLVM_DEBUG(dbgs() << TestChangedAdressValues.substr(Start, End - Start) << " val is not a number!\n");
+                  break;
+              }
+
+              uint64_t Val = std::stol(TestChangedAdressValues.substr(Start, End - Start));
+
+              ChangedAdressValues[Adr] = Val;
+
+          }while(End != -1);
+
+
+        }
+      }
 
 void crash_analyzer::TaintAnalysis::calculateMemAddr(TaintInfo &Ti) {
   if (!Ti.Op->isReg() || !Ti.Offset)
@@ -304,6 +358,11 @@ void crash_analyzer::TaintAnalysis::calculateMemAddr(TaintInfo &Ti) {
           lldb::SBError err;
           Val = Dec->getTarget()->GetProcess().ReadUnsignedFromMemory(AddrValue,
                                                                       8, err);
+
+          int x = 0;
+          x = x + 8;
+
+          if(ChangedAdressValues.count(AddrValue)) Val = ChangedAdressValues[AddrValue];
         }
         Val += *Ti.Offset;
         Ti.ConcreteMemoryAddress = Val;
