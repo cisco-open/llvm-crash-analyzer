@@ -10,6 +10,7 @@ llvm_add_library(CrashAnalyzerTaintAnalysis
   RegisterEquivalence.cpp
   TaintAnalysis.cpp
   TaintDataFlowGraph.cpp
+  MemoryWrapper.cpp
   DEPENDS
     intrinsics_gen
     CrashAnalyzerDecompiler

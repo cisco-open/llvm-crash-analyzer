@@ -50,6 +50,7 @@ static cl::opt<unsigned>
                     cl::desc("Set frame to start tracking target taint info."),
                     cl::value_desc("start_crash_order"), cl::init(0));
 
+// Ukini
 static cl::opt<std::string>
     TestChangedAdressValues("test-changed-address-values",
                             cl::desc("Test taint-analysis with changed values in address."),
@@ -65,7 +66,6 @@ using TaintInfo = llvm::crash_analyzer::TaintInfo;
 
 unsigned Node::NextID = 0;
 
-std::map<uint64_t, uint64_t> ChangedAdressValues;
 
 // New implementation of operator==.
 bool llvm::crash_analyzer::operator==(const TaintInfo &T1,
@@ -269,7 +269,8 @@ crash_analyzer::TaintAnalysis::TaintAnalysis(
 
               uint64_t Val = std::stol(TestChangedAdressValues.substr(Start, End - Start));
 
-              ChangedAdressValues[Adr] = Val;
+              lldb::SBError err;
+              MemWrapper.WriteMemory(Adr, &Val, 8, err);
 
           }while(End != -1);
 
@@ -356,13 +357,11 @@ void crash_analyzer::TaintAnalysis::calculateMemAddr(TaintInfo &Ti) {
           if (!Dec || !Dec->getTarget())
             break;
           lldb::SBError err;
-          Val = Dec->getTarget()->GetProcess().ReadUnsignedFromMemory(AddrValue,
-                                                                      8, err);
+          Optional<uint64_t> ValOptional = MemWrapper.ReadUnsignedFromMemory(AddrValue, 8, err);
+          if(!ValOptional.hasValue()) break;
 
-          int x = 0;
-          x = x + 8;
+          Val = *ValOptional;
 
-          if(ChangedAdressValues.count(AddrValue)) Val = ChangedAdressValues[AddrValue];
         }
         Val += *Ti.Offset;
         Ti.ConcreteMemoryAddress = Val;
@@ -643,6 +642,7 @@ bool crash_analyzer::TaintAnalysis::getIsCrashAnalyzerTATool() const {
 void crash_analyzer::TaintAnalysis::setDecompiler(
     crash_analyzer::Decompiler *D) {
   Dec = D;
+  MemWrapper.setDecompiler(D);
 }
 Decompiler *crash_analyzer::TaintAnalysis::getDecompiler() const { return Dec; }
 
