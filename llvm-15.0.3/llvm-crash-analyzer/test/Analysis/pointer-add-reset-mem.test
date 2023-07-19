@@ -1,0 +1,40 @@
+##include <iostream>
+#
+#void h(int* x)
+#{
+#    *x = 4;
+#}
+#
+#void g(int* x)
+#{
+#    h(x);
+#}
+#
+#void f()
+#{
+#    int x = 3;
+#    int y = 4;
+#    x = x + y;
+#    int* py = &y;
+#    int* px = &x;
+#    int** ppx = &px;
+#    *ppx = nullptr;
+#    ppx = ppx + 1;
+#    g(px);
+#}
+#
+#int main()
+#{
+#    f();
+#    return 0;
+#}
+
+# RUN: %llvm-crash-analyzer --core-file=%S/Inputs/core.pointer-add-reset-mem \
+# RUN: %S/Inputs/pointer-add-reset-mem --print-potential-crash-cause-loc \
+# RUN: --debug-only=mem-wrapper 2>&1 | FileCheck %s
+
+# CHECK: Invalidating location: 0x00007fffa1b164e0, byte_size: 8
+# CHECK: Writing location: 0x00007fffa1b164e0 : 0x00007fffa1b164e8, byte_size: 8
+# CHECK: Addressing valid location: 0x00007fffa1b164e0 : 0x00007fffa1b164e8, byte_size: 8
+# CHECK: Blame Function is f()
+# CHECK-NEXT: From File {{.+}}:21:10

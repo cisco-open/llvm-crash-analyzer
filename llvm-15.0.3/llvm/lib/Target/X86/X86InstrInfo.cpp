@@ -1153,14 +1153,33 @@ X86InstrInfo::getDestAndSrc(const MachineInstr &MI) const {
     // TODO: for DIV -- within operand(2) is the remainder.
     return DestSourcePair{*Dest, *Src};
   }
-  case X86::POP64r:
-  case X86::PUSH64r: {
+  case X86::POP64r: {
     /* FIXME: This needs to be handled appropriately. Setting destination
        as empty enables the propagation of taint analysis. */
     return DestSourcePair{nullptr, nullptr, None,    None, nullptr,
                           None,    nullptr, nullptr, 0};
   }
+  case X86::PUSH64r:
+  case X86::PUSH32r:
+  case X86::PUSH16r: {
+    const MachineOperand *Src = &(MI.getOperand(0));
+    const MachineOperand *Dest = &(MI.getOperand(1));
+    int64_t Offset = -8;
+    switch(MI.getOpcode())
+    {
+      case X86::PUSH32r:
+        Offset = -4;
+        break;
+      case X86::PUSH16r:
+        Offset = -2;
+        break;
+      default: 
+        break;
+    }
+
+    return DestSourcePair{*Dest, Offset, *Src};
   }
+}
 
   return None;
 }

@@ -18,6 +18,7 @@ add_crash_balmer_unittest(CRASHANALYZERAnalysisTests
   ConcreteReverseExec.cpp
   RegisterEquivalence.cpp
   TaintInfo.cpp
+  MemoryWrapper.cpp
   DEPENDS
     intrinsics_gen
 )

@@ -358,7 +358,8 @@ void ConcreteReverseExec::execute(const MachineInstr &MI) {
       auto regVal = getCurretValueInReg(RegName);
       if (regVal == "")
       {
-        // FIXME: No use of register equivalence here, is that right?
+        // FIXME: No use of register equivalence here and it even shouldn't be right
+        // in the case of load at least, is this right?
         // regVal = getEqRegValue(const_cast<MachineInstr*>(&MI), Reg, *TRI);
         // if(regVal == "") continue;
         continue;
