@@ -4087,6 +4087,9 @@ Optional<RegImmPair> X86InstrInfo::isAddImmediate(const MachineInstr &MI,
     // $eax = ADD32ri8 $eax(tied-def 0), 1
     Offset = MI.getOperand(2).getImm();
     break;
+  case X86::ADD64ri8:
+    Offset = MI.getOperand(2).getImm();
+    break;
   }
   return RegImmPair{MI.getOperand(1).getReg(), Offset};
 }
@@ -10201,6 +10204,42 @@ X86InstrInfo::insertOutlinedCall(Module &M, MachineBasicBlock &MBB,
   }
 
   return It;
+}
+
+Optional<uint32_t> X86InstrInfo::getBitSizeOfMemoryDestination(const MachineInstr& MI) const
+{
+  if(!this->isStore(MI))
+  {
+     return None;
+  }
+
+  switch(MI.getOpcode())
+  {
+    case X86::MOV8mi:
+    case X86::MOV8mr:
+        return 8;
+        break;
+    case X86::MOV16mi:
+    case X86::MOV16mr:
+    case X86::PUSH16r:
+      return 16;
+      break;
+    
+    case X86::MOV32mi:
+    case X86::MOV32mr:
+    case X86::PUSH32r:
+      return 32;
+      break;
+    
+    // case X86::MOV64mi:
+    case X86::MOV64mi32:
+    case X86::MOV64mr:
+    case X86::PUSH64r:
+      return 64;
+      break;
+  }
+
+  return None;
 }
 
 #define GET_INSTRINFO_HELPERS

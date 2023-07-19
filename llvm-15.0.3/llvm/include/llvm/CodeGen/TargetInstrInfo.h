@@ -2097,6 +2097,14 @@ private:
   unsigned CallFrameSetupOpcode, CallFrameDestroyOpcode;
   unsigned CatchRetOpcode;
   unsigned ReturnOpcode;
+
+public:
+  // Returns bit size of memory destination, if MI's destination
+  // operand is memory and if this method is implemented in target's InstrInfo,
+  // in other cases returns empty Optional
+
+  virtual Optional<uint32_t> getBitSizeOfMemoryDestination(const MachineInstr& MI) const;
+
 };
 
 /// Provide DenseMapInfo for TargetInstrInfo::RegSubRegPair.
