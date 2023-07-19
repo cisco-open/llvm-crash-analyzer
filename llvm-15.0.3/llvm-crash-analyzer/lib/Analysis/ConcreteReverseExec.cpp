@@ -200,6 +200,8 @@ std::string ConcreteReverseExec::getEqRegValue(MachineInstr* MI, Register& Reg, 
 {
   std::string RetVal = "";
 
+  auto& MRI = MI->getMF()->getRegInfo();
+
   if(REAnalysis)
   {
     auto EqRegisters = REAnalysis->getEqRegsAfterMI(MI, {Reg});
@@ -219,8 +221,10 @@ std::string ConcreteReverseExec::getEqRegValue(MachineInstr* MI, Register& Reg, 
 
           BaseAddr += RegOffset.Offset;
           lldb::SBError error;
-
-          auto ValOpt = MemWrapper.ReadUnsignedFromMemory(BaseAddr, 8, error);
+          // TO DO: Check if this is right
+          uint32_t bitSize = TRI.getRegSizeInBits(Reg, MRI);
+          uint32_t byteSize = bitSize / 8 + (bitSize % 8 ? 1 : 0);
+          auto ValOpt = MemWrapper.ReadUnsignedFromMemory(BaseAddr, byteSize, error);
           if(ValOpt.hasValue())
           {
             SS.clear();
@@ -306,6 +310,7 @@ void ConcreteReverseExec::execute(const MachineInstr &MI) {
             Optional<uint32_t> BitSize = TII->getBitSizeOfMemoryDestination(MI);
             if(BitSize.hasValue())
             {
+              // TO DO: Check if this is right
               byteSize = (*BitSize) / 8 + (*BitSize % 8 ? 1 : 0);
             } 
             
@@ -443,7 +448,7 @@ void ConcreteReverseExec::execute(const MachineInstr &MI) {
             std::istringstream(srcRegVal) >> std::hex >> Addr;
             Addr += static_cast<uint64_t>(*DestSrc.SrcOffset);
 
-
+            // TO DO: Check if this is right
             uint32_t bitSize = TRI->getRegSizeInBits(DestSrc.Destination->getReg(), MRI);
             uint32_t byteSize =  bitSize / 8 + (bitSize % 8 ? 1 : 0);
 
