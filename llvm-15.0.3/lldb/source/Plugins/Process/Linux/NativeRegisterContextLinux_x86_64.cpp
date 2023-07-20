@@ -101,13 +101,13 @@ static_assert((sizeof(g_mpx_regnums_i386) / sizeof(g_mpx_regnums_i386[0])) -
 // x86 64-bit general purpose registers.
 static const uint32_t g_gpr_regnums_x86_64[] = {
     lldb_rax_x86_64,    lldb_rbx_x86_64,    lldb_rcx_x86_64, lldb_rdx_x86_64,
-    lldb_rdi_x86_64,    lldb_rsi_x86_64,    lldb_rbp_x86_64, lldb_rsp_x86_64,
+    lldb_rsi_x86_64,    lldb_rdi_x86_64,    lldb_rbp_x86_64, lldb_rsp_x86_64,
     lldb_r8_x86_64,     lldb_r9_x86_64,     lldb_r10_x86_64, lldb_r11_x86_64,
     lldb_r12_x86_64,    lldb_r13_x86_64,    lldb_r14_x86_64, lldb_r15_x86_64,
-    lldb_rip_x86_64,    lldb_rflags_x86_64, lldb_cs_x86_64,  lldb_fs_x86_64,
-    lldb_gs_x86_64,     lldb_ss_x86_64,     lldb_ds_x86_64,  lldb_es_x86_64,
+    lldb_rip_x86_64,    lldb_rflags_x86_64, lldb_cs_x86_64,  lldb_ss_x86_64,
+    lldb_ds_x86_64,     lldb_es_x86_64,     lldb_fs_x86_64,  lldb_gs_x86_64,
     lldb_eax_x86_64,    lldb_ebx_x86_64,    lldb_ecx_x86_64, lldb_edx_x86_64,
-    lldb_edi_x86_64,    lldb_esi_x86_64,    lldb_ebp_x86_64, lldb_esp_x86_64,
+    lldb_esi_x86_64,    lldb_edi_x86_64,    lldb_ebp_x86_64, lldb_esp_x86_64,
     lldb_r8d_x86_64,  // Low 32 bits or r8
     lldb_r9d_x86_64,  // Low 32 bits or r9
     lldb_r10d_x86_64, // Low 32 bits or r10
@@ -117,7 +117,7 @@ static const uint32_t g_gpr_regnums_x86_64[] = {
     lldb_r14d_x86_64, // Low 32 bits or r14
     lldb_r15d_x86_64, // Low 32 bits or r15
     lldb_ax_x86_64,     lldb_bx_x86_64,     lldb_cx_x86_64,  lldb_dx_x86_64,
-    lldb_di_x86_64,     lldb_si_x86_64,     lldb_bp_x86_64,  lldb_sp_x86_64,
+    lldb_si_x86_64,     lldb_di_x86_64,     lldb_bp_x86_64,  lldb_sp_x86_64,
     lldb_r8w_x86_64,  // Low 16 bits or r8
     lldb_r9w_x86_64,  // Low 16 bits or r9
     lldb_r10w_x86_64, // Low 16 bits or r10
@@ -128,7 +128,7 @@ static const uint32_t g_gpr_regnums_x86_64[] = {
     lldb_r15w_x86_64, // Low 16 bits or r15
     lldb_ah_x86_64,     lldb_bh_x86_64,     lldb_ch_x86_64,  lldb_dh_x86_64,
     lldb_al_x86_64,     lldb_bl_x86_64,     lldb_cl_x86_64,  lldb_dl_x86_64,
-    lldb_dil_x86_64,    lldb_sil_x86_64,    lldb_bpl_x86_64, lldb_spl_x86_64,
+    lldb_sil_x86_64,    lldb_dil_x86_64,    lldb_bpl_x86_64, lldb_spl_x86_64,
     lldb_r8l_x86_64,    // Low 8 bits or r8
     lldb_r9l_x86_64,    // Low 8 bits or r9
     lldb_r10l_x86_64,   // Low 8 bits or r10
@@ -415,6 +415,7 @@ NativeRegisterContextLinux_x86_64::ReadRegister(const RegisterInfo *reg_info,
     error.SetErrorString("reg_info NULL");
     return error;
   }
+
 
   const uint32_t reg = reg_info->kinds[lldb::eRegisterKindLLDB];
   if (reg == LLDB_INVALID_REGNUM) {

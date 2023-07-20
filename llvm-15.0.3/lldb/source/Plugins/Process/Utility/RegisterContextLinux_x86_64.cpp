@@ -32,16 +32,16 @@ typedef struct _GPR {
   uint64_t rdi;
   uint64_t orig_rax;
   uint64_t rip;
-  uint64_t cs;
-  uint64_t rflags;
+  uint32_t __attribute__((__aligned__(8))) cs;
+  uint32_t __attribute__((__aligned__(8))) rflags;
   uint64_t rsp;
-  uint64_t ss;
+  uint32_t __attribute__((__aligned__(8))) ss;
   uint64_t fs_base;
   uint64_t gs_base;
-  uint64_t ds;
-  uint64_t es;
-  uint64_t fs;
-  uint64_t gs;
+  uint32_t __attribute__((__aligned__(8))) ds;
+  uint32_t __attribute__((__aligned__(8))) es;
+  uint32_t __attribute__((__aligned__(8))) fs;
+  uint32_t __attribute__((__aligned__(8))) gs;
 } GPR;
 
 struct DBG {

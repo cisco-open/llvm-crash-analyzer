@@ -27,6 +27,8 @@
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/raw_ostream.h"
 
+#include "Analysis/MemoryWrapper.h"
+
 struct Node;
 class TaintDataFlowGraph;
 class RegisterEquivalence;
@@ -72,6 +74,8 @@ private:
   StringRef MirDotFileName;
   SmallVector<TaintInfo, 8> TaintList;
   Decompiler *Dec = nullptr;
+  MemoryWrapper MemWrapper;
+
   // We use this flag to avoid decompilation on demand
   // for calls in the case of llvm-crash-analyzer-ta tool.
   bool isCrashAnalyzerTATool = false;

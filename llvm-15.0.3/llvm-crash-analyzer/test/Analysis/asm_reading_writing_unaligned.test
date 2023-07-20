@@ -1,0 +1,52 @@
+#void g(int* px)
+#{
+#    *px = 2;
+#}
+#
+#void f()
+#{
+#    int x = 1;
+#    int y = 2;
+#    int z = 3;
+#    int zz = 4;
+#    int w = 0x11111111;
+#    int v = 0x22222222;
+#    int a = 0x44444444;
+#    int *px = nullptr;
+#
+#    __asm__(
+#        "movq %0, %%rax;"
+#        "movq %%rax, %1;"
+#        :"=m" (a), "=m" (z)
+#        :"0" (a), "1" (z)
+#    );
+#
+#    a = a + 1;
+#
+#    g(px);
+#
+#}
+#
+#int main()
+#{
+#    f();
+#    return 0;
+#}
+
+# RUN: %llvm-crash-analyzer --core-file=%S/Inputs/core.asm_reading_writing_unaligned \
+# RUN: %S/Inputs/asm_reading_writing_unaligned --print-potential-crash-cause-loc \
+# RUN: --debug-only=mem-wrapper 2>&1 | FileCheck %s
+
+# CHECK: Addressing valid location: 0x00007fff17d45884 : 0x44444445, byte_size: 4
+# CHECK: Writing location: 0x00007fff17d45884 : 0x44444444, byte_size: 4
+# CHECK: Addressing valid location: 0x00007fff17d45894 : 0x2222222244444444, byte_size: 8
+# CHECK: Invalidating location: 0x00007fff17d45894, byte_size: 4
+# CHECK-NEXT: Invalidating location: 0x00007fff17d45898, byte_size: 4
+# CHECK-NEXT: 	Invalid location: 0x00007fff17d45898, byte_size: 1
+# CHECK: 	Valid location: 0x00007fff17d4589c, byte_size: 1, Val: 0x01
+# CHECK: 	Valid location: 0x00007fff17d45890, byte_size: 1, Val: 0x04
+# CHECK: Writing location: 0x00007fff17d45884 : 0x44444444, byte_size: 4
+# CHECK-NEXT: Writing location: 0x00007fff17d45888 : 0x22222222, byte_size: 4
+# CHECK: Blame Function is f()
+# CHECK-NEXT: From File {{.*}}:15:10
+

@@ -665,6 +665,11 @@ private:
                             Register SrcReg2, int64_t ImmMask, int64_t ImmValue,
                             const MachineInstr &OI, bool *IsSwapped,
                             int64_t *ImmDelta) const;
+
+  public:
+    // Implemented only for MOVmr and MOVmi instructions
+    // TO DO: Implement for other instructions
+    Optional<uint32_t> getBitSizeOfMemoryDestination(const MachineInstr& MI) const override;
 };
 
 } // namespace llvm

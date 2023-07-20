@@ -1,0 +1,41 @@
+##include <iostream>
+#
+#void h(int* x)
+#{
+#    *x = 4;
+#}
+#
+#void g(int* x)
+#{
+#    h(x);
+#}
+#
+#void f()
+#{
+#    int x = 3;
+#    int y = 4;
+#    int* py = &y;
+#    int* px = &x;
+#    px = nullptr;
+#    int** ppx = &py;
+#    *ppx = &y;
+#    ppx = &px;
+#    g(px);
+#}
+#
+#int main()
+#{
+#    f();
+#    return 0;
+#}
+
+# RUN: %llvm-crash-analyzer --core-file=%S/Inputs/core.planted-pointer \
+# RUN: %S/Inputs/planted-pointer --print-potential-crash-cause-loc \
+# RUN: --debug-only=mem-wrapper 2>&1 | FileCheck %s
+
+# CHECK: Invalidating location: 0x00007ffc21d1a850, byte_size: 8
+# CHECK: Addressing invalid location: 0x00007ffc21d1a850, byte size: 8
+# CHECK: Blame Function is f()
+# CHECK-NEXT: From File {{.+}}:19:8
+
+

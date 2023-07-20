@@ -1431,3 +1431,8 @@ bool TargetInstrInfo::isMBBSafeToOutlineFrom(MachineBasicBlock &MBB,
 
   return true;
 }
+
+Optional<uint32_t> TargetInstrInfo::getBitSizeOfMemoryDestination(const MachineInstr& MI) const
+{
+  return None;
+}

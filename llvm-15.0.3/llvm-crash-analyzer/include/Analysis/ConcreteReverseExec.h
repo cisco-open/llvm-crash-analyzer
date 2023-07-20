@@ -10,6 +10,7 @@
 #define CRE_
 
 #include "Analysis/TaintAnalysis.h"
+#include "Analysis/RegisterEquivalence.h"
 #include "Target/CATargetInfo.h"
 #include "llvm/ADT/DenseSet.h"
 #include "llvm/CodeGen/MachineBasicBlock.h"
@@ -31,6 +32,8 @@ class ConcreteReverseExec {
   // This represents current values in the registers.
   MachineFunction::RegisterCrashInfo currentRegisterValues;
   const MachineFunction *mf;
+  MemoryWrapper& MemWrapper;
+  RegisterEquivalence* REAnalysis;
 
   CATargetInfo *CATI;
 
@@ -42,8 +45,8 @@ class ConcreteReverseExec {
 public:
   // Init the curr reg values with the values from the 'regInfo' attribute,
   // which are the values read from corefile.
-  ConcreteReverseExec(const MachineFunction *MF)
-      : currentRegisterValues(MF->getCrashRegInfo()), mf(MF) {
+  ConcreteReverseExec(const MachineFunction *MF, MemoryWrapper& MW, RegisterEquivalence *REAnalysis = nullptr)
+      : currentRegisterValues(MF->getCrashRegInfo()), mf(MF), MemWrapper(MW), REAnalysis(REAnalysis)  {
     CATI = getCATargetInfoInstance();
     if (MF->getCrashRegInfo().size())
       CREEnabled = true;
@@ -64,6 +67,8 @@ public:
 
   // Reverse execution of the MI by updating the currentRegisterValues.
   void execute(const MachineInstr &MI);
+
+  std::string getEqRegValue(MachineInstr* MI, Register& Reg, const TargetRegisterInfo& TRI);
 };
 
 #endif
