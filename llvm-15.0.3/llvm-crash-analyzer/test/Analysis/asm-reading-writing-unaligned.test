@@ -33,8 +33,8 @@
 #    return 0;
 #}
 
-# RUN: %llvm-crash-analyzer --core-file=%S/Inputs/core.asm_reading_writing_unaligned \
-# RUN: %S/Inputs/asm_reading_writing_unaligned --print-potential-crash-cause-loc \
+# RUN: %llvm-crash-analyzer --core-file=%S/Inputs/core.asm-reading-writing-unaligned \
+# RUN: %S/Inputs/asm-reading-writing-unaligned --print-potential-crash-cause-loc \
 # RUN: --debug-only=mem-wrapper 2>&1 | FileCheck %s
 
 # CHECK: Addressing valid location: 0x00007fff17d45884 : 0x44444445, byte_size: 4
