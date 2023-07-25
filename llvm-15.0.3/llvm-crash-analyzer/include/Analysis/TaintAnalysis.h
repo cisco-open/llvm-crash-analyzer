@@ -57,7 +57,7 @@ struct TaintInfo {
   std::tuple<unsigned, int, int> getTuple() const;
 
   int DerefLevel = 0;
-  void propagateDerefLevel(const MachineInstr& MI);
+  void propagateDerefLevel(const MachineInstr &MI);
 
   bool IsGlobal = false;
 
