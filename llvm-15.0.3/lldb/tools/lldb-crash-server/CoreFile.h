@@ -126,6 +126,8 @@ public:
   unsigned getNumOfFrames() { return NumOfFrames; }
 
   lldb::SBTarget &getTarget() { return target; }
+
+  lldb::SBProcess &getProcess() { return process; }
 };
 
 } // namespace lldb_crash_analyzer
