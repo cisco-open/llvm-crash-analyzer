@@ -66,6 +66,7 @@ public:
     eServerPacketType_qUserName,
     eServerPacketType_qGetWorkingDir,
     eServerPacketType_qFileLoadAddress,
+    eServerPacketType_qOffsets,
     eServerPacketType_QEnvironment,
     eServerPacketType_QEnableErrorStrings,
     eServerPacketType_QLaunchArch,

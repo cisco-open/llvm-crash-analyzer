@@ -10,6 +10,7 @@
 
 #include "Plugins/Process/gdb-remote/GDBRemoteCommunicationServerLLGS.h"
 #include "CoreFile.h"
+#include "CoreFileProtocol.h"
 
 namespace lldb_private {
 
@@ -21,7 +22,9 @@ public:
   GDBRemoteCommunicationServerLLCS(
     MainLoop &mainloop,
     const NativeProcessProtocol::Factory &process_factory) : 
-  GDBRemoteCommunicationServerLLGS(mainloop, process_factory) {};
+  GDBRemoteCommunicationServerLLGS(mainloop, process_factory){
+     RegisterPacketHandlers_LLCS();
+  };
 
   Status ReadCoreFile(
     const std::string &core_file,
@@ -30,9 +33,24 @@ public:
     const std::string solib_path,
     llvm::ArrayRef<llvm::StringRef> Arguments
     );
+
+  std::unique_ptr<lldb::crash_analyzer::CoreFile>& getCoreFile() {
+    return m_corefile;
+  }
+  
+  Status CreateProcessContext();
+
+  void RegisterPacketHandlers_LLCS();
+
+  PacketResult Handle_qC_LLCS(StringExtractorGDBRemote &packet);
+
+  PacketResult Handle_qOffsets_LLCS(StringExtractorGDBRemote &packet);
+
 protected:
 private:
-  std::unique_ptr<lldb::crash_analyzer::CoreFile> corefile;
+  std::unique_ptr<lldb::crash_analyzer::CoreFile> m_corefile;
+  std::unique_ptr<CoreFileProtocol::Factory> m_corefile_factory;
+  llvm::StringRef m_progname;
 };
 
 } // namespace process_gdb_remote

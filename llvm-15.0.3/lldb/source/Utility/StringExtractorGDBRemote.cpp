@@ -239,6 +239,11 @@ StringExtractorGDBRemote::GetServerPacketType() const {
         return eServerPacketType_qMemTags;
       break;
 
+    case 'O':
+        if (PACKET_MATCHES("qOffsets"))
+          return eServerPacketType_qOffsets;
+        break;
+
     case 'P':
       if (PACKET_STARTS_WITH("qProcessInfoPID:"))
         return eServerPacketType_qProcessInfoPID;
