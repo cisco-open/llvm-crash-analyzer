@@ -849,6 +849,8 @@ GDBRemoteCommunicationServerLLGS::PrepareStopReplyPacketForThread(
     response.PutChar(';');
   }
 
+#if 0 // TODO: Uncomment after fixing corefile register handling.
+
   // If a 'QListThreadsInStopReply' was sent to enable this feature, we will
   // send all thread IDs back in the "threads" key whose value is a list of hex
   // thread IDs separated by commas:
@@ -992,6 +994,7 @@ GDBRemoteCommunicationServerLLGS::PrepareStopReplyPacketForThread(
                     tid_stop_info.details.fork.child_pid,
                     tid_stop_info.details.fork.child_tid);
   }
+#endif
 
   return response;
 }
