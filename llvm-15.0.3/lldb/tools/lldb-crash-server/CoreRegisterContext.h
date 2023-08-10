@@ -31,9 +31,6 @@ public:
 
   uint32_t GetUserRegisterCount() const override { return 42; }
 
-  // Status ReadRegister(const RegisterInfo *reg_info, RegisterValue &reg_value)
-  //                                  override { return Status(); }
-
   Status WriteRegister(const RegisterInfo *reg_info,
                        const RegisterValue &reg_value)
                                     override { return Status(); }
