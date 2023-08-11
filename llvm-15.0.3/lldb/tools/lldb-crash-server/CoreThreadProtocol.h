@@ -9,15 +9,21 @@
 #ifndef CORETHREADPROTOCOL_H
 #define CORETHREADPROTOCOL_H
 
+#include "lldb/Host/common/NativeProcessProtocol.h"
 #include "CoreRegisterContext.h"
 
 namespace lldb_private {
 
 namespace process_gdb_remote {
+
   class CoreThreadProtocol : public NativeThreadProtocol {
   public:
-    CoreThreadProtocol(NativeProcessProtocol &process, lldb::tid_t tid)
-       : NativeThreadProtocol(process, tid) { m_reg_context_up = std::make_unique<CoreRegisterContext>(*this); }
+    CoreThreadProtocol(NativeProcessProtocol &process, lldb::tid_t tid,
+                       lldb::crash_analyzer::CoreFile &corefile)
+       : NativeThreadProtocol(process, tid),
+       m_reg_context_up(CoreRegisterContext::CreateCoreRegisterContext(
+            process.GetArchitecture(), *this, corefile)) {}
+
     std::string GetName() override { return ""; }
     lldb::StateType GetState() override { return lldb::StateType::eStateStopped; }
     NativeRegisterContext &GetRegisterContext() override { return *m_reg_context_up; }

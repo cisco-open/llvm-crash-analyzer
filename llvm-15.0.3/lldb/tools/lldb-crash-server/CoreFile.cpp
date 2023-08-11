@@ -215,7 +215,7 @@ bool lldb::crash_analyzer::CoreFile::read(StringRef SolibSearchPath) {
       break;
   }
 
-  LLVM_DEBUG(auto FrameToRegs = getGRPsFromFrame(); for (auto &fn
+  LLVM_DEBUG(auto FrameToRegs = getGPRsFromFrame(); for (auto &fn
                                                          : FrameToRegs) {
     dbgs() << "Function: " << fn.first << "\n";
     dbgs() << "Regs:\n";

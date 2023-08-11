@@ -112,7 +112,7 @@ public:
   }
 
   // Handle General Purpose Registers.
-  FrameToRegsMap &getGRPsFromFrame() { return GPRs; }
+  FrameToRegsMap &getGPRsFromFrame() { return GPRs; }
   void insertIntoGPRsFromFrame(llvm::StringRef frame, std::vector<RegInfo> &Regs) {
     GPRs.insert(std::make_pair(frame, Regs));
   }
