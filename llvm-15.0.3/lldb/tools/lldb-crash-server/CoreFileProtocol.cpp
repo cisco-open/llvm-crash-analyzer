@@ -21,8 +21,10 @@ using namespace process_linux;
 CoreFileProtocol::CoreFileProtocol(::pid_t pid,
                  NativeProcessProtocol::NativeDelegate &delegate,
                  const ArchSpec &arch,
-                 MainLoop &mainloop, llvm::ArrayRef<::pid_t> tids)
-    : NativeProcessELF(pid, -1, delegate), m_arch(arch), m_main_loop(mainloop) {
+                 MainLoop &mainloop, llvm::ArrayRef<::pid_t> tids,
+                 lldb::crash_analyzer::CoreFile &corefile)
+    : NativeProcessELF(pid, -1, delegate), m_arch(arch), m_main_loop(mainloop),
+      m_corefile(corefile) {
   Status status;
   for (const auto &tid : tids) {
     AddThread(tid);
@@ -53,10 +55,11 @@ CoreFileProtocol::Factory::Read(lldb::crash_analyzer::CoreFile &corefile,
     }
 
     return std::unique_ptr<CoreFileProtocol>(new CoreFileProtocol(
-       pid, native_delegate, Arch, mainloop, tids));
+       pid, native_delegate, Arch, mainloop, tids, corefile));
 }
 
 void
 CoreFileProtocol::AddThread(lldb::tid_t tid) {
-    m_threads.push_back(std::make_unique<CoreThreadProtocol>(*this, tid));
+    m_threads.push_back(std::make_unique<CoreThreadProtocol>(*this, tid,
+                                                             m_corefile));
 }

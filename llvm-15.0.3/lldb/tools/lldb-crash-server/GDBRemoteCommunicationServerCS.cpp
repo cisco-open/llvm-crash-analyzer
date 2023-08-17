@@ -46,7 +46,7 @@ GDBRemoteCommunicationServerLLCS::CreateProcessContext() {
       llvm::errs() << llvm::formatv("Failed to load corefile.\n");
       return error;
     }
-    m_current_process = corefile_or->get();
+    m_current_process = m_continue_process = corefile_or->get();
     m_debugged_processes.emplace(m_current_process->GetID(),
         DebuggedProcess{std::move(*corefile_or), DebuggedProcess::Flag{}});
     return Status();
