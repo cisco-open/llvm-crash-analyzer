@@ -32,7 +32,7 @@ public:
   Status Kill() override { return Status(); }
 
   Status ReadMemory(lldb::addr_t addr, void *buf, size_t size,
-                    size_t &bytes_read) override { return Status(); }
+                    size_t &bytes_read) override;
 
   Status WriteMemory(lldb::addr_t addr, const void *buf, size_t size,
                      size_t &bytes_written) override { return Status(); }
