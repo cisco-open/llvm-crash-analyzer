@@ -48,6 +48,7 @@ public:
 
 protected:
 private:
+  llvm::Expected<std::unique_ptr<llvm::MemoryBuffer>> BuildTargetXml() override;
   std::unique_ptr<lldb::crash_analyzer::CoreFile> m_corefile;
   std::unique_ptr<CoreFileProtocol::Factory> m_corefile_factory;
   llvm::StringRef m_progname;
