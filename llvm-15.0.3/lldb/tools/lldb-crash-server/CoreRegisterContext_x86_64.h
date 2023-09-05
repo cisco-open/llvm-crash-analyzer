@@ -35,6 +35,14 @@ public:
     return Status();
   }
 
+  uint32_t GetRegisterCount() const override {
+    return NativeRegisterContextLinux_x86_64::GetRegisterCount();
+  }
+
+  uint32_t GetUserRegisterCount() const override {
+    return NativeRegisterContextLinux_x86_64::GetUserRegisterCount();
+  }
+
   uint32_t GetRegisterSetCount() const override {
     return NativeRegisterContextLinux_x86_64::GetRegisterSetCount();
   }

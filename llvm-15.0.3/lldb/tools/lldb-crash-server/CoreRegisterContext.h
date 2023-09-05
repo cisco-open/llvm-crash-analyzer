@@ -27,10 +27,6 @@ public:
 
   ~CoreRegisterContext() {}
   
-  uint32_t GetRegisterCount() const override { return 42; }
-
-  uint32_t GetUserRegisterCount() const override { return 42; }
-
   Status WriteRegister(const RegisterInfo *reg_info,
                        const RegisterValue &reg_value)
                                     override { return Status(); }

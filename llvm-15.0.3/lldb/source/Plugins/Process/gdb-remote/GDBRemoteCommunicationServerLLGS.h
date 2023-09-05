@@ -294,7 +294,7 @@ protected:
                                 lldb::tid_t tid);
 
 private:
-  llvm::Expected<std::unique_ptr<llvm::MemoryBuffer>> BuildTargetXml();
+  virtual llvm::Expected<std::unique_ptr<llvm::MemoryBuffer>> BuildTargetXml();
 
   void HandleInferiorState_Exited(NativeProcessProtocol *process);
 
