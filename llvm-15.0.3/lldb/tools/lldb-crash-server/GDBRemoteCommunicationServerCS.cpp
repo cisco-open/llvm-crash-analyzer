@@ -82,6 +82,7 @@ GDBRemoteCommunicationServerLLCS::RegisterPacketHandlers_LLCS() {
 
 llvm::Expected<std::unique_ptr<llvm::MemoryBuffer>>
 GDBRemoteCommunicationServerLLCS::BuildTargetXml() {
+#if 0
   NativeThreadProtocol *thread = m_current_process->GetThreadAtIndex(0);
   if (!thread) {
     return llvm::createStringError(llvm::inconvertibleErrorCode(),
@@ -91,6 +92,7 @@ GDBRemoteCommunicationServerLLCS::BuildTargetXml() {
   Log *log = GetLog(LLDBLog::Process | LLDBLog::Thread);
 
   NativeRegisterContext &reg_context = thread->GetRegisterContext();
+#endif
 
   StreamString response;
   auto archString = m_current_process->GetArchitecture().GetTriple().
@@ -105,6 +107,8 @@ GDBRemoteCommunicationServerLLCS::BuildTargetXml() {
   }
   response.Printf("</architecture>");
 
+
+#if 0
   response.Printf("<feature name=\"org.gnu.gdb.i386.core\">");
 
   const int register_count = reg_context.GetUserRegisterCount();
@@ -134,7 +138,9 @@ GDBRemoteCommunicationServerLLCS::BuildTargetXml() {
     }
   }
 
+  response << "<reg_name=\"k0\" bitsize=\"64\" type=\"uint64\" regnum=\"108\"/>";
   response.Printf("</feature>");
+#endif
 
   response.Printf("</target>");
 
