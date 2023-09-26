@@ -45,15 +45,16 @@ CoreRegisterContext_x86_64::DoReadRegisterValue(uint32_t offset,
                                                 const char *reg_name,
                                                 uint32_t size,
                                                 RegisterValue &value) {
-  auto functions = m_corefile.getFunctionsFromBacktrace();
+  lldb::tid_t tid = CoreRegisterContext::m_thread.GetID();
+  auto functions = m_corefile.getFunctionsFromBacktrace(tid);
   auto currentFrameName = functions[0];
-  FrameToRegsMap regmap = m_corefile.getGPRsFromFrame();
+  FrameToRegsMap regmap = m_corefile.getGPRsFromFrame(tid);
   auto reginfo = regmap.find(currentFrameName)->second;
 
   for (auto Reg : reginfo) {
     const char *rName = Reg.regName.c_str();
     if (::strcmp(rName, reg_name) == 0) {
-      unsigned long regValue = stol(Reg.regValue, 0, 16);
+      unsigned long regValue = stoul(Reg.regValue, 0, 16);
       value.SetUInt(regValue, size);
       break;
     }

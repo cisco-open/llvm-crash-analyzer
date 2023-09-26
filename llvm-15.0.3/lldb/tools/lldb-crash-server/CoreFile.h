@@ -42,19 +42,25 @@ struct RegInfo {
 };
 
 using FrameToRegsMap = std::map<llvm::StringRef, std::vector<RegInfo>>;
+using FunctionsFromBacktraceVec = llvm::SmallVector<llvm::StringRef, 8>;
+using FrameInfoVec = std::map<llvm::StringRef, lldb::SBFrame>;
+using ThreadFunctionsFromBt = std::map<lldb::tid_t, FunctionsFromBacktraceVec>;
+using ThreadFrameToRegsMap = std::map<lldb::tid_t, FrameToRegsMap>;
+using ThreadFrameInfo = std::map<lldb::tid_t, FrameInfoVec>;
+using ThreadFrameCount = std::map<lldb::tid_t, unsigned int>;
 
 namespace lldb {
 namespace crash_analyzer {
 
 class CoreFile {
-  unsigned NumOfFrames = 0;
   const char *name;
   lldb::SBTarget target;
   lldb::SBDebugger debugger;
   lldb::SBProcess process;
-  llvm::SmallVector<llvm::StringRef, 8> FunctionsFromBacktrace;
-  FrameToRegsMap GPRs;
-  std::map<llvm::StringRef, lldb::SBFrame> FrameInfo;
+  ThreadFunctionsFromBt m_thread_functions;
+  ThreadFrameToRegsMap m_thread_gprs;
+  ThreadFrameInfo m_thread_frame_info;
+  ThreadFrameCount m_thread_num_of_frames;
 
 public:
   CoreFile(llvm::StringRef name, llvm::StringRef InputFileName,
@@ -96,9 +102,6 @@ public:
       llvm::WithColor::error() << "invalid core-file\n";
       return;
     }
-
-    FunctionsFromBacktrace = {};
-    FrameInfo = {};
   }
 
   ~CoreFile() {
@@ -107,23 +110,24 @@ public:
   }
 
   bool read(llvm::StringRef SolibSearchPath);
-  llvm::SmallVector<llvm::StringRef, 8> &getFunctionsFromBacktrace() {
-    return FunctionsFromBacktrace;
+
+  llvm::SmallVector<llvm::StringRef, 8> &getFunctionsFromBacktrace(
+                                                  lldb::tid_t tid) {
+    return m_thread_functions[tid];
   }
 
   // Handle General Purpose Registers.
-  FrameToRegsMap &getGPRsFromFrame() { return GPRs; }
-  void insertIntoGPRsFromFrame(llvm::StringRef frame, std::vector<RegInfo> &Regs) {
-    GPRs.insert(std::make_pair(frame, Regs));
+  FrameToRegsMap &getGPRsFromFrame(lldb::tid_t tid) { 
+    return m_thread_gprs[tid];
   }
 
-  void rememberSBFrame(llvm::StringRef frame, lldb::SBFrame f) {
-    FrameInfo.insert(std::make_pair(frame, f));
+  std::map<llvm::StringRef, lldb::SBFrame> &getFrameInfo(lldb::tid_t tid) {
+    return m_thread_frame_info[tid];
   }
-  std::map<llvm::StringRef, lldb::SBFrame> &getFrameInfo() { return FrameInfo; }
 
-  void setNumOfFrames(unsigned frames) { NumOfFrames = frames; }
-  unsigned getNumOfFrames() { return NumOfFrames; }
+  unsigned getNumOfFrames(lldb::tid_t tid) {
+    return m_thread_num_of_frames[tid];
+  }
 
   lldb::SBTarget &getTarget() { return target; }
 
