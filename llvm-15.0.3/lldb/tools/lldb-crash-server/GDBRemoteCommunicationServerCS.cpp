@@ -82,18 +82,6 @@ GDBRemoteCommunicationServerLLCS::RegisterPacketHandlers_LLCS() {
 
 llvm::Expected<std::unique_ptr<llvm::MemoryBuffer>>
 GDBRemoteCommunicationServerLLCS::BuildTargetXml() {
-#if 0
-  NativeThreadProtocol *thread = m_current_process->GetThreadAtIndex(0);
-  if (!thread) {
-    return llvm::createStringError(llvm::inconvertibleErrorCode(),
-                                   "No thread available.");
-  }
-  
-  Log *log = GetLog(LLDBLog::Process | LLDBLog::Thread);
-
-  NativeRegisterContext &reg_context = thread->GetRegisterContext();
-#endif
-
   StreamString response;
   auto archString = m_current_process->GetArchitecture().GetTriple().
                                        getArchName().str();
@@ -106,41 +94,6 @@ GDBRemoteCommunicationServerLLCS::BuildTargetXml() {
     response.Printf("i386:x86-64");
   }
   response.Printf("</architecture>");
-
-
-#if 0
-  response.Printf("<feature name=\"org.gnu.gdb.i386.core\">");
-
-  const int register_count = reg_context.GetUserRegisterCount();
-  for (int reg_index = 0; reg_index < register_count; reg_index++) {
-    const RegisterInfo *reg_info = reg_context.GetRegisterInfoAtIndex(reg_index);
-    if (!reg_info) {
-      LLDB_LOGF(log, "%s failed to get register info at index %" PRIu32,
-                "target.xml", reg_index);
-      continue;
-    }
-
-    const char *reg_name = ((strcmp(reg_info->name, "rflags") == 0) ? "eflags" :
-                           reg_info->name);
-    response.Printf("<reg name=\"%s\" bitsize=\"%" PRIu32 "\" regnum=\"%d\" ",
-                    reg_name, reg_info->byte_size * 8, reg_index);
-
-    const char *register_set_name = 
-        reg_context.GetRegisterSetNameForRegisterAtIndex(reg_index);
-    if (register_set_name && strcmp(register_set_name,
-                                    "Floating Point Registers") == 0) {
-      response << "group=\"float\" ";
-    }
-    if (reg_info->byte_size == 10) {
-      response.Printf("type=\"i387_ext\"/>");
-    } else {
-      response.Printf("type=\"int%d\"/>", reg_info->byte_size * 8);
-    }
-  }
-
-  response << "<reg_name=\"k0\" bitsize=\"64\" type=\"uint64\" regnum=\"108\"/>";
-  response.Printf("</feature>");
-#endif
 
   response.Printf("</target>");
 
