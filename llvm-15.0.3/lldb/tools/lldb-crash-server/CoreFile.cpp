@@ -39,12 +39,6 @@ bool lldb::crash_analyzer::CoreFile::read(StringRef SolibSearchPath) {
   llvm::SmallVector<StringRef, 8> SysRootPaths;
   SolibSearchPath.split(SysRootPaths, ':');
 
-  SBThread thread = process.GetSelectedThread();
-  if (!thread.IsValid()) {
-    WithColor::error() << "invalid thread selected within core-file\n";
-    return false;
-  }
-
   int NumModules = target.GetNumModules();
   for (int i = 0; i < NumModules; ++i) {
     auto m = target.GetModuleAtIndex(i);
@@ -155,73 +149,97 @@ bool lldb::crash_analyzer::CoreFile::read(StringRef SolibSearchPath) {
     }
   }
 
-  int NumOfFrames = thread.GetNumFrames();
-  LLVM_DEBUG(dbgs() << "Num of frames " << NumOfFrames << "\n");
+  uint32_t numThreads = process.GetNumThreads();
 
-  setNumOfFrames(NumOfFrames);
+  for (unsigned int i = 0; i < numThreads; i++) {
+    FunctionsFromBacktraceVec FunctionsFromBacktrace;
+    FrameInfoVec FrameInfo;
+    FrameToRegsMap GPRs;
+    SBThread thread = process.GetThreadAtIndex(i);
+    lldb::tid_t tid;
 
-  // There are some cases where debug info for frames is broken,
-  // so backtraces can be very long, so we want to skip such cases
-  // with this.
-  if (NumOfFrames > 64) {
-    WithColor::error() << "backtrace is too long(" << NumOfFrames
-                       << " frames)\n";
-    return false;
-  }
-
-  for (int i = 0; i < NumOfFrames; ++i) {
-    auto Frame = thread.GetFrameAtIndex(i);
-    if (!Frame.IsValid()) {
-      WithColor::error() << "invalid frame found within core-file\n";
+    if (!thread.IsValid()) {
+      WithColor::error() << "invalid thread selected within core-file\n";
       return false;
     }
-    StringRef fnName = Frame.GetFunctionName();
 
-    // Functions similar to __libc_start_main and _start or 
-    // _be_unix_suspend from Polaris that start the execution
-    // indicate that we have reached the end of our backtrace
-    // so stop here . Since main still has to be processed, 
-    // we check it at the end of this loop. (see the end of this loop for main function)
-    if (fnName == "__be_unix_suspend")
-      break;
+    FunctionsFromBacktrace = {};
+    FrameInfo = {};
 
-    LLVM_DEBUG(dbgs() << "#" << i << " " << Frame.GetPC() << " "
-                      << Frame.GetFunctionName();
-               if (Frame.IsInlined()) dbgs() << "[inlined]"
-                                             << "\n";
-               else dbgs() << "\n";);
+    unsigned int NumOfFrames = thread.GetNumFrames();
+    LLVM_DEBUG(dbgs() << "Num of frames " << NumOfFrames << "\n");
 
-    // Get registers state at the point of the crash.
-    auto Regs = Frame.GetRegisters();
-    auto GPRegss = Regs.GetFirstValueByName(GPR);
-    int NumOfGPRegs = GPRegss.GetNumChildren();
-    std::vector<RegInfo> RegReads;
-    for (int j = 0; j < NumOfGPRegs; ++j) {
-      auto Reg = GPRegss.GetChildAtIndex(j);
-      if (Reg.GetValue())
-        RegReads.push_back({Reg.GetName(), Reg.GetValue()});
-      else
-        RegReads.push_back({Reg.GetName(), nullptr});
+    // There are some cases where debug info for frames is broken,
+    // so backtraces can be very long, so we want to skip such cases
+    // with this.
+    if (NumOfFrames > 64) {
+      WithColor::error() << "backtrace is too long(" << NumOfFrames
+                         << " frames)\n";
+      return false;
     }
 
-    insertIntoGPRsFromFrame(fnName, RegReads);
-    FunctionsFromBacktrace.push_back(fnName);
-    rememberSBFrame(fnName, Frame);
+    tid = thread.GetThreadID();
 
-    // We know that main is the last frame to be analyzed ...
-    // At this point we have processed main, so we know that
-    // we must stop ...
-    if (fnName == "main")
-      break;
+    for (unsigned int i = 0; i < NumOfFrames; ++i) {
+      auto Frame = thread.GetFrameAtIndex(i);
+      if (!Frame.IsValid()) {
+        WithColor::error() << "invalid frame found within core-file\n";
+        return false;
+      }
+      StringRef fnName = Frame.GetFunctionName();
+  
+      // Functions similar to __libc_start_main and _start or 
+      // _be_unix_suspend from Polaris that start the execution
+      // indicate that we have reached the end of our backtrace
+      // so stop here . Since main still has to be processed, 
+      // we check it at the end of this loop. (see the end of this loop for
+      // main function)
+      if (fnName == "__be_unix_suspend" || fnName == "__clone")
+        break;
+  
+      LLVM_DEBUG(dbgs() << "#" << i << " " << Frame.GetPC() << " "
+                        << Frame.GetFunctionName();
+                 if (Frame.IsInlined()) dbgs() << "[inlined]"
+                                               << "\n";
+                 else dbgs() << "\n";);
+  
+      // Get registers state at the point of the crash.
+      auto Regs = Frame.GetRegisters();
+      auto GPRegss = Regs.GetFirstValueByName(GPR);
+      int NumOfGPRegs = GPRegss.GetNumChildren();
+      std::vector<RegInfo> RegReads;
+      for (int j = 0; j < NumOfGPRegs; ++j) {
+        auto Reg = GPRegss.GetChildAtIndex(j);
+        if (Reg.GetValue())
+          RegReads.push_back({Reg.GetName(), Reg.GetValue()});
+        else
+          RegReads.push_back({Reg.GetName(), nullptr});
+      }
+  
+      GPRs.insert(std::make_pair(fnName, RegReads));
+      FunctionsFromBacktrace.push_back(fnName);
+      FrameInfo.insert(std::make_pair(fnName, Frame));
+  
+      // We know that main is the last frame to be analyzed ...
+      // At this point we have processed main, so we know that
+      // we must stop ...
+      if (fnName == "main")
+        break;
+    }
+    m_thread_num_of_frames[tid] = NumOfFrames;
+    m_thread_gprs[tid] = GPRs;
+    m_thread_functions[tid] = FunctionsFromBacktrace;
+    m_thread_frame_info[tid] = FrameInfo;
+
+    LLVM_DEBUG(auto FrameToRegs = getGPRsFromFrame(tid); for (auto &fn
+                                                         : FrameToRegs) {
+      dbgs() << "Function: " << fn.first << "\n";
+      dbgs() << "Regs:\n";
+      for (auto &R : fn.second)
+        dbgs() << " reg: " << R.regName << " val: " << R.regValue << "\n";
+    });
   }
 
-  LLVM_DEBUG(auto FrameToRegs = getGPRsFromFrame(); for (auto &fn
-                                                         : FrameToRegs) {
-    dbgs() << "Function: " << fn.first << "\n";
-    dbgs() << "Regs:\n";
-    for (auto &R : fn.second)
-      dbgs() << " reg: " << R.regName << " val: " << R.regValue << "\n";
-  });
 
   outs() << "core-file processed.\n\n";
   return true;
