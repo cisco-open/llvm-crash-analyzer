@@ -13,12 +13,16 @@
 #include "llvm/ADT/StringRef.h"
 #include "llvm/ADT/Twine.h"
 #include "llvm/Support/WithColor.h"
+#include "llvm/Support/ErrorOr.h"
+#include "llvm/Support/MemoryBuffer.h"
 
 #include "lldb/API/SBDebugger.h"
 #include "lldb/API/SBFrame.h"
 #include "lldb/API/SBInstruction.h"
 #include "lldb/API/SBProcess.h"
 #include "lldb/API/SBTarget.h"
+
+#include "CoreProcessWrapper.h"
 
 #include <map>
 #include <vector>
@@ -61,6 +65,7 @@ class CoreFile {
   ThreadFrameToRegsMap m_thread_gprs;
   ThreadFrameInfo m_thread_frame_info;
   ThreadFrameCount m_thread_num_of_frames;
+  std::unique_ptr<CoreProcessWrapper> m_p;
 
 public:
   CoreFile(llvm::StringRef name, llvm::StringRef InputFileName,
@@ -102,6 +107,7 @@ public:
       llvm::WithColor::error() << "invalid core-file\n";
       return;
     }
+    m_p = std::unique_ptr<CoreProcessWrapper>(new CoreProcessWrapper(process));
   }
 
   ~CoreFile() {
@@ -132,6 +138,10 @@ public:
   lldb::SBTarget &getTarget() { return target; }
 
   lldb::SBProcess &getProcess() { return process; }
+
+  llvm::ErrorOr<std::unique_ptr<llvm::MemoryBuffer>> GetAuxvData() {
+    return m_p->GetAuxvData();
+  }
 };
 
 } // namespace lldb_crash_analyzer
