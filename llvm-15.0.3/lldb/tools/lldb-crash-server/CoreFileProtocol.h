@@ -47,7 +47,7 @@ public:
   }
 
   llvm::ErrorOr<std::unique_ptr<llvm::MemoryBuffer>> GetAuxvData()
-    const override { return make_error_code(llvm::errc::not_supported); }
+    const override { return m_corefile.GetAuxvData(); }
 
   Status GetLoadedModuleFileSpec(const char *module_path,
                                  FileSpec &file_spec) override {
