@@ -30,6 +30,7 @@ config.llvm_host_triple = '@LLVM_HOST_TRIPLE@'
 config.host_arch = "@HOST_ARCH@"
 config.crash_analyzer_src_dir = "@CRASH_ANALYZER_SOURCE_DIR@"
 config.crash_analyzer_obj_root = "@CRASH_ANALYZER_BINARY_DIR@"
+config.gdb_test_path = "@LLDB_SERVER_GDB_TEST_PATH@"
 
 # Support substitution of the tools_dir with user parameters. This is
 # used when we can't determine the tool dir at configuration time.
