@@ -36,14 +36,12 @@ CoreFileProtocol::CoreFileProtocol(::pid_t pid,
 Status CoreFileProtocol::ReadMemory(lldb::addr_t addr, void *buf, size_t size,
                                     size_t &bytes_read) {
   // Read memory from the core-file process.
-  lldb::SBError error;
-  bytes_read = m_corefile.getProcess().ReadMemory(addr, buf, size, error);
-  if (error.Fail() || bytes_read != size) {
-    return Status("Failed to read %zu bytes at addr=0x%" PRIx64
-                  " from the core-file process",
-                  size, addr);
+  Status status;
+  bytes_read = m_corefile.ReadMemory(addr, buf, size, status);
+  if (bytes_read == size) {
+    status.Clear();
   }
-  return Status();
+  return status;
 }
 
 llvm::Expected<std::unique_ptr<CoreFileProtocol>>
