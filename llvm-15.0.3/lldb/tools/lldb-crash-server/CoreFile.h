@@ -23,6 +23,7 @@
 #include "lldb/API/SBTarget.h"
 
 #include "CoreProcessWrapper.h"
+#include "CoreTargetWrapper.h"
 
 #include <map>
 #include <vector>
@@ -66,6 +67,7 @@ class CoreFile {
   ThreadFrameInfo m_thread_frame_info;
   ThreadFrameCount m_thread_num_of_frames;
   std::unique_ptr<CoreProcessWrapper> m_p;
+  std::unique_ptr<CoreTargetWrapper> m_t;
 
 public:
   CoreFile(llvm::StringRef name, llvm::StringRef InputFileName,
@@ -108,6 +110,7 @@ public:
       return;
     }
     m_p = std::unique_ptr<CoreProcessWrapper>(new CoreProcessWrapper(process));
+    m_t = std::unique_ptr<CoreTargetWrapper>(new CoreTargetWrapper(target));
   }
 
   ~CoreFile() {
@@ -141,6 +144,10 @@ public:
 
   llvm::ErrorOr<std::unique_ptr<llvm::MemoryBuffer>> GetAuxvData() {
     return m_p->GetAuxvData();
+  }
+
+  size_t ReadMemory(lldb::addr_t addr, void* buf, size_t size, Status &status) {
+    return m_t->ReadMemory(addr, buf, size, status);
   }
 };
 
