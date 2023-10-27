@@ -30,6 +30,8 @@ Steps:
     $ $ cmake -G "Ninja" -DLLVM_ENABLE_PROJECTS="clang;llvm-crash-analyzer;lldb;" -DLLVM_ENABLE_LIBCXX=ON ../llvm-crash-analyzer/llvm-10.0.1/llvm -DLLDB_TEST_COMPILER=clang -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER=clang-12 -DCMAKE_CXX_COMPILER=clang++-12 -DLLVM_ENABLE_ASSERTIONS=ON
     $ make && make check-llvm-crash-analyzer
 
+For LLDBServerWithGDB tests to work, we need to add "-DLLDB_SERVER_GDB_TEST_PATH=/path/to/gdb" option.
+
 ## Using the tool
 
 1) help:

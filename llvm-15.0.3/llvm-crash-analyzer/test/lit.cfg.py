@@ -73,6 +73,8 @@ llvm_config.with_environment('PATH', config.llvm_tools_dir, append_path=True)
 tool_dirs = [config.llvm_tools_dir]
 
 tools = [ToolSubst('%llvm-crash-analyzer', command=FindTool('llvm-crash-analyzer'), unresolved='fatal'),
-         ToolSubst('%llvm-crash-analyzer-ta', command=FindTool('llvm-crash-analyzer-ta'), unresolved='fatal')]
+         ToolSubst('%llvm-crash-analyzer-ta', command=FindTool('llvm-crash-analyzer-ta'), unresolved='fatal'),
+         ToolSubst('%lldb-crash-server', command=FindTool('lldb-crash-server'), unresolved='fatal'),
+         ToolSubst('%clang', command=FindTool('clang'), unresolved='fatal')]
 
 llvm_config.add_tool_substitutions(tools, tool_dirs)
