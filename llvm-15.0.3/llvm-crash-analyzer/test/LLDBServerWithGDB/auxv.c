@@ -1,9 +1,10 @@
 // RUN: %clang -g %s -o %t
 // RUN: %gdb -q -x %S/auxv-gc.gdb %t
-// RUN: bash -c "%lldb-crash-server g --core-file %T/auxv.core localhost:1234 %t > /dev/null 2>&1 &"
+// RUN: %python -c 'import socket; s = socket.socket(); s.bind(("", 0)); print(s.getsockname()[1])' > %t.port
+// RUN: bash -c "%lldb-crash-server g --core-file %T/auxv.core localhost:$(cat %t.port) %t > /dev/null 2>&1 &"
 // RUN: sleep 1
-// RUN: %gdb -q -x %S/auxv.gdb %t | sed -n '/ABORT/,/End of vector/p' > %T/gdb-with-lldb-output.txt
-// RUN: %gdb -q -x %S/auxv-gdb.gdb %t %T/auxv.core | sed -n '/ABORT/,/End of vector/p' > %T/gdb-direct-output.txt
+// RUN: %gdb -q %t -batch -ex "target remote localhost:$(cat %t.port)" -ex "source %S/auxv.gdb" | sed -n '/ABORT/,/End of vector/p' > %T/gdb-with-lldb-output.txt
+// RUN: %gdb -q -x %S/auxv.gdb %t %T/auxv.core | sed -n '/ABORT/,/End of vector/p' > %T/gdb-direct-output.txt
 // RUN: diff -s %T/gdb-with-lldb-output.txt %T/gdb-direct-output.txt | FileCheck %s
 
 // CHECK: are identical
