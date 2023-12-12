@@ -38,6 +38,7 @@
 
 #include "GDBRemoteCommunicationServerCS.h"
 #include "CoreFile.h"
+#include "UncoreHandler.h"
 
 #if defined(__linux__)
 #include "Plugins/Process/Linux/NativeProcessLinux.h"
@@ -130,7 +131,7 @@ void handle_attach(GDBRemoteCommunicationServerLLGS &gdb_server,
   // First check if the attach_target is convertible to a long. If so, we'll use
   // it as a pid.
   char *end_p = nullptr;
-  const long int pid = strtol(attach_target.c_str(), &end_p, 10);
+  const long int pid = strtol(attach_target.c_str(), &end_p, 0);
 
   // We'll call it a match if the entire argument is consumed.
   if (end_p &&
@@ -357,6 +358,8 @@ int main_gdbserver(int argc, char *argv[]) {
   std::string sysroot;
   std::string module_path;
   std::string solib_path;
+  std::string uncore_json;
+  std::string uncore_path;
   StringRef
       log_channels; // e.g. "lldb process threads:gdb-remote default:linux all"
   lldb::pipe_t unnamed_pipe = LLDB_INVALID_PIPE;
@@ -422,6 +425,8 @@ int main_gdbserver(int argc, char *argv[]) {
   sysroot = Args.getLastArgValue(OPT_sysroot).str();
   module_path = Args.getLastArgValue(OPT_module_path).str();
   solib_path = Args.getLastArgValue(OPT_solib_path).str();
+  uncore_json = Args.getLastArgValue(OPT_uncore_json).str();
+  uncore_path = UNCORE_PATH;
   if (Args.hasArg(OPT_pipe)) {
     uint64_t Arg;
     if (!llvm::to_integer(Args.getLastArgValue(OPT_pipe), Arg)) {
@@ -479,7 +484,36 @@ int main_gdbserver(int argc, char *argv[]) {
   // to launch a program, or a vAttach packet to attach to an existing process,
   // unless
   // explicitly asked to attach with the --attach={pid|program_name} form.
-  if (!attach_target.empty())
+
+  std::unique_ptr<UncoreHandler> uncore_handler;
+  if (!uncore_json.empty()) {
+    if (!FileSystem::Instance().Exists(uncore_json)) {
+      fprintf(stderr, "Uncore json file doesn't exist.\n");
+      return 1;
+    }
+
+    if (uncore_path.empty()) {
+      fprintf(stderr, "Path to Uncore not provided.\n");
+      return 1;
+    }
+
+    uncore_handler = std::make_unique<UncoreHandler>(uncore_json);
+    if (!uncore_handler->RunUncore())
+      return 1;
+    auto result = uncore_handler->RunLoaderProcess();
+    ::pid_t pid = result.first;
+    std::string set_cmd = result.second;
+
+    if (pid == LLDB_INVALID_PROCESS_ID || set_cmd.empty()) {
+      fprintf(stderr,
+              "Failed to get PID and set command from uncored process.\n");
+      return 1;
+    }
+
+    handle_attach_to_pid(gdb_server, pid);
+
+    llvm::outs() << "Set command:\n" + set_cmd + "\n";
+  } else if (!attach_target.empty())
     handle_attach(gdb_server, attach_target);
   else if (!core_file.empty())
     handle_core(gdb_server, core_file, sysroot, module_path,

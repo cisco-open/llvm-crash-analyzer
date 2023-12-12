@@ -2,6 +2,9 @@ set(LLVM_TARGET_DEFINITIONS LLGSOptions.td)
 tablegen(LLVM LLGSOptions.inc -gen-opt-parser-defs)
 add_public_tablegen_target(LLCSOptionsTableGen)
 set_target_properties(LLGSOptionsTableGen PROPERTIES FOLDER "lldb misc")
+set(UNCORE_PATH CACHE STRING "Path to Uncore tool")
+
+add_definitions(-DUNCORE_PATH="${UNCORE_PATH}")
 
 set(LLDB_PLUGINS)
 
@@ -50,6 +53,7 @@ add_lldb_tool(lldb-crash-server
     CoreThreadProtocol.cpp
     CoreRegisterContext.cpp
     CoreRegisterContext_x86_64.cpp
+    UncoreHandler.cpp
 
     LINK_LIBS
       lldbHost

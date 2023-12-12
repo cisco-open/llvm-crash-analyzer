@@ -48,6 +48,10 @@ defm core_file: SJ<"core-file", "The core file to analyse.">,
   MetaVarName<"<path-to-corefile>">,
   Group<grp_general>;
 
+defm uncore_json: SJ<"uncore-json", "JSON file to be used by Uncore.">,
+  MetaVarName<"<path-to-uncore-json>">,
+  Group<grp_general>;
+
 defm sysroot: SJ<"sysroot", "system root path.">,
   MetaVarName<"<sysroot>">,
   Group<grp_general>;
