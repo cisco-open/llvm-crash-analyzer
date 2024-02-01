@@ -500,19 +500,15 @@ int main_gdbserver(int argc, char *argv[]) {
     uncore_handler = std::make_unique<UncoreHandler>(uncore_json);
     if (!uncore_handler->RunUncore())
       return 1;
-    auto result = uncore_handler->RunLoaderProcess();
-    ::pid_t pid = result.first;
-    std::string set_cmd = result.second;
 
-    if (pid == LLDB_INVALID_PROCESS_ID || set_cmd.empty()) {
-      fprintf(stderr,
-              "Failed to get PID and set command from uncored process.\n");
+    ::pid_t pid = uncore_handler->RunLoaderProcess();
+    if (pid == LLDB_INVALID_PROCESS_ID) {
+      fprintf(stderr, "Failed to get PID from uncored process.\n");
       return 1;
     }
 
     handle_attach_to_pid(gdb_server, pid);
 
-    llvm::outs() << "Set command:\n" + set_cmd + "\n";
   } else if (!attach_target.empty())
     handle_attach(gdb_server, attach_target);
   else if (!core_file.empty())

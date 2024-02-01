@@ -49,6 +49,7 @@
 #include "ProcessGDBRemote.h"
 #include "ProcessGDBRemoteLog.h"
 #include "lldb/Utility/StringExtractorGDBRemote.h"
+#include "Plugins/Process/Utility/lldb-x86-register-enums.h"
 
 using namespace lldb;
 using namespace lldb_private;
@@ -2275,7 +2276,7 @@ GDBRemoteCommunicationServerLLGS::Handle_P(StringExtractorGDBRemote &packet) {
 
   // Parse out the register number from the request.
   packet.SetFilePos(strlen("P"));
-  const uint32_t reg_index =
+  uint32_t reg_index =
       packet.GetHexMaxU32(false, std::numeric_limits<uint32_t>::max());
   if (reg_index == std::numeric_limits<uint32_t>::max()) {
     LLDB_LOGF(log,
@@ -2283,6 +2284,16 @@ GDBRemoteCommunicationServerLLGS::Handle_P(StringExtractorGDBRemote &packet) {
               "parse register number from request \"%s\"",
               __FUNCTION__, packet.GetStringRef().data());
     return SendErrorResponse(0x29);
+  }
+
+  // Skip registers that are not in lldb regular register context
+  if (reg_index > 56 && reg_index < 60)
+    return SendOKResponse();
+
+  // Unlike LLDB, GDB does not have specific numbering for the GP registers
+  // contained in other registers, so we are adding offset to skip those
+  if (reg_index >= k_first_alias_x86_64 && reg_index <= k_last_alias_x86_64) {
+    reg_index += k_first_fpr_x86_64 - k_first_alias_x86_64;
   }
 
   // Note debugserver would send an E30 here.
@@ -2293,6 +2304,13 @@ GDBRemoteCommunicationServerLLGS::Handle_P(StringExtractorGDBRemote &packet) {
   // Parse out the value.
   uint8_t reg_bytes[RegisterValue::kMaxRegisterByteSize];
   size_t reg_size = packet.GetHexBytesAvail(reg_bytes);
+
+  // We reduce the size of the packets that are storing inside registers which
+  // size do not match with gdb
+  if (reg_index == lldb_fctrl_x86_64 || reg_index == lldb_fstat_x86_64 ||
+      reg_index == lldb_ftag_x86_64 || reg_index == lldb_fop_x86_64) {
+    reg_size = 2;
+  }
 
   // Get the thread to use.
   NativeThreadProtocol *thread = GetThreadFromSuffix(packet);
