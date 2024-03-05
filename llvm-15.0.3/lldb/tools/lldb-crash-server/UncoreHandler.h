@@ -24,7 +24,7 @@ public:
                    << "\n";
       exit(1);
     }
-    m_working_dir = cwd.str().data();
+    m_working_dir = cwd.c_str();
   }
 
   bool RunUncore();
