@@ -277,6 +277,57 @@ bool RegisterEquivalence::applyStore(MachineInstr &MI) {
   return true;
 }
 
+bool RegisterEquivalence::applyArithInstr(MachineInstr &MI) {
+  // Currently only LEA is concerned, but this should work for ADD, SUB...
+  if (!TII->isLEAInstr(MI))
+    return false;
+
+  auto srcDest = TII->getDestAndSrc(MI);
+  if (!srcDest)
+    return false;
+
+  auto SrcReg = srcDest->Source->getReg();
+  auto DestReg = srcDest->Destination->getReg();
+
+  int64_t SrcOffset = 0;
+  // Currently cannot handle if dest and src use the same reg.
+  if (SrcReg == DestReg)
+    return false;
+
+  // Take the offset into account.
+  if (srcDest->SrcOffset)
+    SrcOffset = *srcDest->SrcOffset;
+
+  // Transform deref->$rip+(off) to deref->$noreg+(rip+off).
+  auto CATI = getCATargetInfoInstance();
+  std::string RegName = TRI->getRegAsmName(SrcReg).lower();
+  if (CATI->isPCRegister(RegName) && CATI->getInstAddr(&MI)) {
+    SrcReg = 0;
+    SrcOffset += *CATI->getInstAddr(&MI) + *CATI->getInstSize(&MI);
+  }
+
+  RegisterOffsetPair Src{SrcReg, SrcOffset};
+  // Same as Load, but Src Memory address is not dereferenced.
+  Src.IsDeref = false;
+  RegisterOffsetPair Dest{DestReg};
+
+  // First invalidate dest reg, since it is being rewritten.
+  invalidateAllRegUses(MI, Dest);
+
+  // If SrcReg is redefined (same as DestReg), set only identity equivalence.
+  if (Src.RegNum == Dest.RegNum) {
+    if (RegInfo[&MI][Dest].find(Src) == RegInfo[&MI][Dest].end())
+      RegInfo[&MI][Src].insert(Src);
+    return true;
+  }
+
+  // Set (transitive) equivalence.
+  setRegEq(MI, Src, Dest);
+  // dumpRegTableAfterMI(&MI);
+
+  return true;
+}
+
 bool RegisterEquivalence::applyCall(MachineInstr &MI) {
   // TODO: Implement this by invalidating registers
   // that will be clobbered by the call.
@@ -308,6 +359,8 @@ void RegisterEquivalence::processMI(MachineInstr &MI) {
   if (applyLoad(MI))
     return;
   if (applyStore(MI))
+    return;
+  if (applyArithInstr(MI))
     return;
   if (applyCall(MI))
     return;

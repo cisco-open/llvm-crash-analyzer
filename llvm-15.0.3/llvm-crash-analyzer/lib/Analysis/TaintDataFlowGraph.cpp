@@ -31,7 +31,7 @@ void TaintDataFlowGraph::addEdge(std::shared_ptr<Node> src,
   adjacencies[src.get()].push_back({dest.get(), e_type});
 }
 
-void TaintDataFlowGraph::updateLastTaintedNode(TaintInfo Op,
+void TaintDataFlowGraph::updateLastTaintedNode(const MachineOperand *Op,
                                                std::shared_ptr<Node> N) {
   lastTaintedNode[Op] = N;
 }
@@ -131,6 +131,9 @@ void TaintDataFlowGraph::findBlameFunction(Node *v) {
             auto &BlameNodes = blameNodes[MaxLevel];
             for (unsigned i = 0; i < BlameNodes.size(); i++) {
               auto &a = BlameNodes[i];
+              // Do not erase potential blame nodes.
+              if (a->TaintOp.DerefLevel == 0 && a->IsContant)
+                break;
               if (a->MI->getParent() == adjNode->MI->getParent() &&
                   !a->CallMI && !adjNode->CallMI) {
                 if (MDT->dominates(adjNode->MI, a->MI)) {
@@ -196,12 +199,26 @@ bool TaintDataFlowGraph::printBlameFunction(
 
   StringRef BlameFn = "";
   const MachineFunction *MF = nullptr;
-  auto &BlameNodes = blameNodes[MaxLevel];
+  auto &SortBlameNodes = blameNodes[MaxLevel];
   llvm::SmallVector<StringRef, 8> BlameFns;
   llvm::SmallVector<MachineFunction *, 8> MFs;
 
   unsigned BlameLine = 0;
   unsigned BlameColumn = 0;
+  // Sort blame Nodes by depth - descending.
+  std::sort(SortBlameNodes.begin(), SortBlameNodes.end(),
+            [](Node *n1, Node *n2) { return n1->Depth > n2->Depth; });
+  unsigned DepthLevel = 0;
+  llvm::SmallVector<Node *, 8> BlameNodes;
+  // Filter leaf nodes - consider zero DerefLevel and max depth.
+  for (auto &n : SortBlameNodes) {
+    if (n->TaintOp.DerefLevel != 0)
+      continue;
+    if (n->Depth < DepthLevel)
+      break;
+    DepthLevel = n->Depth;
+    BlameNodes.push_back(n);
+  }
 
   for (auto &a : BlameNodes) {
     // Only consider Node if it's DerefLevel is zero.
