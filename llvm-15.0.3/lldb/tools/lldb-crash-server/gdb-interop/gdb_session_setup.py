@@ -4,6 +4,7 @@ import gdb
 import subprocess
 import socket
 import os
+import json
 from contextlib import closing
 from pty import STDERR_FILENO, STDOUT_FILENO
 
@@ -18,6 +19,9 @@ registers_of_interest = [
 # Global dictionaries to store register values from corefile and live process
 core_registers = {}
 live_registers = {}
+
+# Current working directory
+cwd = os.getcwd()
 
 # Global variable to store Crash server path
 lldb_crash_server_path = None
@@ -41,12 +45,14 @@ class GDBSessionSetup(gdb.Command):
         )
 
     def invoke(self, arg, from_tty):
-        global lldb_crash_server_path
+        global lldb_crash_server_path, cwd
 
         args = arg.split()
         if len(args) != 2:
             print("Usage: setup_session <binary> <corefile>")
             return
+        
+        gdb_settings = self.get_gdb_setting()
 
         binary, corefile = args
         gdb.execute(f"file {binary}")
@@ -64,11 +70,21 @@ class GDBSessionSetup(gdb.Command):
         if lldb_crash_server_path is None:
             print("Crash server path is not set.")
             return
+        
+        # Create uncore json file
+        self.create_json_file(corefile, binary, gdb_settings)
+
+        # Create a named pipe
+        pipe_path = os.path.join(cwd, "gdb_lldb_signal_pipe")
+        self.create_pipe(pipe_path)
 
         # Start Crash server as a subprocess
         port = self.find_free_port()
         subprocess.Popen([lldb_crash_server_path, "g", f"localhost:{port}", binary,
                          "--uncore-json", "./uncore.json"], stdout=STDOUT_FILENO, stderr=STDERR_FILENO)
+
+        # Read from a named pipe (waiting for a signal from Crash server)
+        self.read_from_pipe(pipe_path)
 
         # Connect to remote target
         gdb.execute(f"target remote localhost:{port}")
@@ -97,6 +113,92 @@ class GDBSessionSetup(gdb.Command):
         with closing(socket.socket(socket.AF_INET, socket.SOCK_STREAM)) as s:
             s.bind(('localhost', 0))
             return s.getsockname()[1]
+
+    def create_json_file(self, core_path, binary_path, gdb_settings):
+        global cwd
+
+        # Set the uncore output and json file path
+        output_path = os.path.join(cwd, "outdir")
+        json_path = os.path.join(cwd, "uncore.json")
+
+        data = {
+            "core": core_path,
+            "binos_root": "",
+            "entry_point": "main",
+            "prog": binary_path,
+            "pid": "",
+            "additional_resources": "",
+            "custom_o_file": [],
+            "output_directory": output_path,
+            "hot_patch": {
+            },
+            "gdbparse": {
+                "gdb": "gdb",
+                "args": [
+                    binary_path,
+                    core_path
+                ],
+                "kwargs": {
+                }
+            }
+        }
+
+        if len(gdb_settings) > 1:
+            # Create a gdb script with all commands from gdb_settings
+            script_path = os.path.join(cwd, "gdb_uncore.script")
+            with open(script_path, "w") as script_file:
+                for cmd in gdb_settings:
+                    script_file.write(cmd + "\n")
+            data["gdbparse"]["kwargs"]["-x"] = script_path
+        elif len(gdb_settings) == 1:
+            data["gdbparse"]["kwargs"]["-ex"] = gdb_settings[0]
+
+        # Convert the JSON data to a string
+        json_str = json.dumps(data, indent=4)
+
+        # Write the JSON string to a file in the current working directory
+        try:
+            with open(json_path, "w") as json_file:
+                json_file.write(json_str)
+            print(f"JSON file successfully created at: {json_path}")
+        except Exception as e:
+            print(f"Error: {e}")
+
+    # Get gdb session settings
+    def get_gdb_setting(self):
+        gdb_settings = []
+
+        # Retrieve the process sysroot setting
+        sysroot_setting = gdb.execute("show sysroot", to_string=True)
+        if sysroot_setting.startswith("The current system root is"):
+            sysroot_path = sysroot_setting.split('"')[1].strip()
+            if sysroot_path != "target:" and sysroot_path != "":
+                gdb_settings.append(f"set sysroot {sysroot_path}")
+
+        # Retrieve and process solib-search-path setting
+        solib_search_path_setting = gdb.execute("show solib-search-path", to_string=True)
+        if solib_search_path_setting.startswith("The search path for loading non-absolute shared library symbol files is"):
+            solib_search_path = solib_search_path_setting.split(' is ')[1].strip()
+            if solib_search_path != "." and solib_search_path != "":
+                gdb_settings.append(f"set solib-search-path {solib_search_path}")
+
+        return gdb_settings
+
+    # Create a named FIFO pipe
+    def create_pipe(self, pipe_path):
+        try:
+            os.mkfifo(pipe_path)
+        except OSError as e:
+            print(f"Error creating the pipe: {e}")
+
+    # Read from the named pipe
+    def read_from_pipe(self, pipe_path):
+        try:
+            with open(pipe_path, "r") as pipe:
+                message = pipe.read()
+                print(message)
+        except Exception as e:
+            print(f"Error reading from the pipe: {e}")
 
 
 class RestoreRegisters(gdb.Command):
