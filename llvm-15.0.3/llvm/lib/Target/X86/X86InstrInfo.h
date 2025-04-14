@@ -219,6 +219,7 @@ public:
   static bool isDataInvariantLoad(MachineInstr &MI);
   bool isLoad(const MachineInstr &MI) const override;
   bool isStore(const MachineInstr &MI) const override;
+  bool isLEAInstr(const MachineInstr &MI) const override;
   bool isNoopInstr(const MachineInstr &MI) const override;
   bool isXORSimplifiedSetToZero(const MachineInstr &MI) const override;
   bool isPush(const MachineInstr &MI) const override;

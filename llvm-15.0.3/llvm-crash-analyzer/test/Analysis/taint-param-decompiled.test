@@ -1,0 +1,33 @@
+## This is reproducer (clang -g -O0 m.c -o m)
+## // clang -g -O0 m.c -o m
+## void set(int* ptr, int val) {
+## 	*ptr = val; // crash, wrong blame - line 3
+## }
+## 
+## void fun(int** ptr, int* adr)
+## {
+##    set(ptr,adr);
+## }
+## 
+## int main(){
+##   int *adr = 3; // correct blame - line 12
+##   int *p = 0; // wrong blame - line 13
+##   fun(&p,adr);
+##   set(p,1);
+##   return 0;
+## }
+
+# RUN: %llvm-crash-analyzer --print-potential-crash-cause-loc \
+# RUN: --core-file=%S/Inputs/core.taint-param-decompiled %S/Inputs/taint-param-decompiled.out < %s 2>&1 | FileCheck %s
+
+# CHECK: Decompiling...
+# CHECK-NEXT: Decompiling set
+# CHECK-NEXT: Decompiling main
+# CHECK-NEXT: Decompiled.
+
+# CHECK: Analyzing...
+# CHECK-NEXT: Decompiling fun
+
+
+# CHECK: Blame Function is main
+# CHECK-NEXT: From File {{.*}}/m.c:12:8

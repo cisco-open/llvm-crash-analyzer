@@ -146,6 +146,28 @@ Optional<std::string> X86CATargetInfo::getPC() const {
   }
 }
 
+Optional<std::string> X86CATargetInfo::getBP() const {
+  switch (TT->getArch()) {
+  case Triple::x86_64:
+    return static_cast<std::string>("rbp");
+  case Triple::x86:
+    return static_cast<std::string>("ebp");
+  default:
+    return llvm::None;
+  }
+}
+
+Optional<std::string> X86CATargetInfo::getSP() const {
+  switch (TT->getArch()) {
+  case Triple::x86_64:
+    return static_cast<std::string>("rsp");
+  case Triple::x86:
+    return static_cast<std::string>("esp");
+  default:
+    return llvm::None;
+  }
+}
+
 bool X86CATargetInfo::isSPRegister(std::string RegName) const {
   if (RegName == "rsp" || RegName == "esp" || RegName == "sp" ||
       RegName == "spl")
@@ -153,9 +175,56 @@ bool X86CATargetInfo::isSPRegister(std::string RegName) const {
   return false;
 }
 
+int64_t X86CATargetInfo::getSPAdjust() const {
+  switch (TT->getArch()) {
+  case Triple::x86_64:
+    return 16;
+  case Triple::x86:
+    return 8;
+  default:
+    return 0;
+  }
+}
+
 bool X86CATargetInfo::isBPRegister(std::string RegName) const {
   if (RegName == "rbp" || RegName == "ebp" || RegName == "bp" ||
       RegName == "bpl")
     return true;
   return false;
+}
+
+bool X86CATargetInfo::isParamFwdRegister(std::string RegName) const {
+  if (RegName == "rdi" || RegName == "edi" || RegName == "di" ||
+      RegName == "dil")
+    return true;
+  if (RegName == "rsi" || RegName == "esi" || RegName == "si" ||
+      RegName == "sil")
+    return true;
+  if (RegName == "rdx" || RegName == "edx" || RegName == "dx" ||
+      RegName == "dl")
+    return true;
+  if (RegName == "rcx" || RegName == "ecx" || RegName == "cx" ||
+      RegName == "cl")
+    return true;
+  if (RegName == "r8" || RegName == "r8d" || RegName == "r8w" ||
+      RegName == "r8b")
+    return true;
+  if (RegName == "r9" || RegName == "r9d" || RegName == "r9w" ||
+      RegName == "r9b")
+    return true;
+  return false;
+}
+
+Optional<unsigned> X86CATargetInfo::getRegister(std::string RegName,
+                                                const MachineInstr *MI) const {
+  auto TRI = MI->getMF()->getSubtarget().getRegisterInfo();
+  if (!TRI)
+    return None;
+  unsigned N = 1000;
+  for (unsigned I = 0; I < N; ++I) {
+    std::string CurName = TRI->getRegAsmName(I).lower();
+    if (CurName == RegName)
+      return I;
+  }
+  return None;
 }

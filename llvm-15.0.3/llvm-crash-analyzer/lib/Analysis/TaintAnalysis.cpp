@@ -404,6 +404,115 @@ void llvm::crash_analyzer::TaintAnalysis::removeFromTaintList(
   llvm_unreachable("Operand not in Taint List");
 }
 
+// Find the instruction, which loaded parameter value in the register location.
+const MachineInstr *crash_analyzer::TaintAnalysis::findParamLoadingInstr(
+    TaintInfo &Ti, const MachineInstr *CallMI) {
+  MachineInstr *MI = nullptr;
+  if (!CallMI)
+    return nullptr;
+  auto *MBB = CallMI->getParent();
+  auto *MF = CallMI->getMF();
+  auto TII = MF->getSubtarget().getInstrInfo();
+  // Skip the call instruction.
+  auto I = std::next(CallMI->getReverseIterator());
+  // Search for an instruction, which loads parameter value in register(Ti) in
+  // the same MBB.
+  for (; I != MBB->rend(); ++I) {
+    // We stop the search at the new call site.
+    if (I->isCall())
+      break;
+    auto DestSrc = TII->getDestAndSrc(*I);
+    if (!DestSrc)
+      continue;
+
+    TaintInfo DestTi;
+    DestTi.Op = DestSrc->Destination;
+    DestTi.Offset = DestSrc->DestOffset;
+    if (DestTi.Offset)
+      calculateMemAddr(DestTi);
+    // Compare loded value (DestTi) to the register.
+    if (DestTi == Ti)
+      return &*I;
+  }
+  return MI;
+}
+
+// Return true, if any parameter forwarding register location is tainted.
+// Add tainted parameters to the TaintList (TL_Of_Caller), which will be used
+// during forward TaintAnalysis of the called function.
+bool crash_analyzer::TaintAnalysis::areParamsTainted(
+    const MachineInstr *CallMI, SmallVectorImpl<TaintInfo> &TL,
+    SmallVectorImpl<TaintInfo> *TL_Of_Caller, TaintDataFlowGraph &TaintDFG,
+    RegisterEquivalence &REAnalysis) {
+  auto CATI = getCATargetInfoInstance();
+  const MachineFunction *MF = CallMI->getMF();
+
+  bool Tainted = false;
+
+  // Search the parameter forwarding registers.
+  // TODO: Add support for parameters forwarded via stack.
+  auto RegMap = CATI->getWholeRegMap();
+  for (auto regTuple : RegMap) {
+    std::string LargestRegName = std::get<0>(regTuple.second);
+    if (!CATI->isParamFwdRegister(LargestRegName))
+      continue;
+    // Get unsigned identifier from Reg name.
+    auto OptReg = CATI->getRegister(LargestRegName, CallMI);
+    unsigned Reg = OptReg ? *OptReg : 0;
+
+    // Create a TaintInfo for param forwarding register.
+    TaintInfo Ti;
+    MachineOperand MOp = MachineOperand::CreateReg(MCRegister(Reg), false);
+    MOp.setParent(const_cast<MachineInstr *>(CallMI));
+    Ti.Op = new MachineOperand(MOp);
+
+    // Check if the register (parameter) is tainted.
+    auto Taint = isTainted(Ti, TL, &REAnalysis, CallMI);
+    if (Taint.Op == nullptr)
+      continue;
+
+    // FIXME: Confirm that the param is a reference?
+    if (Taint.DerefLevel >= 0)
+      continue;
+
+    Tainted = true;
+
+    // FIXME: Should we update deref level for Ti?
+    Ti.DerefLevel = Taint.DerefLevel;
+
+    // Add param forwarding reg to the Caller's TL.
+    if (addToTaintList(Ti, *TL_Of_Caller)) {
+      // For now use CallMI for param forwarding node.
+      auto LoadMI = findParamLoadingInstr(Ti, CallMI);
+      Node *newNode = new Node(MF->getCrashOrder(), LoadMI, Ti, false);
+      if (CallMI)
+        newNode->CallMI = CallMI;
+      std::shared_ptr<Node> newTaintNode(newNode);
+      // TODO: Check if this should be a deref edge:
+      //       if we propagate taint from a mem addr (e.g. rbx + 10)
+      //       to its base reg (e.g. rbx).
+      assert(TaintDFG.lastTaintedNode.count(Taint.Op) &&
+             "Taint Op must be reached already");
+      auto &LastTaintedNodeForTheOp = TaintDFG.lastTaintedNode[Taint.Op];
+      // Set new node depth.
+      newTaintNode->Depth = LastTaintedNodeForTheOp->Depth + 1;
+
+      if (LastTaintedNodeForTheOp->TaintOp.Op->isReg() &&
+          LastTaintedNodeForTheOp->TaintOp.Offset &&
+          newTaintNode->TaintOp.Op->isReg() &&
+          (LastTaintedNodeForTheOp->TaintOp.Op->getReg() ==
+           newTaintNode->TaintOp.Op->getReg()))
+        TaintDFG.addEdge(LastTaintedNodeForTheOp, newTaintNode,
+                         EdgeType::Dereference);
+      else
+        TaintDFG.addEdge(LastTaintedNodeForTheOp, newTaintNode);
+      TaintDFG.updateLastTaintedNode(Ti.Op, newTaintNode);
+    }
+  }
+
+  return Tainted;
+}
+
 // Return true if rax register, that stores the return value
 // of a function call is present in the taint list.
 // Also, if a global variable is tainted, we are interested
@@ -428,6 +537,97 @@ bool crash_analyzer::TaintAnalysis::shouldAnalyzeCall(
   return false;
 }
 
+// Check TaintList for non-dereferenced locations, equivalent to stack slots
+// and add those stack locations to the TL_Of_Caller (to be tracked during
+// TaintAnalysis of functions out of the backtrace).
+bool crash_analyzer::TaintAnalysis::isStackSlotTainted(
+    const MachineInstr *CallMI, SmallVectorImpl<TaintInfo> &TL,
+    SmallVectorImpl<TaintInfo> *TL_Of_Caller, TaintDataFlowGraph &TaintDFG,
+    RegisterEquivalence *REAnalysis) {
+  auto *MF = CallMI->getMF();
+  auto TRI = MF->getSubtarget().getRegisterInfo();
+  auto CATI = getCATargetInfoInstance();
+
+  if (!REAnalysis)
+    return false;
+  bool Tainted = false;
+
+  // Search for tainted stack slots.
+  for (auto itr = TL.begin(); itr != TL.end(); ++itr) {
+    auto Taint = *itr;
+    // Consider only memory Taint Infos.
+    if (!Taint.Op->isReg() || !Taint.Offset)
+      continue;
+
+    int64_t OffsetOp = *Taint.Offset;
+
+    if (!CallMI)
+      break;
+    // Try to see if there is an equal register that could be used here.
+    auto MII = MachineBasicBlock::iterator(const_cast<MachineInstr *>(CallMI));
+    if (MII == CallMI->getParent()->begin())
+      break;
+
+    // We try to see what was reg eq. status before the MI.
+    MII = std::prev(MII);
+    auto EqRegs = REAnalysis->getEqRegsAfterMI(
+        const_cast<MachineInstr *>(&*MII),
+        {Taint.Op->getReg(), OffsetOp, /*IsDeref=*/false});
+
+    for (auto &eqR : EqRegs) {
+      // Read (base) register value, if it is not $noreg.
+      if (eqR.RegNum == 0)
+        continue;
+      std::string RegName = TRI->getRegAsmName(eqR.RegNum).lower();
+      int64_t Offset = eqR.Offset;
+      // FIXME: Confirm that the param is a reference?
+      if (Taint.DerefLevel >= 0)
+        break;
+
+      if (!CATI->isSPRegister(RegName) || !eqR.IsDeref)
+        continue;
+      // Create a TaintInfo for param forwarding stack slot.
+      TaintInfo Ti;
+      MachineOperand MOp =
+          MachineOperand::CreateReg(MCRegister(eqR.RegNum), false);
+      MOp.setParent(const_cast<MachineInstr *>(CallMI));
+      Ti.Op = new MachineOperand(MOp);
+      Ti.Offset = Offset;
+      // Based on the equivalance $rbp+(-40) : { deref->$rsp },
+      // Ti ($rsp + 0) has one DerefLevel below ($rbp+(-40)).
+      Ti.DerefLevel = Taint.DerefLevel - 1;
+
+      // Add param forwarding memory location to the Caller's TL.
+      if (addToTaintList(Ti, *TL_Of_Caller)) {
+        Tainted = true;
+        // For now, use CallMI for param forwarding node.
+        auto LoadMI = findParamLoadingInstr(Ti, CallMI);
+        Node *newNode = new Node(MF->getCrashOrder(), LoadMI, Ti, false);
+        if (CallMI)
+          newNode->CallMI = CallMI;
+        std::shared_ptr<Node> newTaintNode(newNode);
+        assert(TaintDFG.lastTaintedNode.count(Taint.Op) &&
+               "Taint Op must be reached already");
+        auto &LastTaintedNodeForTheOp = TaintDFG.lastTaintedNode[Taint.Op];
+        // Set new node depth.
+        newTaintNode->Depth = LastTaintedNodeForTheOp->Depth + 1;
+
+        if (LastTaintedNodeForTheOp->TaintOp.Op->isReg() &&
+            LastTaintedNodeForTheOp->TaintOp.Offset &&
+            newTaintNode->TaintOp.Op->isReg() &&
+            (LastTaintedNodeForTheOp->TaintOp.Op->getReg() ==
+             newTaintNode->TaintOp.Op->getReg()))
+          TaintDFG.addEdge(LastTaintedNodeForTheOp, newTaintNode,
+                           EdgeType::Dereference);
+        else
+          TaintDFG.addEdge(LastTaintedNodeForTheOp, newTaintNode);
+        TaintDFG.updateLastTaintedNode(Ti.Op, newTaintNode);
+      }
+    }
+  }
+  return Tainted;
+}
+
 TaintInfo crash_analyzer::TaintAnalysis::isTainted(
     TaintInfo &Op, SmallVectorImpl<TaintInfo> &TL,
     RegisterEquivalence *REAnalysis, const MachineInstr *MI) {
@@ -435,7 +635,7 @@ TaintInfo crash_analyzer::TaintAnalysis::isTainted(
   Empty_op.Op = nullptr;
   Empty_op.Offset = 0;
 
-  unsigned OffsetOp = 0;
+  int64_t OffsetOp = 0;
   if (Op.Offset)
     OffsetOp = *Op.Offset;
 
@@ -446,7 +646,7 @@ TaintInfo crash_analyzer::TaintAnalysis::isTainted(
       if (itr->Op->isReg() && Op.Op->isReg() &&
           Op.Op->getReg() != itr->Op->getReg() &&
           MI != &*MI->getParent()->begin()) {
-        unsigned OffsetCurrOp = 0;
+        int64_t OffsetCurrOp = 0;
         if (itr->Offset)
           OffsetCurrOp = *itr->Offset;
         if (REAnalysis->isEquivalent(
@@ -486,7 +686,7 @@ bool crash_analyzer::TaintAnalysis::continueAnalysis(
 void crash_analyzer::TaintAnalysis::printTaintList(
     SmallVectorImpl<TaintInfo> &TL) {
   if (TL.empty()) {
-    LLVM_DEBUG(dbgs() << "Taint List is empty");
+    LLVM_DEBUG(dbgs() << "Taint List is empty\n");
     return;
   }
   LLVM_DEBUG(dbgs() << "\n-----Taint List Begin------\n";
@@ -609,8 +809,10 @@ void crash_analyzer::TaintAnalysis::insertTaint(
     StartCrashOrder = 0;
     Node *sNode = new Node(MF->getCrashOrder(), &MI, DestTi, false);
     std::shared_ptr<Node> startTaintNode(sNode);
+    // Set new node depth (crashNode has zero depth).
+    startTaintNode->Depth = crashNode->Depth + 1;
     TaintDFG.addEdge(crashNode, startTaintNode, EdgeType::Dereference);
-    TaintDFG.updateLastTaintedNode(DestTi, startTaintNode);
+    TaintDFG.updateLastTaintedNode(DestTi.Op, startTaintNode);
   }
 
   printTaintList(TL);
@@ -708,8 +910,10 @@ void crash_analyzer::TaintAnalysis::addNewTaint(
   if (addToTaintList(Ti, TL)) {
     Node *sNode = new Node(MF->getCrashOrder(), &MI, Ti, false);
     std::shared_ptr<Node> startTaintNode(sNode);
+    // Set new node depth (crashNode has zero depth).
+    startTaintNode->Depth = crashNode->Depth + 1;
     TaintDFG.addEdge(crashNode, startTaintNode, EdgeType::Dereference);
-    TaintDFG.updateLastTaintedNode(Ti, startTaintNode);
+    TaintDFG.updateLastTaintedNode(Ti.Op, startTaintNode);
   }
 }
 
@@ -844,7 +1048,7 @@ bool llvm::crash_analyzer::TaintAnalysis::propagateTaint(
   // If empty taint list, we do nothing and we continue to
   // to propagate the taint along the other paths
   if (TL.empty() && !StartCrashOrder) {
-    LLVM_DEBUG(dbgs() << "\n No taint to propagate");
+    LLVM_DEBUG(dbgs() << "\n No taint to propagate\n");
     return true;
   }
 
@@ -941,10 +1145,12 @@ bool llvm::crash_analyzer::TaintAnalysis::propagateTaint(
     if (CallMI)
       constantNode->CallMI = CallMI;
     std::shared_ptr<Node> constNode(constantNode);
-    auto &LastTaintedNodeForTheOp = TaintDFG.lastTaintedNode[Taint];
+    auto &LastTaintedNodeForTheOp = TaintDFG.lastTaintedNode[Taint.Op];
     TaintDFG.addEdge(LastTaintedNodeForTheOp, constNode, EdgeType::Dereference);
     // FIXME: The LastTaintedNode won't be used any more, no need for this line?
-    TaintDFG.updateLastTaintedNode(SrcTi, constNode);
+    TaintDFG.updateLastTaintedNode(SrcTi.Op, constNode);
+    // Set new node depth.
+    constNode->Depth = LastTaintedNodeForTheOp->Depth + 1;
 
     // We have reached a terminating condition where
     // dest is tainted and src is a constant operand.
@@ -959,9 +1165,9 @@ bool llvm::crash_analyzer::TaintAnalysis::propagateTaint(
     // TODO: Check if this should be a deref edge:
     //       if we propagate taint from a mem addr (e.g. rbx + 10)
     //       to its base reg (e.g. rbx).
-    assert(TaintDFG.lastTaintedNode.count(Taint) &&
+    assert(TaintDFG.lastTaintedNode.count(Taint.Op) &&
            "Taint Op must be reached already");
-    auto &LastTaintedNodeForTheOp = TaintDFG.lastTaintedNode[Taint];
+    auto &LastTaintedNodeForTheOp = TaintDFG.lastTaintedNode[Taint.Op];
 
     if (LastTaintedNodeForTheOp->TaintOp.Op->isReg() &&
         LastTaintedNodeForTheOp->TaintOp.Offset &&
@@ -972,7 +1178,9 @@ bool llvm::crash_analyzer::TaintAnalysis::propagateTaint(
                        EdgeType::Dereference);
     else
       TaintDFG.addEdge(LastTaintedNodeForTheOp, newTaintNode);
-    TaintDFG.updateLastTaintedNode(SrcTi, newTaintNode);
+    TaintDFG.updateLastTaintedNode(SrcTi.Op, newTaintNode);
+    // Set new node depth.
+    newTaintNode->Depth = LastTaintedNodeForTheOp->Depth + 1;
 
     if (!BaseTaintFlag)
       removeFromTaintList(Taint, TL);
@@ -983,6 +1191,199 @@ bool llvm::crash_analyzer::TaintAnalysis::propagateTaint(
   }
 
   printTaintList(TL);
+  return true;
+}
+
+
+// Simplified version of propagateTaint, but in the oposite (forward) direction.
+// Idea is to track tainted parameters of out-of-the-backtrace calls, from the
+// function entry point, to the spot where the parameter value is set.
+// (From that spot, we would go backwards to find the origin of the value.)
+bool llvm::crash_analyzer::TaintAnalysis::propagateTaintFwd(
+    DestSourcePair &DS, SmallVectorImpl<TaintInfo> &TL, const MachineInstr &MI,
+    TaintDataFlowGraph &TaintDFG, RegisterEquivalence &REAnalysis,
+    const MachineInstr *CallMI) {
+
+  TaintInfo SrcTi, DestTi;
+  SrcTi.Op = DS.Source;
+  SrcTi.Offset = DS.SrcOffset;
+  DestTi.Op = DS.Destination;
+  DestTi.Offset = DS.DestOffset;
+
+  if (!SrcTi.Op)
+    return true;
+
+  const auto &MF = MI.getParent()->getParent();
+  auto TII = MF->getSubtarget().getInstrInfo();
+
+  auto DestTaint = isTainted(DestTi, TL, &REAnalysis, &MI);
+  // FIXME: Define better terminating criteria for forward analysis?
+  if (SrcTi.Op->isImm()) {
+    if (DestTaint.Op == nullptr)
+      return true;
+    // Propagate dereference level (from crash) from the Taint (DestTi) to the
+    // SrcTi. This propagation is in the backwards direction.
+    SrcTi.DerefLevel = DestTaint.DerefLevel;
+    SrcTi.propagateDerefLevel(MI);
+
+    Node *constantNode = new Node(MF->getCrashOrder(), &MI, SrcTi, false, true);
+    // FIXME: Improve this code.
+    // This will be used to indentify call instruction when analyzing fns out of
+    // bt.
+    if (CallMI)
+      constantNode->CallMI = CallMI;
+    std::shared_ptr<Node> constNode(constantNode);
+    auto &LastTaintedNodeForTheOp = TaintDFG.lastTaintedNode[DestTaint.Op];
+    TaintDFG.addEdge(LastTaintedNodeForTheOp, constNode, EdgeType::Dereference);
+    // FIXME: The LastTaintedNode won't be used any more, no need for this line?
+    TaintDFG.updateLastTaintedNode(SrcTi.Op, constNode);
+    constNode->Depth = LastTaintedNodeForTheOp->Depth + 1;
+    // We have reached a terminating condition where
+    // dest is tainted and src is a constant operand.
+    removeFromTaintList(DestTaint, TL);
+    return false;
+  }
+
+  // Check if SrcTi is already tainted.
+  auto Taint = isTainted(SrcTi, TL, &REAnalysis, &MI);
+
+  // If SrcTi is not tainted, check if the base reg is tainted.
+  if (Taint.Op == nullptr && SrcTi.Offset) {
+    TaintInfo SrcBase;
+    SrcBase.Op = SrcTi.Op;
+    Taint = isTainted(SrcBase, TL, &REAnalysis, &MI);
+  }
+
+  // If Source is not tainted, nothing to do, just move on.
+  if (Taint.Op == nullptr)
+    return true;
+
+  // Propagate dereference level (from crash) from the Taint to the DestTi.
+  // This propagation is in the forwards direction.
+  DestTi.DerefLevel = Taint.DerefLevel;
+  // Inverse DestTi.propagateDerefLevel(MI);
+  if (TII->isStore(MI))
+    DestTi.DerefLevel -= 1;
+  else if (TII->isLoad(MI))
+    DestTi.DerefLevel += 1;
+
+  // Add new TaintDFG node for the DestTi.
+  if (addToTaintList(DestTi, TL)) {
+    Node *newNode = new Node(MF->getCrashOrder(), &MI, DestTi, false);
+    if (CallMI)
+      newNode->CallMI = CallMI;
+    std::shared_ptr<Node> newTaintNode(newNode);
+    assert(TaintDFG.lastTaintedNode.count(Taint.Op) &&
+           "Taint Op must be reached already");
+    auto &LastTaintedNodeForTheOp = TaintDFG.lastTaintedNode[Taint.Op];
+    // Set new node depth.
+    newTaintNode->Depth = LastTaintedNodeForTheOp->Depth + 1;
+
+    if (LastTaintedNodeForTheOp->TaintOp.Op->isReg() &&
+        LastTaintedNodeForTheOp->TaintOp.Offset &&
+        newTaintNode->TaintOp.Op->isReg() &&
+        (LastTaintedNodeForTheOp->TaintOp.Op->getReg() ==
+         newTaintNode->TaintOp.Op->getReg()))
+      TaintDFG.addEdge(LastTaintedNodeForTheOp, newTaintNode,
+                       EdgeType::Dereference);
+    else
+      TaintDFG.addEdge(LastTaintedNodeForTheOp, newTaintNode);
+    TaintDFG.updateLastTaintedNode(DestTi.Op, newTaintNode);
+
+    // TODO: Handle cases where we don't remove the Taint, like struct field
+    // access.
+    removeFromTaintList(Taint, TL);
+  }
+  printTaintList(TL);
+  return true;
+}
+
+// Simplified version of runOnBlameMF, but in the oposite (forward) direction.
+// Idea is to propagate the Taint from parameter (function entry point) to the
+// program point, where the parameter's value is set.
+bool crash_analyzer::TaintAnalysis::forwardMFAnalysis(
+    BlameModule &BM, const MachineFunction &MF, TaintDataFlowGraph &TaintDFG,
+    unsigned levelOfCalledFn, SmallVector<TaintInfo, 8> *TL_Of_Caller,
+    const MachineInstr *CallMI) {
+  LLVM_DEBUG(llvm::dbgs() << "### MF - forward analysis: " << MF.getName()
+                          << "\n";);
+  printTaintList(*TL_Of_Caller);
+
+  // Run the forward analysis to compute register equivalance.
+  RegisterEquivalence REAnalysis;
+  REAnalysis.init(const_cast<MachineFunction &>(MF));
+  REAnalysis.run(const_cast<MachineFunction &>(MF));
+
+  // Per function : Map MBB with its Taint List
+  DenseMap<const MachineBasicBlock *, SmallVector<TaintInfo, 8>> MBB_TL_Map;
+
+  // Initialize all the MBB with emtpty taint list
+  for (const MachineBasicBlock &MBB : MF) {
+    SmallVector<TaintInfo, 8> _tmp;
+    MBB_TL_Map[&MBB] = _tmp;
+  }
+
+  auto TII = MF.getSubtarget().getInstrInfo();
+
+  // Perform forward analysis on the MF.
+  for (auto MBBIt = ipo_begin(&MF.front()), MBBIt_E = ipo_end(&MF.front());
+       MBBIt != MBBIt_E; ++MBBIt) {
+    auto MBB = *MBBIt;
+    SmallVector<TaintInfo, 8> &TL_Mbb = MBB_TL_Map.find(MBB)->second;
+
+    // Initialize Taint list for a MBB
+    for (const MachineBasicBlock *Pred : MBB->predecessors()) {
+      mergeTaintList(TL_Mbb, MBB_TL_Map.find(Pred)->second);
+    }
+    if (MBB->pred_empty())
+      mergeTaintList(TL_Mbb, *TL_Of_Caller);
+    TL_Of_Caller->clear();
+
+    // If Taint List for an MBB is empty, then no need to analyze this MBB
+    printTaintList(TL_Mbb);
+    if (TL_Mbb.empty())
+      continue;
+
+    for (auto MIIt = MBB->begin(); MIIt != MBB->end(); ++MIIt) {
+      auto &MI = *MIIt;
+
+      // Stop analyzing this MBB.
+      if (MI.isBranch() || MI.isReturn())
+        break;
+
+      // Skip push.
+      if (TII->isPush(MI))
+        continue;
+
+      // Forward analysis doesn't step into nested calls, that is done in
+      // the backward analysis (runOnBlameMF).
+      if (MI.isCall())
+        continue;
+
+      auto DestSrc = TII->getDestAndSrc(MI);
+      if (!DestSrc) {
+        MI.dump();
+        LLVM_DEBUG(llvm::dbgs()
+                       << "haven't found dest && source for the MI\n";);
+        bool toContinue = continueAnalysis(MI, TL_Mbb, REAnalysis);
+        if (!toContinue) {
+          WithColor::error(errs())
+              << "MIR not handled; Unable to propagate taint analysis\n";
+          abortAnalysis = true;
+          return false;
+        }
+        continue;
+      }
+
+      printDestSrcInfo(*DestSrc, MI);
+      propagateTaintFwd(*DestSrc, TL_Mbb, MI, TaintDFG, REAnalysis, CallMI);
+    }
+    // At the end, if we didn't find the blame in this function, the
+    // TL_Of_Caller should contain locations to continue backward analysis of
+    // this function (including nested calls).
+    mergeTaintList(*TL_Of_Caller, TL_Mbb);
+  }
+
   return true;
 }
 
@@ -1000,13 +1401,94 @@ RegisterEquivalence *crash_analyzer::TaintAnalysis::getREAnalysis() {
   return REA;
 }
 
+// Transform stack memory locations in the TaintList, to use Base Pointer as a
+// base register (callee side), instead of the Stack Pointer (caller side).
+void crash_analyzer::TaintAnalysis::transformSPtoBPTaints(
+    const MachineFunction &MF, TaintDataFlowGraph &TaintDFG,
+    SmallVectorImpl<TaintInfo> &TL) {
+  auto TRI = MF.getSubtarget().getRegisterInfo();
+  auto CATI = getCATargetInfoInstance();
+
+  for (auto itr = TL.begin(); itr != TL.end(); ++itr) {
+    if (!itr->Op || !itr->Op->isReg())
+      continue;
+    if (itr->IsConcreteMemory)
+      continue;
+    Register Reg = itr->Op->getReg();
+    std::string RegName = TRI->getRegAsmName(Reg).lower();
+    if (!CATI->isSPRegister(RegName))
+      continue;
+    // Transform $rsp + off -> $rbp + ADJUSTMENT + off
+    // For X86, ADJUSTMENT is 16 (sizeof(rip) + sizeof(rbp)).
+    if (!CATI->getBP())
+      break;
+    auto BpReg = CATI->getRegister(*CATI->getBP(), itr->Op->getParent());
+    if (!BpReg)
+      break;
+
+    assert(TaintDFG.lastTaintedNode.count(itr->Op) &&
+           "Taint Op must be reached already");
+    auto &LastTaintedNodeForTheOp = TaintDFG.lastTaintedNode[itr->Op];
+
+    LLVM_DEBUG(llvm::dbgs() << "Caller-side: " << *itr);
+    MachineOperand MOp = MachineOperand::CreateReg(MCRegister(*BpReg), false);
+    MOp.setParent(const_cast<MachineInstr *>(itr->Op->getParent()));
+    itr->Op = new MachineOperand(MOp);
+    *itr->Offset = *itr->Offset + CATI->getSPAdjust();
+    LLVM_DEBUG(llvm::dbgs() << " -> Callee-side:" << *itr << "\n");
+    // Update LastTaintedNode with the transformed TaintInfo.
+    TaintDFG.updateLastTaintedNode(itr->Op, LastTaintedNodeForTheOp);
+  }
+}
+
+// Transform stack memory locations in the TaintList, to use Stack Pointer as a
+// base register (caller side), instead of the Base Pointer (callee side).
+void crash_analyzer::TaintAnalysis::transformBPtoSPTaints(
+    const MachineFunction &MF, TaintDataFlowGraph &TaintDFG,
+    SmallVectorImpl<TaintInfo> &TL) {
+  auto TRI = MF.getSubtarget().getRegisterInfo();
+  auto CATI = getCATargetInfoInstance();
+
+  for (auto itr = TL.begin(); itr != TL.end(); ++itr) {
+    if (!itr->Op || !itr->Op->isReg())
+      continue;
+    if (itr->IsConcreteMemory)
+      continue;
+    Register Reg = itr->Op->getReg();
+    std::string RegName = TRI->getRegAsmName(Reg).lower();
+    if (!CATI->isBPRegister(RegName))
+      continue;
+    // Transform $rbp + ADJUSTMENT + off ->  $rsp + off
+    // For X86, ADJUSTMENT is 16 (sizeof(rip) + sizeof(rbp)).
+    if (!CATI->getSP())
+      break;
+    auto SpReg = CATI->getRegister(*CATI->getSP(), itr->Op->getParent());
+    if (!SpReg)
+      break;
+
+    assert(TaintDFG.lastTaintedNode.count(itr->Op) &&
+           "Taint Op must be reached already");
+    auto &LastTaintedNodeForTheOp = TaintDFG.lastTaintedNode[itr->Op];
+
+    LLVM_DEBUG(llvm::dbgs() << "Callee-side: " << *itr);
+    MachineOperand MOp = MachineOperand::CreateReg(MCRegister(*SpReg), false);
+    MOp.setParent(const_cast<MachineInstr *>(itr->Op->getParent()));
+    itr->Op = new MachineOperand(MOp);
+    *itr->Offset = *itr->Offset - CATI->getSPAdjust();
+    LLVM_DEBUG(llvm::dbgs() << " -> Caller-side:" << *itr << "\n");
+    // Update LastTaintedNode with the transformed TaintInfo.
+    TaintDFG.updateLastTaintedNode(itr->Op, LastTaintedNodeForTheOp);
+  }
+}
+
 // Return true if taint is terminated.
 // Return false otherwise.
 bool crash_analyzer::TaintAnalysis::runOnBlameMF(
     BlameModule &BM, const MachineFunction &MF, TaintDataFlowGraph &TaintDFG,
     bool CalleeNotInBT, unsigned levelOfCalledFn,
     SmallVector<TaintInfo, 8> *TL_Of_Caller, const MachineInstr *CallMI) {
-  LLVM_DEBUG(llvm::dbgs() << "### MF: " << MF.getName() << "\n";);
+  LLVM_DEBUG(llvm::dbgs() << "### MF - backward analysis: " << MF.getName()
+                          << "\n";);
 
   // Run the forward analysis to compute register equivalance.
   RegisterEquivalence REAnalysis;
@@ -1061,16 +1543,10 @@ bool crash_analyzer::TaintAnalysis::runOnBlameMF(
 
     for (auto MIIt = MBB->rbegin(); MIIt != MBB->rend(); ++MIIt) {
       auto &MI = *MIIt;
-      if (MI.getFlag(MachineInstr::CrashStart)) {
+      // Consider crash-start instruction when analyzing functions from the
+      // backtrace.
+      if (!CalleeNotInBT && MI.getFlag(MachineInstr::CrashStart)) {
         CrashSequenceStarted = true;
-        // If this was a call to a function that isn't in the bt,
-        // the analysis will start from the last intr (return), so
-        // we need just to consider the taint operands from the MBB
-        // where it got called.
-        if (CalleeNotInBT) {
-          mergeTaintList(TL_Mbb, *TL_Of_Caller);
-          continue;
-        }
 
         // For frames > 0, skip to the first instruction after the call
         // instruction, traversing backwards.
@@ -1169,8 +1645,22 @@ bool crash_analyzer::TaintAnalysis::runOnBlameMF(
         continue;
       }
 
-      if (!CrashSequenceStarted)
-        continue;
+      // Skip until crash-start instruction.
+      if (!CrashSequenceStarted) {
+        // If we analyze call out of the backtrace, even if the function
+        // is already decompiled (is in the backtrace as well), do not
+        // skip.
+        if (!CalleeNotInBT)
+          continue;
+        // For functions out of the BT, start TA from the last instruction.
+        CrashSequenceStarted = true;
+        // If this was a call to a function that isn't in the bt,
+        // the analysis will start from the last intr (return), so
+        // we need just to consider the taint operands from the MBB
+        // where it got called.
+        mergeTaintList(TL_Mbb, *TL_Of_Caller);
+        TL_Of_Caller->clear();
+      }
 
       // Update the register values (including PC reg), so we have right
       // register values state.
@@ -1184,12 +1674,18 @@ bool crash_analyzer::TaintAnalysis::runOnBlameMF(
       if (MI.isCall() && levelOfCalledFn < FrameLevelDepthToGo) {
         //  mergeTaintList(TL_Mbb, TaintList); Is this needed (as above) ?
         const MachineOperand &CalleeOp = MI.getOperand(0);
+        TL_Of_Call.clear();
         // TODO: handle indirect calls.
         if (!CalleeOp.isGlobal())
           continue;
 
+        bool runFwAnalysis =
+            areParamsTainted(&MI, TL_Mbb, &TL_Of_Call, TaintDFG, *REA) ||
+            isStackSlotTainted(&MI, TL_Mbb, &TL_Of_Call, TaintDFG, REA);
+        bool runBwAnalysis = shouldAnalyzeCall(TL_Mbb);
+
         auto TargetName = CalleeOp.getGlobal()->getName();
-        if (!shouldAnalyzeCall(TL_Mbb)) {
+        if (!runBwAnalysis && !runFwAnalysis) {
           LLVM_DEBUG(llvm::dbgs()
                      << "Not Analyzing function " << TargetName << "\n");
           continue;
@@ -1197,8 +1693,35 @@ bool crash_analyzer::TaintAnalysis::runOnBlameMF(
         MachineFunction *CalledMF = getCalledMF(BM, TargetName.str());
         if (CalledMF) {
           CalledMF->setCrashOrder(MF.getCrashOrder());
-          runOnBlameMF(BM, *CalledMF, TaintDFG, true, ++levelOfCalledFn,
-                       &TL_Mbb, &MI);
+          if (runBwAnalysis)
+            runOnBlameMF(BM, *CalledMF, TaintDFG, true, levelOfCalledFn + 1,
+                         &TL_Mbb, &MI);
+          CalledMF->setCrashOrder(MF.getCrashOrder() + 1);
+          // If parameter is tainted, run analysis from the function entry point
+          // (forward), to the point where the parameter value is set.
+          if (runFwAnalysis) {
+            // Before call analysis, transform stack location TaintInfo to
+            // match the callee frame pointer.
+            transformSPtoBPTaints(MF, TaintDFG, TL_Of_Call);
+            printTaintList(TL_Of_Call);
+            forwardMFAnalysis(BM, *CalledMF, TaintDFG, levelOfCalledFn + 1,
+                              &TL_Of_Call, &MI);
+            // If there is a Taint left after the forward analysis, run backward
+            // analysis for the same TaintList. (ex. one parameter sets the
+            // value of another)
+            if (!TL_Of_Call.empty()) {
+              printTaintList(TL_Of_Call);
+              runOnBlameMF(BM, *CalledMF, TaintDFG, true, levelOfCalledFn + 1,
+                           &TL_Of_Call, &MI);
+            }
+            // After call analysis, transform stack location TaintInfo to
+            // match the caller stack pointer.
+            transformBPtoSPTaints(MF, TaintDFG, TL_Of_Call);
+            mergeTaintList(TL_Mbb, TL_Of_Call);
+            TL_Of_Call.clear();
+            LLVM_DEBUG(llvm::dbgs() << "### Return to backward analysis: "
+                                    << MF.getName() << "\n";);
+          }
           CalledMF->setCrashOrder(0);
           continue;
         } else {
@@ -1211,10 +1734,39 @@ bool crash_analyzer::TaintAnalysis::runOnBlameMF(
             } else {
               // Handle it.
               MFOnDemand->setCrashOrder(MF.getCrashOrder());
-              runOnBlameMF(BM, *MFOnDemand, TaintDFG, true, ++levelOfCalledFn,
-                           &TL_Mbb, &MI);
+              if (runBwAnalysis)
+                runOnBlameMF(BM, *MFOnDemand, TaintDFG, true,
+                             levelOfCalledFn + 1, &TL_Mbb, &MI);
+
+              MFOnDemand->setCrashOrder(MF.getCrashOrder() + 1);
+              // If parameter is tainted, run analysis from the function entry
+              // point (forward), to the point where the parameter value is set.
+              if (runFwAnalysis) {
+                // Before call analysis, transform stack location TaintInfo to
+                // match the callee frame pointer.
+                transformSPtoBPTaints(MF, TaintDFG, TL_Of_Call);
+                printTaintList(TL_Of_Call);
+                forwardMFAnalysis(BM, *MFOnDemand, TaintDFG,
+                                  levelOfCalledFn + 1, &TL_Of_Call, &MI);
+                // If there is a Taint left after the forward analysis, run
+                // backward analysis for the same TaintList. (ex. one parameter
+                // sets the value of another)
+                if (!TL_Of_Call.empty()) {
+                  printTaintList(TL_Of_Call);
+                  runOnBlameMF(BM, *MFOnDemand, TaintDFG, true,
+                               levelOfCalledFn + 1, &TL_Of_Call, &MI);
+                }
+                // After call analysis, transform stack location TaintInfo to
+                // match the caller stack pointer.
+                transformBPtoSPTaints(MF, TaintDFG, TL_Of_Call);
+                mergeTaintList(TL_Mbb, TL_Of_Call);
+                TL_Of_Call.clear();
+                LLVM_DEBUG(llvm::dbgs() << "### Return to backward analysis: "
+                                        << MF.getName() << "\n";);
+              }
               MFOnDemand->setCrashOrder(0);
             }
+            continue;
           } else {
             LLVM_DEBUG(llvm::dbgs()
                            << "#### Callee not found: " << TargetName << "\n";);
@@ -1253,6 +1805,9 @@ bool crash_analyzer::TaintAnalysis::runOnBlameMF(
       if (!TaintResult)
         Result = true;
     }
+    // Update TL_Of_Caller to be available in the parent call.
+    if (CalleeNotInBT)
+      mergeTaintList(*TL_Of_Caller, TL_Mbb);
   }
   resetTaintList(*CurTL);
   setREAnalysis(nullptr);

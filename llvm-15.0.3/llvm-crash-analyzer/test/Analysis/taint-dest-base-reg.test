@@ -33,7 +33,7 @@
 
 # RUN: %llvm-crash-analyzer --debug-only=taint-analysis --core-file=%S/Inputs/core.taint-dest-base-reg %S/Inputs/taint-dest-base-reg.out < %s 2>&1 | FileCheck --check-prefix=CHECK-DEBUG %s
 
-# CHECK-DEBUG: MF: crash
+# CHECK-DEBUG: MF - backward analysis: crash
 # CHECK-DEBUG-EMPTY:
 # CHECK-DEBUG-NEXT:   crash-start MOV32mr $rcx, 1, $noreg, 4, $noreg, $eax
 ## Print Destination Source Pair for the MachineInstr above.

@@ -732,6 +732,17 @@ bool X86InstrInfo::isStore(const MachineInstr &MI) const {
   }
 }
 
+bool X86InstrInfo::isLEAInstr(const MachineInstr &MI) const {
+  switch (MI.getOpcode()) {
+  case X86::LEA32r:
+  case X86::LEA64r:
+  case X86::LEA64_32r:
+    return true;
+  default:
+    return false;
+  }
+}
+
 Optional<DestSourcePair>
 X86InstrInfo::getDestAndSrc(const MachineInstr &MI) const {
   auto Res = isCopyInstr(MI);

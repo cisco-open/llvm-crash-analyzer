@@ -1,0 +1,35 @@
+## This is reproducer (clang -g -O0 m.c -o m)
+## void crash(int val, int* adr){
+##        *adr = val; // crash - line 3
+## }
+##
+## void blame(int** ptr){
+##        *ptr = 0; // correct blame - line 7
+## }
+##
+## void fun(int** ptr)
+## {
+##    blame(ptr);
+## }
+##
+## int main(){
+##  int *p = 0; // incorrect blame - line 16
+##  fun(&p);
+##  crash(1, p);
+##  return 0;
+## }
+
+## In this case, we test TaintAnalysis of functions out of the backtrace, where
+## parameters are tainted (references to the tainted location) and are forwarded
+## through registers. Blame instruction is in the call (outside of the backtrace).
+
+
+# RUN: %llvm-crash-analyzer --print-potential-crash-cause-loc --debug-only=taint-dfg \
+# RUN: --core-file=%S/Inputs/core.tainted-param-inside-blame %S/Inputs/tainted-param-inside-blame.out < %s 2>&1 | FileCheck %s
+
+# CHECK: Blame Nodes:
+# CHECK-NEXT: !11{4; MOV64mi32 $rax, 1, $noreg, 0, $noreg, 0; CONSTANT: 0; DEREF-LVL: 0}
+# CHECK-NEXT: Blame line: 7
+
+# CHECK: Blame Function is blame
+# CHECK-NEXT: From File {{.*}}/m.c:7:7
